@@ -9,6 +9,7 @@ use Emc\Core\Request;
 use Emc\Core\Response;
 use Emc\Core\Session;
 use Emc\Tests\Integration\DbTestCase;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 final class HttpZugriffTest extends DbTestCase
 {
@@ -102,7 +103,7 @@ final class HttpZugriffTest extends DbTestCase
         $this->assertArrayHasKey('benutzer_id', $this->sitzung);
     }
 
-    /** @dataProvider unsichereZiele */
+    #[DataProvider('unsichereZiele')]
     public function test_ziel_wird_gegen_open_redirect_geschuetzt(string $ziel): void
     {
         $this->legeBenutzerAn('max@verein.de');

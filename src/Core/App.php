@@ -15,6 +15,8 @@ use Emc\Personen\BenutzerRepository;
 use Emc\Personen\KontoController;
 use Emc\Personen\PersonController;
 use Emc\Personen\PersonRepository;
+use Emc\Stammdaten\SpurweiteController;
+use Emc\Stammdaten\SpurweiteRepository;
 use Emc\Protokoll\Aenderungsprotokoll;
 
 final class App
@@ -74,6 +76,12 @@ final class App
             $c->get(PersonRepository::class),
             $c->get(Aenderungsprotokoll::class),
             $c->get(Auth::class),
+            $c->get('session')
+        ));
+        $this->container->set(SpurweiteRepository::class, fn(Container $c) => new SpurweiteRepository($c->get('pdo')));
+        $this->container->set(SpurweiteController::class, fn(Container $c) => new SpurweiteController(
+            $this->view,
+            $c->get(SpurweiteRepository::class),
             $c->get('session')
         ));
         $this->container->set(KontoController::class, fn(Container $c) => new KontoController(

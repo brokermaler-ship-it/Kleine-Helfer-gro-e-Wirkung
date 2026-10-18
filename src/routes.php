@@ -11,6 +11,7 @@ use Emc\Core\Router;
 use Emc\Personen\BenutzerController;
 use Emc\Personen\KontoController;
 use Emc\Personen\PersonController;
+use Emc\Stammdaten\SpurweiteController;
 
 /** Routendefinitionen; spätere Tasks ergänzen hier. */
 return function (Router $router, App $app): void {
@@ -41,6 +42,11 @@ return function (Router $router, App $app): void {
     $router->add('POST', '/admin/benutzer/{id}', $app->erfordert('benutzer_verwalten', $benutzer('aendern')));
     $router->add('POST', '/admin/benutzer/{id}/passwort', $app->erfordert('benutzer_verwalten', $benutzer('passwortZuruecksetzen')));
     $router->add('POST', '/admin/benutzer/{id}/loeschen', $app->erfordert('benutzer_verwalten', $benutzer('loeschen')));
+
+    $spur = fn(string $m) => fn(Request $r, array $p = []) => $c->get(SpurweiteController::class)->$m($r, $p);
+    $router->add('GET', '/admin/spurweiten', $app->erfordert('stammdaten_verwalten', $spur('liste')));
+    $router->add('POST', '/admin/spurweiten', $app->erfordert('stammdaten_verwalten', $spur('speichern')));
+    $router->add('POST', '/admin/spurweiten/{id}/loeschen', $app->erfordert('stammdaten_verwalten', $spur('loeschen')));
 
     $router->add('GET', '/konto/passwort', fn(Request $r) => $c->get(KontoController::class)->passwortForm($r));
     $router->add('POST', '/konto/passwort', fn(Request $r) => $c->get(KontoController::class)->passwortAendern($r));
