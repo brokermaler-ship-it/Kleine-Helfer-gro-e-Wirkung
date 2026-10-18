@@ -8,6 +8,8 @@ use Emc\Core\App;
 use Emc\Core\Request;
 use Emc\Core\Response;
 use Emc\Core\Router;
+use Emc\Digital\AdressenController;
+use Emc\Digital\DecoderController;
 use Emc\Fahrzeuge\FahrzeugController;
 use Emc\Personen\BenutzerController;
 use Emc\Personen\KontoController;
@@ -35,6 +37,16 @@ return function (Router $router, App $app): void {
     $router->add('GET', '/fahrzeuge/{id}/bearbeiten', $app->erfordert('fahrzeug_bearbeiten', $fz('bearbeiten')));
     $router->add('POST', '/fahrzeuge/{id}', $app->erfordert('fahrzeug_bearbeiten', $fz('aendern')));
     $router->add('POST', '/fahrzeuge/{id}/loeschen', $app->erfordert('fahrzeug_bearbeiten', $fz('loeschen')));
+
+    $dec = fn(string $m) => fn(Request $r, array $p = []) => $c->get(DecoderController::class)->$m($r, $p);
+    $router->add('POST', '/fahrzeuge/{id}/decoder', $app->erfordert('fahrzeug_bearbeiten', $dec('anlegen')));
+    $router->add('GET', '/decoder/{id}/bearbeiten', $app->erfordert('fahrzeug_bearbeiten', $dec('bearbeiten')));
+    $router->add('POST', '/decoder/{id}', $app->erfordert('fahrzeug_bearbeiten', $dec('aendern')));
+    $router->add('POST', '/decoder/{id}/loeschen', $app->erfordert('fahrzeug_bearbeiten', $dec('loeschen')));
+
+    $adr = fn(string $m) => fn(Request $r, array $p = []) => $c->get(AdressenController::class)->$m($r);
+    $router->add('GET', '/adressen', $app->erfordert('lesen', $adr('uebersicht')));
+    $router->add('GET', '/api/adresspruefung', $app->erfordert('lesen', $adr('api')));
 
     $person = fn(string $m) => fn(Request $r, array $p = []) => $c->get(PersonController::class)->$m($r, $p);
     $router->add('GET', '/personen', $app->erfordert('person_bearbeiten', $person('liste')));

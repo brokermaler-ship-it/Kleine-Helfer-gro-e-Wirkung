@@ -6,6 +6,10 @@ namespace Emc\Fahrzeuge;
 
 use Emc\Auth\Auth;
 use Emc\Core\HttpFehler;
+use Emc\Digital\AdressValidator;
+use Emc\Digital\Adresspruefung;
+use Emc\Digital\DecoderRepository;
+use Emc\Digital\Protokoll;
 use Emc\Core\Request;
 use Emc\Core\Response;
 use Emc\Core\Session;
@@ -29,6 +33,8 @@ final class FahrzeugController
         private Aenderungsprotokoll $protokoll,
         private Auth $auth,
         private Session $session,
+        private DecoderRepository $decoder,
+        private Adresspruefung $adresspruefung,
     ) {
     }
 
@@ -51,6 +57,7 @@ final class FahrzeugController
             'titel' => $fz['inventarnummer'] . ' ' . $fz['bezeichnung'],
             'fahrzeug' => $fz,
             'verlauf' => $this->protokoll->fuerObjekt('fahrzeug', (int) $fz['id']),
+            'decoderListe' => $this->decoderMitPruefung($fz),
         ]);
     }
 
@@ -117,6 +124,28 @@ final class FahrzeugController
         );
         $this->session->meldung('erfolg', 'Das Fahrzeug wurde gelöscht.');
         return Response::redirect(url('/fahrzeuge'));
+    }
+
+    /**
+     * Decoder des Fahrzeugs samt Adressart und Adresskonflikten für den Tab „Digital“.
+     *
+     * @param array<string,mixed> $fz
+     * @return list<array<string,mixed>>
+     */
+    private function decoderMitPruefung(array $fz): array
+    {
+        $liste = [];
+        foreach ($this->decoder->fuerFahrzeug((int) $fz['id']) as $d) {
+            $p = Protokoll::from((string) $d['protokoll']);
+            $adresse = $d['adresse'] === null ? null : (int) $d['adresse'];
+            $d['protokoll_label'] = $p->label();
+            $d['adressart'] = $adresse === null ? null : AdressValidator::adressart($p, $adresse);
+            $d['konflikte'] = $adresse === null || $fz['status'] === 'ausgemustert'
+                ? []
+                : $this->adresspruefung->konflikte((int) $fz['spurweite_id'], $p, $adresse, (int) $fz['id']);
+            $liste[] = $d;
+        }
+        return $liste;
     }
 
     /** @return array<string,mixed> */

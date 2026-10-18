@@ -10,6 +10,10 @@ use Emc\Auth\Berechtigung;
 use Emc\Auth\InstallController;
 use Emc\Betrieb\Einstellungen;
 use Emc\Betrieb\Migrator;
+use Emc\Digital\AdressenController;
+use Emc\Digital\Adresspruefung;
+use Emc\Digital\DecoderController;
+use Emc\Digital\DecoderRepository;
 use Emc\Fahrzeuge\FahrzeugController;
 use Emc\Fahrzeuge\FahrzeugRepository;
 use Emc\Personen\BenutzerController;
@@ -94,7 +98,25 @@ final class App
             $c->get(PersonRepository::class),
             $c->get(Aenderungsprotokoll::class),
             $c->get(Auth::class),
+            $c->get('session'),
+            $c->get(DecoderRepository::class),
+            $c->get(Adresspruefung::class)
+        ));
+        $this->container->set(DecoderRepository::class, fn(Container $c) => new DecoderRepository($c->get('pdo')));
+        $this->container->set(Adresspruefung::class, fn(Container $c) => new Adresspruefung($c->get('pdo')));
+        $this->container->set(DecoderController::class, fn(Container $c) => new DecoderController(
+            $this->view,
+            $c->get(DecoderRepository::class),
+            $c->get(FahrzeugRepository::class),
+            $c->get(Adresspruefung::class),
+            $c->get(Aenderungsprotokoll::class),
+            $c->get(Auth::class),
             $c->get('session')
+        ));
+        $this->container->set(AdressenController::class, fn(Container $c) => new AdressenController(
+            $this->view,
+            $c->get(Adresspruefung::class),
+            $c->get(SpurweiteRepository::class)
         ));
         $this->container->set(KontoController::class, fn(Container $c) => new KontoController(
             $this->view,
