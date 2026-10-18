@@ -10,6 +10,12 @@ use Emc\Auth\Berechtigung;
 use Emc\Auth\InstallController;
 use Emc\Betrieb\Einstellungen;
 use Emc\Betrieb\Migrator;
+use Emc\Personen\BenutzerController;
+use Emc\Personen\BenutzerRepository;
+use Emc\Personen\KontoController;
+use Emc\Personen\PersonController;
+use Emc\Personen\PersonRepository;
+use Emc\Protokoll\Aenderungsprotokoll;
 
 final class App
 {
@@ -52,6 +58,31 @@ final class App
             $c->get('session')
         ));
         $this->container->set(Einstellungen::class, fn(Container $c) => new Einstellungen($c->get('pdo')));
+        $this->container->set(Aenderungsprotokoll::class, fn(Container $c) => new Aenderungsprotokoll($c->get('pdo')));
+        $this->container->set(PersonRepository::class, fn(Container $c) => new PersonRepository($c->get('pdo')));
+        $this->container->set(BenutzerRepository::class, fn(Container $c) => new BenutzerRepository($c->get('pdo')));
+        $this->container->set(PersonController::class, fn(Container $c) => new PersonController(
+            $this->view,
+            $c->get(PersonRepository::class),
+            $c->get(Aenderungsprotokoll::class),
+            $c->get(Auth::class),
+            $c->get('session')
+        ));
+        $this->container->set(BenutzerController::class, fn(Container $c) => new BenutzerController(
+            $this->view,
+            $c->get(BenutzerRepository::class),
+            $c->get(PersonRepository::class),
+            $c->get(Aenderungsprotokoll::class),
+            $c->get(Auth::class),
+            $c->get('session')
+        ));
+        $this->container->set(KontoController::class, fn(Container $c) => new KontoController(
+            $this->view,
+            $c->get(BenutzerRepository::class),
+            $c->get(Aenderungsprotokoll::class),
+            $c->get(Auth::class),
+            $c->get('session')
+        ));
 
         $routen = dirname(__DIR__) . '/routes.php';
         if (is_file($routen)) {
