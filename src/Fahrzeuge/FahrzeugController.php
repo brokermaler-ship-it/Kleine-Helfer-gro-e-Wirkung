@@ -6,6 +6,7 @@ namespace Emc\Fahrzeuge;
 
 use Emc\Auth\Auth;
 use Emc\Core\HttpFehler;
+use Emc\Dateien\DokumentRepository;
 use Emc\Digital\AdressValidator;
 use Emc\Digital\Adresspruefung;
 use Emc\Digital\DecoderRepository;
@@ -35,6 +36,7 @@ final class FahrzeugController
         private Session $session,
         private DecoderRepository $decoder,
         private Adresspruefung $adresspruefung,
+        private ?DokumentRepository $dokumente = null,
     ) {
     }
 
@@ -58,6 +60,7 @@ final class FahrzeugController
             'fahrzeug' => $fz,
             'verlauf' => $this->protokoll->fuerObjekt('fahrzeug', (int) $fz['id']),
             'decoderListe' => $this->decoderMitPruefung($fz),
+            'dateien' => $this->dokumente?->fuerObjekt('fahrzeug', (int) $fz['id']) ?? [],
         ]);
     }
 

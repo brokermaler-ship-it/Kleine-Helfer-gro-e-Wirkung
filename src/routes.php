@@ -8,6 +8,7 @@ use Emc\Core\App;
 use Emc\Core\Request;
 use Emc\Core\Response;
 use Emc\Core\Router;
+use Emc\Dateien\DateiController;
 use Emc\Digital\AdressenController;
 use Emc\Digital\CvController;
 use Emc\Digital\DecoderController;
@@ -63,6 +64,13 @@ return function (Router $router, App $app): void {
     $adr = fn(string $m) => fn(Request $r, array $p = []) => $c->get(AdressenController::class)->$m($r);
     $router->add('GET', '/adressen', $app->erfordert('lesen', $adr('uebersicht')));
     $router->add('GET', '/api/adresspruefung', $app->erfordert('lesen', $adr('api')));
+
+    $datei = fn(string $m) => fn(Request $r, array $p = []) => $c->get(DateiController::class)->$m($r, $p);
+    $router->add('POST', '/fahrzeuge/{id}/dateien', $app->erfordert('datei_bearbeiten', $datei('hochladen')));
+    $router->add('POST', '/fahrzeuge/{id}/titelbild', $app->erfordert('datei_bearbeiten', $datei('titelbild')));
+    $router->add('POST', '/dateien/{id}/loeschen', $app->erfordert('datei_bearbeiten', $datei('loeschen')));
+    $router->add('GET', '/dateien/{id}', $app->erfordert('lesen', $datei('ausliefern')));
+    $router->add('GET', '/dateien/{id}/{variante}', $app->erfordert('lesen', $datei('ausliefern')));
 
     $person = fn(string $m) => fn(Request $r, array $p = []) => $c->get(PersonController::class)->$m($r, $p);
     $router->add('GET', '/personen', $app->erfordert('person_bearbeiten', $person('liste')));

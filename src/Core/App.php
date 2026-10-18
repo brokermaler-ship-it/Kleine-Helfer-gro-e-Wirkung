@@ -10,6 +10,10 @@ use Emc\Auth\Berechtigung;
 use Emc\Auth\InstallController;
 use Emc\Betrieb\Einstellungen;
 use Emc\Betrieb\Migrator;
+use Emc\Dateien\Bildbearbeitung;
+use Emc\Dateien\DateiController;
+use Emc\Dateien\DokumentRepository;
+use Emc\Dateien\UploadService;
 use Emc\Digital\AdressenController;
 use Emc\Digital\Adresspruefung;
 use Emc\Digital\CvController;
@@ -105,7 +109,8 @@ final class App
             $c->get(Auth::class),
             $c->get('session'),
             $c->get(DecoderRepository::class),
-            $c->get(Adresspruefung::class)
+            $c->get(Adresspruefung::class),
+            $c->get(DokumentRepository::class)
         ));
         $this->container->set(DecoderRepository::class, fn(Container $c) => new DecoderRepository($c->get('pdo')));
         $this->container->set(Adresspruefung::class, fn(Container $c) => new Adresspruefung($c->get('pdo')));
@@ -144,6 +149,22 @@ final class App
             $this->view,
             $c->get(Adresspruefung::class),
             $c->get(SpurweiteRepository::class)
+        ));
+        $this->container->set(DokumentRepository::class, fn(Container $c) => new DokumentRepository($c->get('pdo'), $this->speicherPfad()));
+        $this->container->set(UploadService::class, fn(Container $c) => new UploadService(
+            $c->get('pdo'),
+            $this->speicherPfad(),
+            max(1, (int) ($this->config['upload_max_mb'] ?? 64)) * 1048576,
+            new Bildbearbeitung()
+        ));
+        $this->container->set(DateiController::class, fn(Container $c) => new DateiController(
+            $this->view,
+            $c->get(DokumentRepository::class),
+            $c->get(UploadService::class),
+            $c->get(FahrzeugRepository::class),
+            $c->get(Aenderungsprotokoll::class),
+            $c->get(Auth::class),
+            $c->get('session')
         ));
         $this->container->set(KontoController::class, fn(Container $c) => new KontoController(
             $this->view,
@@ -214,6 +235,14 @@ final class App
             return Response::redirect(url('/install'));
         }
 
+        // 2a. Zu große Uploads: PHP verwirft dann $_POST, was sonst wie ein CSRF-Fehler aussähe.
+        if ($request->isPost()) {
+            $zuGross = $this->pruefePostGroesse($request);
+            if ($zuGross !== null) {
+                return $zuGross;
+            }
+        }
+
         // 2. CSRF-Schutz für alle POST-Anfragen.
         if ($request->isPost()) {
             $token = $request->post(Csrf::FELD);
@@ -237,6 +266,53 @@ final class App
         }
 
         return $this->router->dispatchOderWirf($request);
+    }
+
+    private function speicherPfad(): string
+    {
+        return (string) ($this->config['speicher_pfad'] ?? dirname(__DIR__, 2) . '/storage');
+    }
+
+    /** Liefert die Weiterleitung mit Fehlermeldung, wenn der Request größer als post_max_size ist. */
+    private function pruefePostGroesse(Request $request): ?Response
+    {
+        $laenge = $request->server('CONTENT_LENGTH');
+        if (!is_string($laenge) && !is_int($laenge)) {
+            return null;
+        }
+        $laenge = (int) $laenge;
+        $max = isset($this->config['post_max_bytes'])
+            ? (int) $this->config['post_max_bytes']
+            : UploadService::iniBytes((string) ini_get('post_max_size'));
+        if ($max <= 0 || $laenge <= $max) {
+            return null;
+        }
+        $mb = min(max(1, (int) ($this->config['upload_max_mb'] ?? 64)), max(1, intdiv($max, 1048576)));
+        $this->container->get('session')->meldung('fehler', 'Die Datei ist zu groß (höchstens ' . $mb . ' MB).');
+        return Response::redirect($this->gleicheHerkunft($request) ?? '/');
+    }
+
+    /** Relativer Pfad des Referers, nur wenn er vom selben Host stammt. */
+    private function gleicheHerkunft(Request $request): ?string
+    {
+        $referer = $request->server('HTTP_REFERER');
+        $host = $request->server('HTTP_HOST');
+        if (!is_string($referer) || !is_string($host) || $host === '' || preg_match('/[\x00-\x1F\x7F\\\\]/', $referer) === 1) {
+            return null;
+        }
+        $teile = parse_url($referer);
+        if ($teile === false || !isset($teile['host']) || !in_array($teile['scheme'] ?? '', ['http', 'https'], true)) {
+            return null;
+        }
+        $refHost = strtolower($teile['host']) . (isset($teile['port']) ? ':' . $teile['port'] : '');
+        if ($refHost !== strtolower($host)) {
+            return null;
+        }
+        $pfad = $teile['path'] ?? '/';
+        if ($pfad === '' || $pfad[0] !== '/' || str_starts_with($pfad, '//')) {
+            return null;
+        }
+        return $pfad . (isset($teile['query']) ? '?' . $teile['query'] : '');
     }
 
     public function container(): Container
