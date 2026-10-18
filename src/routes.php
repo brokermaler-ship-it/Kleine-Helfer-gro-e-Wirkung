@@ -8,6 +8,8 @@ use Emc\Core\App;
 use Emc\Core\Request;
 use Emc\Core\Response;
 use Emc\Core\Router;
+use Emc\Betrieb\SicherungController;
+use Emc\Betrieb\UpdateController;
 use Emc\Dateien\DateiController;
 use Emc\Digital\AdressenController;
 use Emc\Digital\CvController;
@@ -93,6 +95,14 @@ return function (Router $router, App $app): void {
     $router->add('GET', '/admin/spurweiten', $app->erfordert('stammdaten_verwalten', $spur('liste')));
     $router->add('POST', '/admin/spurweiten', $app->erfordert('stammdaten_verwalten', $spur('speichern')));
     $router->add('POST', '/admin/spurweiten/{id}/loeschen', $app->erfordert('stammdaten_verwalten', $spur('loeschen')));
+
+    $sich = fn(string $m) => fn(Request $r, array $p = []) => $c->get(SicherungController::class)->$m($r);
+    $router->add('GET', '/admin/sicherung', $app->erfordert('betrieb', $sich('zeigen')));
+    $router->add('POST', '/admin/sicherung', $app->erfordert('betrieb', $sich('herunterladen')));
+
+    $upd = fn(string $m) => fn(Request $r, array $p = []) => $c->get(UpdateController::class)->$m($r);
+    $router->add('GET', '/admin/update', $app->erfordert('betrieb', $upd('zeigen')));
+    $router->add('POST', '/admin/update', $app->erfordert('betrieb', $upd('ausfuehren')));
 
     $router->add('GET', '/konto/passwort', fn(Request $r) => $c->get(KontoController::class)->passwortForm($r));
     $router->add('POST', '/konto/passwort', fn(Request $r) => $c->get(KontoController::class)->passwortAendern($r));

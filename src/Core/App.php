@@ -10,6 +10,9 @@ use Emc\Auth\Berechtigung;
 use Emc\Auth\InstallController;
 use Emc\Betrieb\Einstellungen;
 use Emc\Betrieb\Migrator;
+use Emc\Betrieb\Sicherung;
+use Emc\Betrieb\SicherungController;
+use Emc\Betrieb\UpdateController;
 use Emc\Dateien\Bildbearbeitung;
 use Emc\Dateien\DateiController;
 use Emc\Dateien\DokumentRepository;
@@ -166,6 +169,21 @@ final class App
             $c->get(Auth::class),
             $c->get('session')
         ));
+        $this->container->set(Sicherung::class, fn(Container $c) => new Sicherung(
+            $c->get('pdo'),
+            $this->speicherPfad(),
+            $c->get(Einstellungen::class)
+        ));
+        $this->container->set(SicherungController::class, fn(Container $c) => new SicherungController(
+            $this->view,
+            $c->get(Sicherung::class),
+            $c->get('session')
+        ));
+        $this->container->set(UpdateController::class, fn(Container $c) => new UpdateController(
+            $this->view,
+            $c->get(Migrator::class),
+            $c->get('session')
+        ));
         $this->container->set(KontoController::class, fn(Container $c) => new KontoController(
             $this->view,
             $c->get(BenutzerRepository::class),
@@ -223,6 +241,7 @@ final class App
         $this->view->teile('csrf', $c->get(Csrf::class));
         $this->view->teile('darf', fn(string $aktion): bool => Berechtigung::darf($auth()->benutzer(), $aktion));
         $this->view->teileSpaet('benutzer', fn() => $auth()->benutzer());
+        $this->view->teileSpaet('betriebshinweise', fn() => $this->betriebshinweise());
         $this->view->teileSpaet('meldungen', fn() => $c->get('session')->meldungenAbholen());
     }
 
@@ -259,6 +278,13 @@ final class App
                 $ziel = $request->method() === 'GET' && $pfad !== '/' ? ['ziel' => $pfad] : [];
                 return Response::redirect(url('/login', $ziel));
             }
+            // 3a. Stehen Migrationen aus, dürfen nur Administratoren weiterarbeiten (Update ausführen).
+            if (!in_array($pfad, ['/logout', '/admin/update'], true)
+                && !Berechtigung::darf($benutzer, Berechtigung::BETRIEB)
+                && $this->container->get(Migrator::class)->ausstehend() !== []
+            ) {
+                return $this->wartungsSeite();
+            }
             // 4. Erzwungene Passwortänderung.
             if ($benutzer->mussPasswortAendern && $pfad !== '/konto/passwort' && $pfad !== '/logout') {
                 return Response::redirect(url('/konto/passwort'));
@@ -266,6 +292,36 @@ final class App
         }
 
         return $this->router->dispatchOderWirf($request);
+    }
+
+    private function wartungsSeite(): Response
+    {
+        $html = $this->view->render('fehler/wartung', ['titel' => 'Wartung']);
+        return new Response($html, 503, ['Content-Type' => 'text/html; charset=utf-8', 'Retry-After' => '300']);
+    }
+
+    /**
+     * Hinweisleisten für Administratoren (Update ausstehend, Sicherung überfällig).
+     *
+     * @return list<array{typ:string,text:string,link:string,linktext:string}>
+     */
+    private function betriebshinweise(): array
+    {
+        $hinweise = [];
+        try {
+            if (!Berechtigung::darf($this->container->get(Auth::class)->benutzer(), Berechtigung::BETRIEB)) {
+                return [];
+            }
+            if ($this->container->get(Migrator::class)->ausstehend() !== []) {
+                $hinweise[] = ['typ' => 'warning', 'text' => 'Es steht ein Datenbank-Update an.', 'link' => '/admin/update', 'linktext' => 'Jetzt aktualisieren'];
+            }
+            if ($this->container->get(Sicherung::class)->istUeberfaellig(new \DateTimeImmutable())) {
+                $hinweise[] = ['typ' => 'warning', 'text' => 'Die letzte Datensicherung ist älter als 30 Tage.', 'link' => '/admin/sicherung', 'linktext' => 'Sicherung erstellen'];
+            }
+        } catch (\Throwable) {
+            // Hinweise sind nur Beiwerk; bei Datenbankproblemen nicht die ganze Seite verhindern.
+        }
+        return $hinweise;
     }
 
     private function speicherPfad(): string

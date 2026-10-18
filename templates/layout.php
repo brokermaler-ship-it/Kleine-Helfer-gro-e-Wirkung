@@ -11,6 +11,7 @@
 <body>
 <?php include __DIR__ . '/partials/navigation.php'; ?>
 <main class="container mt-4">
+    <?php include __DIR__ . '/partials/betriebshinweise.php'; ?>
     <?php include __DIR__ . '/partials/meldungen.php'; ?>
     <?= $inhalt ?>
 </main>

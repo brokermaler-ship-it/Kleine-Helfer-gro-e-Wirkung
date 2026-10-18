@@ -4,3 +4,4 @@
 !/storage/dateien/.gitkeep
 /dist
 .phpunit.cache
+/build

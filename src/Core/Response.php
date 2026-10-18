@@ -13,6 +13,8 @@ final class Response
         public readonly array $headers = [],
         /** Pfad einer Datei, die beim Senden direkt ausgegeben wird (statt $body). */
         public readonly ?string $datei = null,
+        /** Löscht die Datei nach dem Senden (für Temp-Dateien wie die Sicherung). */
+        public readonly bool $loescheNachSenden = false,
     ) {
     }
 
@@ -22,9 +24,9 @@ final class Response
     }
 
     /** @param array<string,string> $headers */
-    public static function datei(string $pfad, array $headers = []): self
+    public static function datei(string $pfad, array $headers = [], bool $loescheNachSenden = false): self
     {
-        return new self('', 200, $headers, $pfad);
+        return new self('', 200, $headers, $pfad, $loescheNachSenden);
     }
 
     public static function json(array $daten, int $status = 200): self
@@ -46,8 +48,14 @@ final class Response
             while (ob_get_level() > 0) {
                 ob_end_clean();
             }
-            header('Content-Length: ' . (string) filesize($this->datei));
-            readfile($this->datei);
+            try {
+                header('Content-Length: ' . (string) filesize($this->datei));
+                readfile($this->datei);
+            } finally {
+                if ($this->loescheNachSenden) {
+                    @unlink($this->datei);
+                }
+            }
             return;
         }
         echo $this->body;
