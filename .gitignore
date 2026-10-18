@@ -2,6 +2,8 @@
 /config.php
 /storage/dateien/*
 !/storage/dateien/.gitkeep
+/storage/sitzungen/*
+!/storage/sitzungen/.gitkeep
 /dist
 .phpunit.cache
 /build

@@ -17,10 +17,12 @@ final class AppTest extends DbTestCase
 
     private function app(bool $debug = false): App
     {
-        $this->sitzung['benutzer_id'] = $this->legeBenutzerAn('max@verein.de');
+        $this->sitzungAnmelden($this->sitzung, $this->legeBenutzerAn('max@verein.de'));
         $app = App::erzeuge(['debug' => $debug] + self::testConfig(), new Session($this->sitzung));
         $router = $app->container()->get('router');
         $router->add('GET', '/eigen404', fn() => new Response('Seite nicht gefunden.', 404));
+        $router->add('GET', '/bild', fn() => new Response('x', 200, ['Content-Type' => 'image/png', 'Content-Security-Policy' => "default-src 'none'; sandbox"]));
+        $router->add('GET', '/eigene-csp', fn() => new Response('<p>x</p>', 200, ['Content-Type' => 'text/html; charset=utf-8', 'Content-Security-Policy' => "default-src 'none'"]));
         $router->add('GET', '/kaputt', function () {
             throw new \RuntimeException('geheime Details');
         });
@@ -41,6 +43,37 @@ final class AppTest extends DbTestCase
         $this->assertSame(405, $antwort->status);
         $this->assertSame('GET', $antwort->headers['Allow']);
         $this->assertStringContainsString('Methode nicht erlaubt', $antwort->body);
+    }
+
+    public function test_html_antworten_sind_gegen_einbetten_in_frames_geschuetzt(): void
+    {
+        $app = $this->app();
+        foreach (['/fahrzeuge', '/gibtsnicht', '/kaputt'] as $pfad) {
+            $prev = ini_set('error_log', '/dev/null');
+            try {
+                $antwort = $app->handle(new Request('GET', $pfad));
+            } finally {
+                ini_set('error_log', (string) $prev);
+            }
+            $this->assertStringStartsWith('text/html', $antwort->headers['Content-Type'], $pfad);
+            $this->assertSame('DENY', $antwort->headers['X-Frame-Options'] ?? null, $pfad);
+            $this->assertSame("frame-ancestors 'none'", $antwort->headers['Content-Security-Policy'] ?? null, $pfad);
+        }
+        $ohneAnmeldung = [];
+        $login = App::erzeuge(self::testConfig(), new Session($ohneAnmeldung))->handle(new Request('GET', '/login'));
+        $this->assertSame(200, $login->status);
+        $this->assertSame('DENY', $login->headers['X-Frame-Options'] ?? null);
+    }
+
+    public function test_dateiauslieferung_und_eigene_csp_bleiben_unveraendert(): void
+    {
+        $app = $this->app();
+        $bild = $app->handle(new Request('GET', '/bild'));
+        $this->assertSame("default-src 'none'; sandbox", $bild->headers['Content-Security-Policy']);
+        $this->assertArrayNotHasKey('X-Frame-Options', $bild->headers);
+        $html = $app->handle(new Request('GET', '/eigene-csp'));
+        $this->assertSame("default-src 'none'", $html->headers['Content-Security-Policy']);
+        $this->assertSame('DENY', $html->headers['X-Frame-Options']);
     }
 
     public function test_eigene_404_antwort_wird_nicht_ersetzt(): void

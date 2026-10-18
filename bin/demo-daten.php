@@ -5,7 +5,7 @@ declare(strict_types=1);
 /**
  * Beispieldaten für die Testumgebung anlegen.
  * Aufruf: php bin/demo-daten.php [--zuruecksetzen]
- * Läuft nur, wenn in der config.php 'testumgebung' => true gesetzt ist.
+ * Läuft nur, wenn in der config.php 'testumgebung' => true und 'testumgebung_admin_passwort' gesetzt sind.
  */
 
 if (PHP_SAPI !== 'cli') {
@@ -32,4 +32,5 @@ try {
     fwrite(STDERR, 'Fehler: ' . $t->getMessage() . "\n");
     exit(1);
 }
-echo "Beispieldaten wurden angelegt. Anmeldung z. B. mitglied@test.emc78.de / Test-EMC78!\n";
+echo "Beispieldaten wurden angelegt. Anmeldung z. B. mitglied@test.emc78.de / Test-EMC78!\n"
+    . "Administrator: admin@test.emc78.de mit dem Passwort aus 'testumgebung_admin_passwort'.\n";

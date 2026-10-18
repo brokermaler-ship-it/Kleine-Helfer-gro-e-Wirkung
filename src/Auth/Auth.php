@@ -11,13 +11,15 @@ final class Auth
     public const MAX_FEHLVERSUCHE = 5;
     public const SPERRE_MINUTEN = 15;
     private const SESSION_KEY = 'benutzer_id';
+    /** Fingerabdruck der Instanz, an der die Anmeldung erfolgt ist (siehe Instanz::fingerabdruck). */
+    public const INSTANZ_KEY = 'instanz';
 
     /** Vorberechneter bcrypt-Hash (Kosten 10) für unbekannte E-Mails: gleiche Rechenzeit, kein password_hash je Anfrage. */
     private const ATTRAPPE = '$2y$10$N3RKsKsuGQBFYUWpIQyp..zwSKRjz27CPnRIFDoLb/jx9nVvPagpG';
     private ?Benutzer $geladen = null;
     private ?int $geladenId = null;
 
-    public function __construct(private \PDO $pdo, private Session $session)
+    public function __construct(private \PDO $pdo, private Session $session, private string $instanz)
     {
     }
 
@@ -55,15 +57,16 @@ final class Auth
 
         $this->session->erneuere();
         $this->session->setze(self::SESSION_KEY, (int) $zeile['id']);
+        $this->session->setze(self::INSTANZ_KEY, $this->instanz);
         $this->geladen = null;
         $this->geladenId = null;
         return AnmeldeErgebnis::Erfolg;
     }
 
+    /** Verwirft die ganze Sitzung; danach gesetzte Meldungen bleiben für die nächste Seite erhalten. */
     public function abmelden(): void
     {
-        $this->session->entferne(self::SESSION_KEY);
-        $this->session->erneuere();
+        $this->session->leere();
         $this->geladen = null;
         $this->geladenId = null;
     }
@@ -72,6 +75,12 @@ final class Auth
     {
         $id = $this->session->hole(self::SESSION_KEY);
         if (!is_int($id)) {
+            return null;
+        }
+        $instanz = $this->session->hole(self::INSTANZ_KEY);
+        if (!is_string($instanz) || !hash_equals($this->instanz, $instanz)) {
+            // Sitzung einer anderen Instanz (z. B. Test statt Echtbetrieb im selben Hosting-Paket): nie übernehmen.
+            $this->abmelden();
             return null;
         }
         if ($this->geladenId === $id) {

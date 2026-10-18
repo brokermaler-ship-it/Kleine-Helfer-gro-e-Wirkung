@@ -42,8 +42,15 @@ final class DemoDaten
 
     public function erzeuge(bool $zuruecksetzen): void
     {
-        if (empty($this->app->config()['testumgebung'])) {
+        if (!$this->app->istTestumgebung()) {
             throw new DomainFehler('Beispieldaten nur in der Testumgebung');
+        }
+        $adminPasswort = $this->app->config()['testumgebung_admin_passwort'] ?? null;
+        if (!is_string($adminPasswort) || mb_strlen($adminPasswort) < BenutzerRepository::MIN_PASSWORT) {
+            throw new DomainFehler(
+                "Für die Beispieldaten fehlt in der config.php das Passwort des Test-Administrators: "
+                . "'testumgebung_admin_passwort' setzen (mindestens " . BenutzerRepository::MIN_PASSWORT . ' Zeichen, nicht öffentlich).'
+            );
         }
         if ($zuruecksetzen) {
             $this->leere();
@@ -52,7 +59,7 @@ final class DemoDaten
         }
 
         $personen = $this->personen();
-        $this->benutzer($personen);
+        $this->benutzer($personen, $adminPasswort);
 
         $c = $this->app->container();
         $fahrzeuge = $c->get(FahrzeugRepository::class);
@@ -141,13 +148,21 @@ final class DemoDaten
         return $ids;
     }
 
-    /** @param array<string,int> $personen */
-    private function benutzer(array $personen): void
+    /**
+     * Mitglied und Bearbeiter erhalten das öffentliche Testpasswort, der Administrator das aus der config.php.
+     *
+     * @param array<string,int> $personen
+     */
+    private function benutzer(array $personen, string $adminPasswort): void
     {
         $repo = $this->app->container()->get(BenutzerRepository::class);
-        foreach ([['anja', 'admin@test.emc78.de', Rolle::Admin], ['bernd', 'bearbeiter@test.emc78.de', Rolle::Bearbeiter], ['carla', 'mitglied@test.emc78.de', Rolle::Mitglied]] as [$p, $mail, $rolle]) {
-            $id = $repo->anlegen($personen[$p], $mail, $rolle, self::PASSWORT);
-            $repo->passwortSetzen($id, self::PASSWORT, false);
+        foreach ([
+            ['anja', 'admin@test.emc78.de', Rolle::Admin, $adminPasswort],
+            ['bernd', 'bearbeiter@test.emc78.de', Rolle::Bearbeiter, self::PASSWORT],
+            ['carla', 'mitglied@test.emc78.de', Rolle::Mitglied, self::PASSWORT],
+        ] as [$p, $mail, $rolle, $passwort]) {
+            $id = $repo->anlegen($personen[$p], $mail, $rolle, $passwort);
+            $repo->passwortSetzen($id, $passwort, false);
         }
     }
 

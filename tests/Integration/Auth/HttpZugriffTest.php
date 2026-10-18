@@ -27,7 +27,7 @@ final class HttpZugriffTest extends DbTestCase
     private function anmelden(string $rolle = 'mitglied', bool $mussAendern = false): void
     {
         $id = $this->legeBenutzerAn('max@verein.de', 'geheim-passwort-1', $rolle, true, $mussAendern);
-        $this->sitzung['benutzer_id'] = $id;
+        $this->sitzungAnmelden($this->sitzung, $id);
     }
 
     private function csrf(): string

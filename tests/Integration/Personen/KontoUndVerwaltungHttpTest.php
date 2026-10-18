@@ -24,7 +24,7 @@ final class KontoUndVerwaltungHttpTest extends DbTestCase
     private function anmelden(string $rolle = 'mitglied', bool $mussAendern = false, string $email = 'max@verein.de'): int
     {
         $id = $this->legeBenutzerAn($email, 'geheim-passwort-1', $rolle, true, $mussAendern);
-        $this->sitzung['benutzer_id'] = $id;
+        $this->sitzungAnmelden($this->sitzung, $id);
         $this->sitzung['_csrf'] = str_repeat('a', 64);
         return $id;
     }

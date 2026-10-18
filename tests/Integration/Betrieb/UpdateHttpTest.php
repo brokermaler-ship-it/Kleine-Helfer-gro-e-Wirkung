@@ -56,7 +56,7 @@ final class UpdateHttpTest extends DbTestCase
 
     private function anmelden(string $rolle): void
     {
-        $this->sitzung['benutzer_id'] = $this->legeBenutzerAn($rolle . '@verein.de', 'geheim-passwort-1', $rolle);
+        $this->sitzungAnmelden($this->sitzung, $this->legeBenutzerAn($rolle . '@verein.de', 'geheim-passwort-1', $rolle));
         $this->sitzung['_csrf'] = str_repeat('a', 64);
     }
 
@@ -133,7 +133,7 @@ final class UpdateHttpTest extends DbTestCase
         $this->assertSame(303, $r->status);
         $this->assertSame('Datenbank wurde aktualisiert (1 Schritte).', $this->sitzung['_meldungen'][0]['text']);
         $this->assertSame([], (new \Emc\Betrieb\Migrator($this->pdo, $this->migrationen))->ausstehend());
-        $this->sitzung['benutzer_id'] = $this->legeBenutzerAn('m@verein.de', 'geheim-passwort-1', 'mitglied');
+        $this->sitzungAnmelden($this->sitzung, $this->legeBenutzerAn('m@verein.de', 'geheim-passwort-1', 'mitglied'));
         $this->assertSame(200, $this->get('/fahrzeuge')->status);
     }
 
@@ -158,7 +158,7 @@ final class UpdateHttpTest extends DbTestCase
         (new Einstellungen($this->pdo))->setze('letzte_sicherung', (new \DateTimeImmutable('-2 days'))->format(\DATE_ATOM));
         $this->assertStringNotContainsString('Datensicherung ist älter', $this->get('/fahrzeuge')->body);
         (new Einstellungen($this->pdo))->setze('letzte_sicherung', (new \DateTimeImmutable('-40 days'))->format(\DATE_ATOM));
-        $this->sitzung['benutzer_id'] = $this->legeBenutzerAn('b@verein.de', 'geheim-passwort-1', 'bearbeiter');
+        $this->sitzungAnmelden($this->sitzung, $this->legeBenutzerAn('b@verein.de', 'geheim-passwort-1', 'bearbeiter'));
         $this->assertStringNotContainsString('Datensicherung', $this->get('/fahrzeuge')->body);
     }
 

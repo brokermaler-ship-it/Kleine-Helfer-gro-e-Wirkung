@@ -41,7 +41,7 @@ final class DecoderHttpTest extends DbTestCase
     private function anmelden(string $rolle): int
     {
         $id = $this->legeBenutzerAn($rolle . '@verein.de', 'geheim-passwort-1', $rolle);
-        $this->sitzung['benutzer_id'] = $id;
+        $this->sitzungAnmelden($this->sitzung, $id);
         $this->sitzung['_csrf'] = str_repeat('a', 64);
         return $id;
     }

@@ -96,7 +96,7 @@ final class SpurweiteRepositoryTest extends DbTestCase
 
     private function anmelden(string $rolle): void
     {
-        $this->sitzung['benutzer_id'] = $this->legeBenutzerAn('x@verein.de', 'geheim-passwort-1', $rolle);
+        $this->sitzungAnmelden($this->sitzung, $this->legeBenutzerAn('x@verein.de', 'geheim-passwort-1', $rolle));
         $this->sitzung['_csrf'] = str_repeat('a', 64);
     }
 

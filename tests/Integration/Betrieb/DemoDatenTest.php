@@ -13,6 +13,7 @@ use Emc\Core\Request;
 use Emc\Core\Session;
 use Emc\Digital\Adresspruefung;
 use Emc\Tests\Integration\DbTestCase;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 final class DemoDatenTest extends DbTestCase
 {
@@ -43,9 +44,15 @@ final class DemoDatenTest extends DbTestCase
         rmdir($pfad);
     }
 
-    private function app(bool $test = true): App
+    private const ADMIN_PASSWORT = 'Admin-Geheim-2026';
+
+    /** @param array<string,mixed> $extra */
+    private function app(mixed $test = true, array $extra = []): App
     {
-        return App::erzeuge(['testumgebung' => $test, 'speicher_pfad' => $this->speicher] + self::testConfig(), new Session($this->sitzung));
+        return App::erzeuge(
+            $extra + ['testumgebung' => $test, 'testumgebung_admin_passwort' => self::ADMIN_PASSWORT, 'speicher_pfad' => $this->speicher] + self::testConfig(),
+            new Session($this->sitzung)
+        );
     }
 
     /** @return list<\SplFileInfo> Originaldateien (ohne .anzeige.jpg/.vorschau.jpg und .gitkeep) */
@@ -65,6 +72,71 @@ final class DemoDatenTest extends DbTestCase
         $this->expectException(DomainFehler::class);
         $this->expectExceptionMessage('Beispieldaten nur in der Testumgebung');
         (new DemoDaten($this->app(false)))->erzeuge(false);
+    }
+
+    /** @return array<string,array{mixed}> */
+    public static function keinEchtesTrue(): array
+    {
+        return ['String false' => ['false'], 'String true' => ['true'], 'Zahl 1' => [1]];
+    }
+
+    #[DataProvider('keinEchtesTrue')]
+    public function test_nur_echtes_true_schaltet_testumgebung_ein(mixed $wert): void
+    {
+        $this->sitzungAnmelden($this->sitzung, $this->legeBenutzerAn('a@verein.de', 'geheim-passwort-1', 'admin'));
+        $this->assertSame(404, $this->app($wert)->handle(new Request('GET', '/admin/testdaten'))->status);
+        $this->assertSame(404, $this->app($wert)->handle(new Request('POST', '/admin/testdaten', [], ['_csrf' => $this->sitzung['_csrf'] = str_repeat('a', 64)]))->status);
+        $this->assertStringNotContainsString('Testumgebung', $this->app($wert)->handle(new Request('GET', '/fahrzeuge'))->body);
+        try {
+            (new DemoDaten($this->app($wert)))->erzeuge(true);
+            $this->fail('DemoDaten darf nicht laufen');
+        } catch (DomainFehler $f) {
+            $this->assertSame('Beispieldaten nur in der Testumgebung', $f->getMessage());
+        }
+        $this->assertSame(1, $this->zaehle('benutzer'), 'nichts gelöscht');
+    }
+
+    /** @return array<string,array{mixed}> */
+    public static function ungueltigeAdminPasswoerter(): array
+    {
+        return ['fehlt' => [null], 'leer' => [''], 'kein String' => [12345678901], 'zu kurz' => ['kurz']];
+    }
+
+    #[DataProvider('ungueltigeAdminPasswoerter')]
+    public function test_ohne_admin_passwort_in_config_wird_abgebrochen(mixed $passwort): void
+    {
+        $this->legeBenutzerAn('x@verein.de');
+        $extra = $passwort === null ? [] : ['testumgebung_admin_passwort' => $passwort];
+        $config = $extra + ['testumgebung' => true, 'speicher_pfad' => $this->speicher] + self::testConfig();
+        try {
+            (new DemoDaten(App::erzeuge($config, new Session($this->sitzung))))->erzeuge(true);
+            $this->fail('DemoDaten darf ohne Admin-Passwort nicht laufen');
+        } catch (DomainFehler $f) {
+            $this->assertStringContainsString("'testumgebung_admin_passwort'", $f->getMessage());
+            $this->assertStringContainsString('mindestens 10 Zeichen', $f->getMessage());
+        }
+        $this->assertSame(1, $this->zaehle('benutzer'), 'vorhandene Daten bleiben unangetastet');
+    }
+
+    public function test_admin_passwort_kommt_aus_der_config(): void
+    {
+        (new DemoDaten($this->app()))->erzeuge(true);
+        $auth = fn() => $this->app()->container()->get(Auth::class);
+        $this->assertSame(AnmeldeErgebnis::Falsch, $auth()->anmelden('admin@test.emc78.de', 'Test-EMC78!', '127.0.0.1'));
+        $this->assertSame(AnmeldeErgebnis::Erfolg, $auth()->anmelden('admin@test.emc78.de', self::ADMIN_PASSWORT, '127.0.0.1'));
+        $this->assertSame(AnmeldeErgebnis::Erfolg, $auth()->anmelden('bearbeiter@test.emc78.de', 'Test-EMC78!', '127.0.0.1'));
+    }
+
+    public function test_login_zeigt_nur_mitglied_und_bearbeiter_zugang(): void
+    {
+        $this->legeBenutzerAn('x@verein.de');
+        $body = $this->app()->handle(new Request('GET', '/login'))->body;
+        $this->assertStringContainsString('mitglied@test.emc78.de', $body);
+        $this->assertStringContainsString('bearbeiter@test.emc78.de', $body);
+        $this->assertStringContainsString('Test-EMC78!', $body);
+        $this->assertStringContainsString('Admin-Zugang: beim Vorstand erfragen', $body);
+        $this->assertStringNotContainsString('admin@test.emc78.de', $body);
+        $this->assertStringNotContainsString(self::ADMIN_PASSWORT, $body);
     }
 
     public function test_legt_beispieldaten_mit_doppelter_adresse_an(): void
@@ -110,7 +182,7 @@ final class DemoDatenTest extends DbTestCase
 
     public function test_testdaten_seite_nur_in_testumgebung_und_nur_fuer_admin(): void
     {
-        $this->sitzung['benutzer_id'] = $this->legeBenutzerAn('a@verein.de', 'geheim-passwort-1', 'admin');
+        $this->sitzungAnmelden($this->sitzung, $this->legeBenutzerAn('a@verein.de', 'geheim-passwort-1', 'admin'));
         $this->assertSame(404, $this->app(false)->handle(new Request('GET', '/admin/testdaten'))->status);
 
         (new DemoDaten($this->app()))->erzeuge(true);
@@ -125,7 +197,7 @@ final class DemoDatenTest extends DbTestCase
     {
         (new DemoDaten($this->app()))->erzeuge(true);
         $this->sitzung = ['_csrf' => str_repeat('a', 64)];
-        $this->app()->container()->get(Auth::class)->anmelden('admin@test.emc78.de', 'Test-EMC78!', '127.0.0.1');
+        $this->app()->container()->get(Auth::class)->anmelden('admin@test.emc78.de', self::ADMIN_PASSWORT, '127.0.0.1');
         $this->sitzung['_csrf'] = str_repeat('a', 64);
         $this->pdo->exec('DELETE FROM decoder');
 

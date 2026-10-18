@@ -12,7 +12,13 @@ return [
     'debug' => false,
     // Sitzungs-Cookie nur über HTTPS senden; auf false nur für lokale Entwicklung ohne HTTPS.
     'cookie_secure' => true,
+    // Minuten ohne Aufruf, nach denen eine Anmeldung verfallen darf (Standard 480 = 8 Stunden).
+    'sitzung_minuten' => 480,
     // Nur für die Testinstanz (test.emc78.de): zeigt eine gelbe Leiste, die Testzugänge auf der Anmeldeseite
-    // und unter Verwaltung → Testdaten das Laden von Beispieldaten. Im Echtbetrieb immer false.
+    // und unter Verwaltung → Testdaten das Laden von Beispieldaten. Nur genau true schaltet sie ein.
+    // Im Echtbetrieb immer false.
     'testumgebung' => false,
+    // Nur Testinstanz: Passwort für admin@test.emc78.de beim Laden der Beispieldaten (mindestens 10 Zeichen).
+    // Wird nirgends angezeigt; nur an Administratoren weitergeben. Ohne diesen Wert werden keine Beispieldaten geladen.
+    'testumgebung_admin_passwort' => '',
 ];

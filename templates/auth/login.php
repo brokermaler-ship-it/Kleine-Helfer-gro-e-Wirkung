@@ -20,11 +20,11 @@
         </form>
         <?php if (!empty($testumgebung)): ?>
             <div class="alert alert-warning mt-4 small" role="note">
-                <strong>Testumgebung</strong> – hier gibt es nur Beispieldaten. Test-Zugänge (Passwort für alle: <code>Test-EMC78!</code>):
+                <strong>Testumgebung</strong> – hier gibt es nur Beispieldaten. Test-Zugänge (Passwort: <code>Test-EMC78!</code>):
                 <ul class="mb-0 mt-1">
-                    <li><code>admin@test.emc78.de</code> – Administrator</li>
                     <li><code>bearbeiter@test.emc78.de</code> – Bearbeiter</li>
                     <li><code>mitglied@test.emc78.de</code> – Mitglied</li>
+                    <li>Admin-Zugang: beim Vorstand erfragen</li>
                 </ul>
             </div>
         <?php endif; ?>

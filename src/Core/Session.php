@@ -12,9 +12,19 @@ final class Session
     private bool $nativ;
     private int $erneuerungen = 0;
 
-    /** @param array<string,mixed>|null $speicher */
-    public function __construct(?array &$speicher = null, bool $cookieSecure = true)
-    {
+    /**
+     * @param array<string,mixed>|null $speicher Test-Sitzung als Array; null = echte PHP-Sitzung
+     * @param ?string $speicherPfad eigener Ablageort der Sitzungsdateien (je Instanz, nicht der gemeinsame des Hosters)
+     * @param int $lebensdauer Sekunden ohne Aufruf, nach denen die Sitzung verfallen darf
+     */
+    public function __construct(
+        ?array &$speicher = null,
+        bool $cookieSecure = true,
+        ?string $speicherPfad = null,
+        string $name = '',
+        string $cookiePfad = '/',
+        int $lebensdauer = 28800,
+    ) {
         if ($speicher !== null) {
             $this->nativ = false;
             $this->daten = &$speicher;
@@ -24,9 +34,22 @@ final class Session
         if (session_status() !== PHP_SESSION_ACTIVE) {
             ini_set('session.use_strict_mode', '1');
             ini_set('session.use_only_cookies', '1');
+            ini_set('session.gc_maxlifetime', (string) $lebensdauer);
+            if ($speicherPfad !== null) {
+                if (!is_dir($speicherPfad) && !mkdir($speicherPfad, 0700, true) && !is_dir($speicherPfad)) {
+                    throw new \RuntimeException('Sitzungsordner kann nicht angelegt werden: ' . $speicherPfad);
+                }
+                session_save_path($speicherPfad);
+                // Eigener Ordner: die Aufräumarbeit des Hosters (z. B. Cron) greift hier nicht, PHP räumt selbst auf.
+                ini_set('session.gc_probability', '1');
+                ini_set('session.gc_divisor', '100');
+            }
+            if ($name !== '') {
+                session_name($name);
+            }
             session_set_cookie_params([
                 'lifetime' => 0,
-                'path' => '/',
+                'path' => $cookiePfad,
                 'secure' => $cookieSecure,
                 'httponly' => true,
                 'samesite' => 'Lax',
@@ -59,6 +82,15 @@ final class Session
         }
         unset($this->daten['_csrf']);
         $this->erneuerungen++;
+    }
+
+    /** Verwirft alle Sitzungsdaten und vergibt eine neue Sitzungs-ID (Abmelden, fremde Sitzung). */
+    public function leere(): void
+    {
+        foreach (array_keys($this->daten) as $k) {
+            unset($this->daten[$k]);
+        }
+        $this->erneuere();
     }
 
     public function erneuerungen(): int

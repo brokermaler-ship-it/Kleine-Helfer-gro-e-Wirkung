@@ -4,7 +4,7 @@ Webanwendung des Modelleisenbahnclubs EMC 78 Halle e. V. zur Verwaltung des Fahr
 
 ## Voraussetzungen
 
-- PHP ab Version 8.2 mit den Erweiterungen `pdo_mysql`, `gd`, `fileinfo` und `zip`
+- PHP ab Version 8.2 mit den Erweiterungen `pdo_mysql`, `mbstring`, `gd`, `fileinfo` und `zip`
 - MySQL ab Version 8 oder MariaDB ab Version 10.6
 - HTTPS (Pflicht, weil Anmeldungen darüber laufen)
 - FTP-Zugang zum Webspace und Zugang zur Datenbankverwaltung des Hosters (z. B. phpMyAdmin)
@@ -24,7 +24,7 @@ Allgemein gilt für jeden Webspace (die Schritte für STRATO stehen im nächsten
 
 Die Anwendung soll unter **https://mitglieder.emc78.de** erreichbar sein. Die Menünamen im STRATO-Kundenbereich ändern sich gelegentlich; die folgenden Bezeichnungen sind deshalb sinngemäß zu verstehen.
 
-1. **PHP-Version:** Im STRATO-Kundenbereich (Menüpunkt sinngemäß „Paket-Verwaltung“ bzw. „Einstellungen“ → „PHP-Einstellungen“ oder „PHP-Version“) eine **PHP-Version ab 8.2** wählen und speichern. Falls Auswahlfelder für Erweiterungen angeboten werden: `gd`, `fileinfo`, `zip` und `pdo_mysql` müssen aktiv sein (meist sind sie es schon).
+1. **PHP-Version:** Im STRATO-Kundenbereich (Menüpunkt sinngemäß „Paket-Verwaltung“ bzw. „Einstellungen“ → „PHP-Einstellungen“ oder „PHP-Version“) eine **PHP-Version ab 8.2** wählen und speichern. Falls Auswahlfelder für Erweiterungen angeboten werden: `gd`, `fileinfo`, `zip`, `mbstring` und `pdo_mysql` müssen aktiv sein (meist sind sie es schon).
 2. **Datenbank:** Im Kundenbereich (Menüpunkt sinngemäß „Datenbanken und Webspace“ → „Datenbanken“ bzw. „MySQL-Datenbank“) eine **neue MySQL-Datenbank anlegen**. Notieren: Datenbankname, Benutzername, Passwort und den **Datenbank-Server** (bei STRATO ein eigener Servername, nicht `localhost`). Der Server steht in der Datenbankübersicht.
 3. **SFTP-Zugang:** Im Kundenbereich (sinngemäß „SFTP-Zugang“ bzw. „FTP-Zugang“ im Bereich Webspace) einen SFTP-Zugang einrichten bzw. das Passwort setzen. Mit einem Programm wie FileZilla oder WinSCP verbinden.
 4. **Dateien hochladen:** Das entpackte Verzeichnis des Release-ZIPs vollständig in einen neuen Ordner `/mitglieder/` auf dem Webspace hochladen. Es entstehen z. B. `/mitglieder/public`, `/mitglieder/src`, `/mitglieder/vendor`, `/mitglieder/storage`.
@@ -58,14 +58,17 @@ Neuerungen und Beispieldaten lassen sich gefahrlos auf einer eigenen Testinstanz
 
 1. Eine **zweite, eigene Datenbank** anlegen (nie dieselbe wie im Echtbetrieb).
 2. Das Release-ZIP in ein **eigenes Verzeichnis `/test/`** hochladen und die Subdomain `test.emc78.de` mit dem Ziel `/test/public` anlegen; SSL wie oben aktivieren.
-3. In der `config.php` der Testinstanz die zweite Datenbank eintragen und **`'testumgebung' => true`** setzen. Die Testinstanz zeigt dann oben eine gelbe Leiste „Testumgebung“ und auf der Anmeldeseite die Test-Zugänge.
-4. `https://test.emc78.de/install` aufrufen und einen Administrator anlegen.
-5. Beispieldaten laden, entweder
+3. In der `config.php` der Testinstanz die zweite Datenbank eintragen, **`'testumgebung' => true`** setzen (genau so, ohne Anführungszeichen; `'true'`, `'false'` oder `1` schalten die Testumgebung nicht ein) und unter **`'testumgebung_admin_passwort'`** ein eigenes, geheimes Passwort für den Test-Administrator eintragen (mindestens 10 Zeichen). Ohne dieses Passwort werden keine Beispieldaten geladen. Die Testinstanz zeigt dann oben eine gelbe Leiste „Testumgebung“ und auf der Anmeldeseite die Test-Zugänge für Mitglied und Bearbeiter.
+4. **Testinstanz zusätzlich mit einem Verzeichnisschutz sichern:** Im STRATO-Kundenbereich (sinngemäß „Sicherheit“ bzw. „Webspace“ → „Verzeichnisschutz“) für das Verzeichnis `/test` einen Verzeichnisschutz (htaccess-Passwort) mit Benutzername und Passwort einrichten und diese nur an Vereinsmitglieder weitergeben, die testen sollen. Die Test-Zugänge stehen auf der Anmeldeseite der Testinstanz; ohne Verzeichnisschutz könnte sie jeder im Internet benutzen. Danach `https://test.emc78.de` aufrufen: Erst fragt der Browser nach dem Verzeichnisschutz-Passwort, dann erscheint die Anmeldeseite. Erscheint stattdessen ein Fehler, hat der Verzeichnisschutz eine mitgelieferte `.htaccess` ersetzt; dann deren Zeilen aus dem Release-ZIP wieder ergänzen.
+5. `https://test.emc78.de/install` aufrufen und einen Administrator anlegen.
+6. Beispieldaten laden, entweder
    - im Browser als Administrator unter **Verwaltung → Testdaten** mit „Beispieldaten neu laden“ oder
    - per SSH (falls das STRATO-Paket SSH bietet) im Verzeichnis `/test/`: `php bin/demo-daten.php --zuruecksetzen`
 
    Beides **löscht alle vorhandenen Daten der Testinstanz** und legt neu an: 6 erfundene Personen, 12 Fahrzeuge in H0 und N (Verein und Mitglieder, ein ausgemustertes), Decoder mit Funktionstasten und CVs, Beispielfotos und absichtlich **eine doppelte DCC-Adresse in H0**, an der man die Warnung der Adressprüfung sieht. Nach dem Laden im Browser wird man abgemeldet.
-6. Anmelden mit `admin@test.emc78.de`, `bearbeiter@test.emc78.de` oder `mitglied@test.emc78.de`, Passwort für alle: `Test-EMC78!`
+7. Anmelden mit `bearbeiter@test.emc78.de` oder `mitglied@test.emc78.de` (Passwort `Test-EMC78!`) oder als Administrator mit `admin@test.emc78.de` und dem Passwort aus `testumgebung_admin_passwort`. Den Admin-Zugang erfahren Tester beim Vorstand; er steht bewusst nicht auf der Anmeldeseite.
+
+Anmeldungen gelten nur für die Instanz, an der man sich angemeldet hat: Echtbetrieb und Testinstanz speichern ihre Sitzungen getrennt (jeweils in `storage/sitzungen/`) und erkennen fremde Sitzungen, auch wenn beide im selben STRATO-Paket liegen.
 
 `testumgebung` im Echtbetrieb **nie** auf `true` setzen; Testdaten-Seite und Test-Zugänge sind dort bewusst nicht vorhanden.
 
@@ -92,13 +95,14 @@ Hinweise:
 
 - **Fehler 500 direkt nach dem Hochladen?** Manche Hoster erlauben die Anweisung `Options` in `.htaccess` nicht. Dann in der Datei `public/.htaccess` die Zeile `Options -Indexes` entfernen.
 - Die Einstellung `cookie_secure` in der `config.php` muss im Betrieb auf `true` bleiben (HTTPS). Nur für lokale Tests ohne HTTPS darf sie `false` sein.
-- Der Ordner `storage/` muss für PHP beschreibbar sein (hier liegen die hochgeladenen Dateien). Er ist per `.htaccess` gegen direkten Abruf gesperrt; Dateien werden nur nach Anmeldung über die Anwendung ausgeliefert.
+- Der Ordner `storage/` muss für PHP beschreibbar sein (hier liegen die hochgeladenen Dateien und unter `storage/sitzungen/` die Anmeldesitzungen). Er ist per `.htaccess` gegen direkten Abruf gesperrt; Dateien werden nur nach Anmeldung über die Anwendung ausgeliefert.
+- Eine Anmeldung verfällt nach `sitzung_minuten` (Standard 480 = 8 Stunden) ohne Aufruf und spätestens beim Schließen des Browsers.
 - Die maximale Upload-Größe richtet sich nach `upload_max_mb` in der `config.php` und den PHP-Grenzen des Hosters (`upload_max_filesize`, `post_max_size`).
 
 ## Update
 
 1. Als Administrator zuerst eine Sicherung erstellen (Verwaltung → Sicherung).
-2. Das neue ZIP entpacken und die Dateien per FTP hochladen, bestehende Dateien überschreiben. **Dabei `config.php` und den Ordner `storage/` nicht überschreiben oder löschen** (das neue ZIP enthält beide nicht).
+2. Das neue ZIP entpacken und die Dateien per FTP hochladen, bestehende Dateien überschreiben. **Dabei `config.php` und den Ordner `storage/` nicht löschen.** Das ZIP enthält keine `config.php` und keine hochgeladenen Dateien. Es enthält nur `storage/.htaccess`, `storage/dateien/.gitkeep` und `storage/sitzungen/.gitkeep`; diese drei Dateien beim Hochladen zu überschreiben ist harmlos, vorhandene Fotos, Dokumente und Sitzungen bleiben erhalten.
 3. Als Administrator anmelden. Gibt es Datenbank-Änderungen, erscheint oben der Hinweis „Es steht ein Datenbank-Update an.“ Dort auf den Link klicken oder **Verwaltung → Update** öffnen und „Datenbank jetzt aktualisieren“ wählen.
 
 Solange ein Datenbank-Update aussteht, sehen alle anderen Benutzer eine Wartungsseite. Nach dem Update ist alles wieder normal nutzbar.
@@ -118,7 +122,7 @@ Die ZIP-Datei bitte an einem sicheren Ort außerhalb des Webspace aufbewahren. I
 1. Die Anwendung wie unter „Installation“ auf dem Webspace bereitstellen (Schritte 1–5), aber `/install` nicht aufrufen.
 2. Das Sicherungs-ZIP entpacken.
 3. `datenbank.sql` im Verwaltungswerkzeug des Hosters (phpMyAdmin → Importieren) in die leere Datenbank einspielen. Bestehende Tabellen mit gleichem Namen werden dabei ersetzt.
-4. Den Ordner `dateien/` per FTP nach `storage/dateien/` hochladen.
+4. Den Ordner `dateien` aus dem entpackten ZIP per FTP **in den Ordner `storage/` hinein** hochladen, sodass z. B. `storage/dateien/2026/…` entsteht (nicht `storage/dateien/dateien/…`).
 5. Die Anwendung aufrufen und wie gewohnt anmelden.
 
 ## Entwicklung

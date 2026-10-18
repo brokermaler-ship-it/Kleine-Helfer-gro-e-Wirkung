@@ -7,6 +7,7 @@ namespace Emc\Tests\Integration\Auth;
 use Emc\Auth\AnmeldeErgebnis;
 use Emc\Auth\Auth;
 use Emc\Auth\Rolle;
+use Emc\Core\Instanz;
 use Emc\Core\Session;
 use Emc\Tests\Integration\DbTestCase;
 
@@ -16,7 +17,7 @@ final class AuthTest extends DbTestCase
 
     private function auth(): Auth
     {
-        return new Auth($this->pdo, new Session($this->sitzung));
+        return new Auth($this->pdo, new Session($this->sitzung), Instanz::fingerabdruck(self::testConfig()));
     }
 
     public function test_anmeldung_erfolgreich(): void
@@ -37,7 +38,7 @@ final class AuthTest extends DbTestCase
     {
         $this->legeBenutzerAn('max@verein.de');
         $s = new Session($this->sitzung);
-        (new Auth($this->pdo, $s))->anmelden('max@verein.de', 'geheim-passwort-1', '127.0.0.1');
+        (new Auth($this->pdo, $s, Instanz::fingerabdruck(self::testConfig())))->anmelden('max@verein.de', 'geheim-passwort-1', '127.0.0.1');
         $this->assertSame(1, $s->erneuerungen());
     }
 

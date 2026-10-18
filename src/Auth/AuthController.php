@@ -51,6 +51,7 @@ final class AuthController
     public function logout(Request $r): Response
     {
         $this->auth->abmelden();
+        $this->session->meldung('erfolg', 'Du wurdest abgemeldet.');
         return Response::redirect(url('/login'));
     }
 

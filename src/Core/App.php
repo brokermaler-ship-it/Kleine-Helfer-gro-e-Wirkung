@@ -64,9 +64,15 @@ final class App
             $c->get('pdo'),
             $this->migrationsVerzeichnis
         ));
-        $this->container->set('session', fn() => $session ?? new Session(cookieSecure: (bool) ($this->config['cookie_secure'] ?? true)));
+        $this->container->set('session', fn() => $session ?? new Session(
+            cookieSecure: (bool) ($this->config['cookie_secure'] ?? true),
+            speicherPfad: rtrim($this->speicherPfad(), '/') . '/sitzungen',
+            name: Instanz::sitzungsName($this->config),
+            cookiePfad: Instanz::cookiePfad($this->config),
+            lebensdauer: Instanz::sitzungSekunden($this->config),
+        ));
         $this->container->set(Csrf::class, fn(Container $c) => new Csrf($c->get('session')));
-        $this->container->set(Auth::class, fn(Container $c) => new Auth($c->get('pdo'), $c->get('session')));
+        $this->container->set(Auth::class, fn(Container $c) => new Auth($c->get('pdo'), $c->get('session'), Instanz::fingerabdruck($this->config)));
         $this->container->set(AuthController::class, fn(Container $c) => new AuthController(
             $this->view,
             $c->get(Auth::class),
@@ -217,14 +223,34 @@ final class App
     {
         try {
             $this->richteViewEin();
-            return $this->durchMiddleware($request);
+            $antwort = $this->durchMiddleware($request);
         } catch (HttpFehler $f) {
             $header = $f->erlaubt !== [] ? ['Allow' => implode(', ', $f->erlaubt)] : [];
-            return $this->fehlerSeite($f->status, null, $header);
+            $antwort = $this->fehlerSeite($f->status, null, $header);
         } catch (\Throwable $t) {
             error_log(sprintf('%s: %s in %s:%d', $t::class, $t->getMessage(), $t->getFile(), $t->getLine()));
-            return $this->fehlerSeite(500, !empty($this->config['debug']) ? $t->getMessage() : null);
+            $antwort = $this->fehlerSeite(500, !empty($this->config['debug']) ? $t->getMessage() : null);
         }
+        return self::gegenFrames($antwort);
+    }
+
+    /** Nur ein echtes `true` in der config.php schaltet die Testumgebung ein. */
+    public function istTestumgebung(): bool
+    {
+        return Instanz::istTestumgebung($this->config);
+    }
+
+    /** Schutz vor Clickjacking für HTML-Seiten; Dateiauslieferung und eigene CSP bleiben unberührt. */
+    private static function gegenFrames(Response $antwort): Response
+    {
+        if ($antwort->datei !== null || !str_starts_with(strtolower($antwort->headers['Content-Type'] ?? ''), 'text/html')) {
+            return $antwort;
+        }
+        $header = $antwort->headers + [
+            'X-Frame-Options' => 'DENY',
+            'Content-Security-Policy' => "frame-ancestors 'none'",
+        ];
+        return new Response($antwort->body, $antwort->status, $header, null, $antwort->loescheNachSenden);
     }
 
     /**
@@ -247,7 +273,7 @@ final class App
         $c = $this->container;
         $auth = fn() => $c->get(Auth::class);
         $this->view->teile('app_name', $this->config['app_name'] ?? '');
-        $this->view->teile('testumgebung', !empty($this->config['testumgebung']));
+        $this->view->teile('testumgebung', $this->istTestumgebung());
         $this->view->teile('csrf', $c->get(Csrf::class));
         $this->view->teile('darf', fn(string $aktion): bool => Berechtigung::darf($auth()->benutzer(), $aktion));
         $this->view->teileSpaet('benutzer', fn() => $auth()->benutzer());

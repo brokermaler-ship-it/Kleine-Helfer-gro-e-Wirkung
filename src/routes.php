@@ -105,7 +105,7 @@ return function (Router $router, App $app): void {
     $router->add('GET', '/admin/update', $app->erfordert('betrieb', $upd('zeigen')));
     $router->add('POST', '/admin/update', $app->erfordert('betrieb', $upd('ausfuehren')));
 
-    if (!empty($app->config()['testumgebung'])) {
+    if ($app->istTestumgebung()) {
         $test = fn(string $m) => fn(Request $r, array $p = []) => $c->get(TestdatenController::class)->$m($r);
         $router->add('GET', '/admin/testdaten', $app->erfordert('betrieb', $test('zeigen')));
         $router->add('POST', '/admin/testdaten', $app->erfordert('betrieb', $test('neuLaden')));

@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Emc\Tests\Integration;
 
+use Emc\Auth\Auth;
 use Emc\Betrieb\Migrator;
+use Emc\Core\Instanz;
 use Emc\Core\Database;
 use PHPUnit\Framework\TestCase;
 
@@ -64,6 +66,17 @@ abstract class DbTestCase extends TestCase
             'db_benutzer' => getenv('TEST_DB_BENUTZER') ?: 'root',
             'db_passwort' => getenv('TEST_DB_PASSWORT') !== false ? (string) getenv('TEST_DB_PASSWORT') : '',
         ];
+    }
+
+    /**
+     * Trägt eine Anmeldung in eine Test-Sitzung ein (wie nach Auth::anmelden für die Testinstanz).
+     *
+     * @param array<string,mixed> $sitzung
+     */
+    protected function sitzungAnmelden(array &$sitzung, int $benutzerId): void
+    {
+        $sitzung['benutzer_id'] = $benutzerId;
+        $sitzung[Auth::INSTANZ_KEY] = Instanz::fingerabdruck(self::testConfig());
     }
 
     /** Legt Person und Benutzer an und liefert die Benutzer-ID. */
