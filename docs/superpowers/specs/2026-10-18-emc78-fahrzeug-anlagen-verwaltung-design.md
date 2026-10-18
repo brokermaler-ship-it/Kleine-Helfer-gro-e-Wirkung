@@ -178,7 +178,7 @@ Ist das Format nicht lesbar, wird mit den Exporten gearbeitet (Bild als Plan-Hin
 
 ### 4.10 Plan-Editor
 
-Grafischer Editor im Browser (PC und Tablet) für Anlagen und Module, aufbauend auf den WinTrack-Plänen.
+Grafischer Editor im Browser (PC und Tablet) für Anlagen und Module, aufbauend auf den WinTrack-Plänen. WinTrack bleibt vorerst das Werkzeug für die maßstäbliche Planung.
 
 **Anordnungen bearbeiten**
 
@@ -199,6 +199,14 @@ Grafischer Editor im Browser (PC und Tablet) für Anlagen und Module, aufbauend 
 - **Statusfarben:** offene Defekte rot, Wartung fällig gelb.
 - Klick auf ein Bauteil zeigt Adresse, Antrieb, Historie und die Schaltfläche **„Defekt melden“** (auch für Mitglieder).
 
+**Gleisbild-Editor** (schematisch, wie ein Stellpult)
+
+- Je Modul ein Raster, auf dem Gleissymbole gesetzt werden: Gerade, Bogen, Weiche (links/rechts/Dreiweg/DKW), Kreuzung, Signal, Prellbock, Entkuppler, Rückmeldeabschnitt.
+- Weichen, Signale und Entkuppler sind direkt **Bauteile** (4.3) mit Zubehöradresse, Antrieb, Statusfarbe und „Defekt melden“.
+- Gleisenden an der Modulkante ergeben die **Übergänge** des Moduls; im Anordnungs-Editor werden die Gleisbilder der Module zum Gesamtgleisbild der Anordnung zusammengesetzt.
+- Wahlweise mit WinTrack-Plan als Hintergrund oder nur als Gleisbild.
+- Das Gleisbild ist **nicht maßstäblich**; die maßstäbliche Planung bleibt in WinTrack.
+
 **Ansichtsmodus** für alle Mitglieder (nur Lesen, zoomen, verschieben, auch am Handy); Bearbeiten nur für Bearbeiter.
 
 **Technik:** SVG-basiert im Browser mit eigenem JavaScript (keine Installation nötig); Speichern der Positionen in `anordnung_modul` bzw. am Bauteil.
@@ -214,7 +222,7 @@ Grafischer Editor im Browser (PC und Tablet) für Anlagen und Module, aufbauend 
 
 **Datenmodell (Übersicht der Tabellen)**
 
-`person`, `benutzer`, `spurweite`, `fahrzeug`, `decoder`, `funktion`, `funktionsvorlage`, `cv_wert`, `anlage`, `modul`, `bauteil`, `anordnung`, `anordnung_modul`, `modul_uebergang`, `import_lauf` (WinTrack-Importe für den Abgleich), `wartungsart`, `wartungsplan`, `wartung`, `reparatur`, `ersatzteil`, `veranstaltung`, `veranstaltung_tag`, `veranstaltung_anlage`, `anmeldung`, `anmeldung_tag`, `box`, `box_inhalt`, `packposition` (Status je Veranstaltung), `dokument`, `dokument_zuordnung`, `druckdatei`, `aenderungsprotokoll`.
+`person`, `benutzer`, `spurweite`, `fahrzeug`, `decoder`, `funktion`, `funktionsvorlage`, `cv_wert`, `anlage`, `modul`, `bauteil`, `anordnung`, `anordnung_modul`, `modul_uebergang`, `gleisbild_element`, `import_lauf` (WinTrack-Importe für den Abgleich), `wartungsart`, `wartungsplan`, `wartung`, `reparatur`, `ersatzteil`, `veranstaltung`, `veranstaltung_tag`, `veranstaltung_anlage`, `anmeldung`, `anmeldung_tag`, `box`, `box_inhalt`, `packposition` (Status je Veranstaltung), `dokument`, `dokument_zuordnung`, `druckdatei`, `aenderungsprotokoll`.
 
 Objektübergreifende Bezüge (Wartungsplan, Reparatur, Dokumentzuordnung, QR-Code) verwenden das Paar `objekt_typ` + `objekt_id` (Typen: fahrzeug, anlage, modul, bauteil, box, veranstaltung).
 
@@ -261,8 +269,9 @@ Jede Stufe ist für sich nutzbar und bekommt einen eigenen Umsetzungsplan.
 | **4 – Veranstaltungen** | Kalender, Anlagen mit Anordnung, Fahrzeuganmeldung mit Prüfungen, Betriebsstunden |
 | **5 – Boxen & Packlisten** | Boxen, Standardinhalt, Packliste je Veranstaltung, mobiles Abhaken, Rückgabe, Druck, QR-Codes für Boxen |
 | **6 – Dateien & 3D** | Erweiterte Dateiverwaltung (Umwandlung, Video), Volltextsuche, 3D-Ansicht, Druckdatei-Bibliothek |
-| **7 – Plan-Editor** | Anordnungs-Editor mit Einrasten, WinTrack-Plan als Hintergrund, Bauteile auf dem Plan mit Statusfarben und „Defekt melden“; danach 3D-Szene |
+| **7 – Plan-Editor** | Anordnungs-Editor mit Einrasten, Gleisbild-Editor je Modul, WinTrack-Plan als Hintergrund, Bauteile auf dem Plan mit Statusfarben und „Defekt melden“; danach 3D-Szene |
 | **8 – Importe** | WinTrack-Import mit Abgleich-Tabelle und Unterschiedsanzeige (nach erfolgreichem Probelauf); JMRI- und Rocrail-Import |
+| **9 – Gleisplaner (optional, später)** | Maßstäblicher Gleisplaner im Browser mit **Materialdatenbanken der Hersteller** (Gleisgeometrie, Artikelnummern, Stücklisten) als möglicher Ersatz für WinTrack. Wird erst nach Stufe 7 entschieden und bekommt eine **eigene Spezifikation**; vorab zu klären: Bezugsquelle und Lizenz der Herstellerdaten (z. B. offene Bibliotheken von XTrackCAD) |
 
 Der **WinTrack-Probelauf** wird vorgezogen und vor Stufe 3 durchgeführt, damit Datenmodell für Module und Bauteile auf das Ergebnis abgestimmt werden kann.
 
@@ -275,7 +284,6 @@ Der **WinTrack-Probelauf** wird vorgezogen und vor Stufe 3 durchgeführt, damit 
 
 ## 8. Nicht Bestandteil
 
-- Eigener Gleisplan-Editor als Ersatz für WinTrack (Gleise zeichnen, Herstellerbibliotheken).
 - Direktes Auslesen oder Programmieren von Decodern (dafür weiter JMRI DecoderPro o. ä.).
 - Mitgliederverwaltung mit Beiträgen, Buchhaltung.
 - Öffentliche Ansicht für die Vereinswebseite (kann später ergänzt werden).
