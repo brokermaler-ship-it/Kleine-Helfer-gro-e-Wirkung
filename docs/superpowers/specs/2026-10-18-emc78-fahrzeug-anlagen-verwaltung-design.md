@@ -223,7 +223,7 @@ Wunsch des Vorsitzenden: Alle hochgeladenen **Fotos und Dokumente** liegen im On
 - **Ablauf beim Hochladen:** Datei wird geprüft (4.7), zuerst lokal gespeichert, dann ins OneDrive übertragen; Status je Datei „im OneDrive“ / „wartet auf Übertragung“. Ist OneDrive nicht erreichbar, wird später automatisch nachübertragen (beim nächsten Aufruf bzw. per Cron, falls im Paket verfügbar).
 - **Anzeige:** Vorschaubilder und Anzeigegrößen werden für schnelle Darstellung auf dem Webspace zwischengespeichert; Originale werden bei Bedarf über die App aus dem OneDrive geladen. Zugriff weiterhin nur nach Anmeldung (keine öffentlichen OneDrive-Links).
 - **Technik:** Speicher-Schnittstelle mit zwei Umsetzungen (lokal, OneDrive), damit die App auch ohne Anbindung voll funktioniert; Umzug vorhandener Dateien per Knopfdruck.
-- **Konto:** offen, siehe Abschnitt 7 – empfohlen ist ein eigenes Vereinskonto statt eines Privatkontos (Abhängigkeit von einer Person, Datenschutz).
+- **Konto (entschieden):** Eigenes Microsoft-Konto des Vereins. Der bestehende OneDrive-Ordner des EMC wird vom bisherigen Inhaber mit Bearbeitungsrechten für das Vereinskonto freigegeben; die App verbindet sich nur mit dem Vereinskonto. Der allgemeine Freigabelink wird danach auf „Bestimmte Personen“ beschränkt.
 
 ## 5. Technik
 
@@ -296,7 +296,7 @@ Der **WinTrack-Probelauf** wird vorgezogen und vor Stufe 3 durchgeführt, damit 
 2. **WinTrack-Probelauf:** Beispieldatei und Exporte einer Vereinsanlage bereitstellen.
 3. **Stammlisten:** Welche Spurweiten und Wartungsarten nutzt der Verein (Startbestand)?
 4. **Gestaltung:** Vereinslogo und -farben, falls vorhanden.
-5. **OneDrive-Konto:** Privates Konto von Ulrich Bühling oder eigenes Vereinskonto (empfohlen, z. B. kostenloses Microsoft-Konto des Vereins, das mit Ulrich Bühling geteilt wird)? Vorstandsbeschluss zum Datenschutz.
+5. **OneDrive:** Vereinskonto anlegen (z. B. `fahrzeuge.emc78@outlook.com`), Ordnerfreigabe mit Bearbeitungsrechten einrichten.
 
 ## 8. Nicht Bestandteil
 
