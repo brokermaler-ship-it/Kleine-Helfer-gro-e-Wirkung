@@ -56,13 +56,17 @@ final class FahrzeugHttpTest extends DbTestCase
         $this->assertSame('/fahrzeuge', $this->get('/')->headers['Location']);
     }
 
-    public function test_mitglied_darf_lesen_aber_nicht_anlegen(): void
+    public function test_mitglied_darf_lesen_und_anlegen_aber_fremde_nicht_aendern_oder_loeschen(): void
     {
         $this->anmelden('mitglied');
         $this->assertSame(200, $this->get('/fahrzeuge')->status);
-        $this->assertSame(403, $this->get('/fahrzeuge/neu')->status);
-        $this->assertSame(403, $this->post('/fahrzeuge', $this->formdaten())->status);
-        $this->assertSame(0, (int) $this->pdo->query('SELECT COUNT(*) FROM fahrzeug')->fetchColumn());
+        $this->assertSame(200, $this->get('/fahrzeuge/neu')->status);
+        $this->pdo->exec("INSERT INTO fahrzeug (inventarnummer, bezeichnung, spurweite_id) SELECT 'EMC-0001', 'Altbestand', id FROM spurweite LIMIT 1");
+        $fz = (int) $this->pdo->lastInsertId();
+        $this->assertSame(403, $this->get("/fahrzeuge/$fz/bearbeiten")->status);
+        $this->assertSame(403, $this->post("/fahrzeuge/$fz", $this->formdaten())->status);
+        $this->assertSame(403, $this->post("/fahrzeuge/$fz/loeschen")->status);
+        $this->assertSame(1, (int) $this->pdo->query('SELECT COUNT(*) FROM fahrzeug')->fetchColumn());
     }
 
     public function test_bearbeiter_legt_an_und_protokoll_entsteht(): void

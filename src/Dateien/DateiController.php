@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Emc\Dateien;
 
 use Emc\Auth\Auth;
+use Emc\Auth\Berechtigung;
 use Emc\Core\HttpFehler;
 use Emc\Core\Request;
 use Emc\Core\Response;
@@ -31,6 +32,7 @@ final class DateiController
     public function hochladen(Request $r, array $p): Response
     {
         $fz = $this->ladeFahrzeug($p);
+        Berechtigung::verlangeFahrzeugBearbeiten($this->auth->benutzer(), $fz);
         $fzId = (int) $fz['id'];
         $dateien = self::normalisiere($r->file('datei'));
         if ($dateien === []) {
@@ -72,6 +74,7 @@ final class DateiController
     public function titelbild(Request $r, array $p): Response
     {
         $fz = $this->ladeFahrzeug($p);
+        Berechtigung::verlangeFahrzeugBearbeiten($this->auth->benutzer(), $fz);
         $fzId = (int) $fz['id'];
         $dokId = $r->ganzzahl('dokument_id', 1, 2147483647);
         $dok = $dokId === null ? null : $this->dokumente->finde($dokId);
@@ -89,6 +92,7 @@ final class DateiController
     public function loeschen(Request $r, array $p): Response
     {
         $dok = $this->ladeDokument($p);
+        $this->verlangeLoeschrecht($dok);
         $fahrzeugIds = $this->dokumente->objekte((int) $dok['id'], 'fahrzeug');
         $this->dokumente->loeschen((int) $dok['id']);
         foreach ($fahrzeugIds as $fzId) {
@@ -96,6 +100,28 @@ final class DateiController
         }
         $this->session->meldung('erfolg', 'Die Datei wurde gelöscht.');
         return isset($fahrzeugIds[0]) ? $this->zurueck($fahrzeugIds[0]) : Response::redirect(url('/fahrzeuge'));
+    }
+
+    /**
+     * Löschregel für Dateien (die Route kennt keinen Fahrzeugkontext, daher wird er aus den Zuordnungen abgeleitet):
+     * Bearbeiter und Admin dürfen jede Datei löschen. Alle anderen nur, wenn die Datei genau einem Fahrzeug
+     * zugeordnet ist (keine weiteren Zuordnungen, auch nicht zu anderen Objekttypen) und sie dieses Fahrzeug
+     * bearbeiten dürfen. Geteilte Dokumente bleiben damit Bearbeitern vorbehalten.
+     *
+     * @param array<string,mixed> $dok
+     */
+    private function verlangeLoeschrecht(array $dok): void
+    {
+        $benutzer = $this->auth->benutzer();
+        if (Berechtigung::darf($benutzer, Berechtigung::DATEI_BEARBEITEN)) {
+            return;
+        }
+        $zuordnungen = $this->dokumente->zuordnungen((int) $dok['id']);
+        if (count($zuordnungen) !== 1 || $zuordnungen[0]['objekt_typ'] !== 'fahrzeug') {
+            throw new HttpFehler(403);
+        }
+        $fz = $this->fahrzeuge->finde($zuordnungen[0]['objekt_id']) ?? throw new HttpFehler(403);
+        Berechtigung::verlangeFahrzeugBearbeiten($benutzer, $fz);
     }
 
     public function ausliefern(Request $r, array $p): Response

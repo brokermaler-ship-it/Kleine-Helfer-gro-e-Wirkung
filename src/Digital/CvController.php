@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Emc\Digital;
 
 use Emc\Auth\Auth;
+use Emc\Auth\Berechtigung;
 use Emc\Core\HttpFehler;
 use Emc\Core\Request;
 use Emc\Core\Response;
@@ -34,6 +35,7 @@ final class CvController
     public function speichern(Request $r, array $p): Response
     {
         $dec = $this->ladeDecoder($p);
+        $this->pruefeBearbeiten($dec);
         $werte = ['cv' => $r->text('cv'), 'wert' => $r->text('wert'), 'kommentar' => $r->text('kommentar')];
         $fehler = [];
         $cv = $r->ganzzahl('cv', 1, 1024);
@@ -68,6 +70,7 @@ final class CvController
     public function loeschen(Request $r, array $p): Response
     {
         $dec = $this->ladeDecoder($p);
+        $this->pruefeBearbeiten($dec);
         $cv = (string) ($p['cv'] ?? '');
         if (preg_match('/^\d{1,4}$/', $cv) === 1) {
             $cv = (int) $cv;
@@ -99,6 +102,13 @@ final class CvController
             'fehler' => $fehler,
         ]);
         return new Response($html, $status, ['Content-Type' => 'text/html; charset=utf-8']);
+    }
+
+    /** @param array<string,mixed> $dec */
+    private function pruefeBearbeiten(array $dec): void
+    {
+        $fz = $this->fahrzeuge->finde((int) $dec['fahrzeug_id']) ?? throw new HttpFehler(404);
+        Berechtigung::verlangeFahrzeugBearbeiten($this->auth->benutzer(), $fz);
     }
 
     /** @return array<string,mixed> */

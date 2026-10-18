@@ -85,17 +85,17 @@ final class FahrzeugRepository
     }
 
     /** @param array<string,mixed> $d */
-    public function anlegen(array $d): int
+    public function anlegen(array $d, ?int $angelegtVonBenutzerId = null): int
     {
         $werte = $this->werte($d);
         $spalten = implode(', ', self::FELDER);
-        $platzhalter = implode(', ', array_fill(0, count(self::FELDER) + 1, '?'));
+        $platzhalter = implode(', ', array_fill(0, count(self::FELDER) + 2, '?'));
         $letzter = null;
         for ($versuch = 0; $versuch < 3; $versuch++) {
             $nummer = Inventarnummer::naechste($this->pdo);
             try {
-                $this->pdo->prepare("INSERT INTO fahrzeug (inventarnummer, $spalten) VALUES ($platzhalter)")
-                    ->execute([$nummer, ...$werte]);
+                $this->pdo->prepare("INSERT INTO fahrzeug (inventarnummer, angelegt_von_benutzer_id, $spalten) VALUES ($platzhalter)")
+                    ->execute([$nummer, $angelegtVonBenutzerId, ...$werte]);
             } catch (\PDOException $e) {
                 if ((string) $e->getCode() === '23000' && str_contains($e->getMessage(), 'uq_fahrzeug_inventarnummer')) {
                     $letzter = $e; // gleichzeitig vergeben: neu versuchen

@@ -22,7 +22,13 @@ use Emc\Personen\KontoController;
 use Emc\Personen\PersonController;
 use Emc\Stammdaten\SpurweiteController;
 
-/** Routendefinitionen; spätere Tasks ergänzen hier. */
+/**
+ * Routendefinitionen.
+ *
+ * Fahrzeugbezogene Schreibrouten verlangen hier nur 'lesen' bzw. 'fahrzeug_anlegen'; ob der Benutzer das
+ * konkrete Fahrzeug bearbeiten darf (Berechtigung::darfFahrzeugBearbeiten), prüfen die Controller je Objekt (403).
+ * Nur das Löschen eines Fahrzeugs verlangt generell 'fahrzeug_bearbeiten'.
+ */
 return function (Router $router, App $app): void {
     $c = $app->container();
 
@@ -37,41 +43,41 @@ return function (Router $router, App $app): void {
 
     $fz = fn(string $m) => fn(Request $r, array $p = []) => $c->get(FahrzeugController::class)->$m($r, $p);
     $router->add('GET', '/fahrzeuge', $app->erfordert('lesen', $fz('liste')));
-    $router->add('GET', '/fahrzeuge/neu', $app->erfordert('fahrzeug_bearbeiten', $fz('neu')));
-    $router->add('POST', '/fahrzeuge', $app->erfordert('fahrzeug_bearbeiten', $fz('anlegen')));
+    $router->add('GET', '/fahrzeuge/neu', $app->erfordert('fahrzeug_anlegen', $fz('neu')));
+    $router->add('POST', '/fahrzeuge', $app->erfordert('fahrzeug_anlegen', $fz('anlegen')));
     $router->add('GET', '/fahrzeuge/{id}', $app->erfordert('lesen', $fz('anzeigen')));
-    $router->add('GET', '/fahrzeuge/{id}/bearbeiten', $app->erfordert('fahrzeug_bearbeiten', $fz('bearbeiten')));
-    $router->add('POST', '/fahrzeuge/{id}', $app->erfordert('fahrzeug_bearbeiten', $fz('aendern')));
+    $router->add('GET', '/fahrzeuge/{id}/bearbeiten', $app->erfordert('lesen', $fz('bearbeiten')));
+    $router->add('POST', '/fahrzeuge/{id}', $app->erfordert('lesen', $fz('aendern')));
     $router->add('POST', '/fahrzeuge/{id}/loeschen', $app->erfordert('fahrzeug_bearbeiten', $fz('loeschen')));
 
     $dec = fn(string $m) => fn(Request $r, array $p = []) => $c->get(DecoderController::class)->$m($r, $p);
-    $router->add('POST', '/fahrzeuge/{id}/decoder', $app->erfordert('fahrzeug_bearbeiten', $dec('anlegen')));
-    $router->add('GET', '/decoder/{id}/bearbeiten', $app->erfordert('fahrzeug_bearbeiten', $dec('bearbeiten')));
-    $router->add('POST', '/decoder/{id}', $app->erfordert('fahrzeug_bearbeiten', $dec('aendern')));
-    $router->add('POST', '/decoder/{id}/loeschen', $app->erfordert('fahrzeug_bearbeiten', $dec('loeschen')));
+    $router->add('POST', '/fahrzeuge/{id}/decoder', $app->erfordert('lesen', $dec('anlegen')));
+    $router->add('GET', '/decoder/{id}/bearbeiten', $app->erfordert('lesen', $dec('bearbeiten')));
+    $router->add('POST', '/decoder/{id}', $app->erfordert('lesen', $dec('aendern')));
+    $router->add('POST', '/decoder/{id}/loeschen', $app->erfordert('lesen', $dec('loeschen')));
 
     $fkt = fn(string $m) => fn(Request $r, array $p = []) => $c->get(FunktionController::class)->$m($r, $p);
     $router->add('GET', '/decoder/{id}/funktionen', $app->erfordert('lesen', $fkt('zeigen')));
-    $router->add('POST', '/decoder/{id}/funktionen', $app->erfordert('fahrzeug_bearbeiten', $fkt('speichern')));
-    $router->add('POST', '/decoder/{id}/funktionen/csv', $app->erfordert('fahrzeug_bearbeiten', $fkt('csvHochladen')));
-    $router->add('POST', '/decoder/{id}/funktionen/csv/uebernehmen', $app->erfordert('fahrzeug_bearbeiten', $fkt('csvUebernehmen')));
+    $router->add('POST', '/decoder/{id}/funktionen', $app->erfordert('lesen', $fkt('speichern')));
+    $router->add('POST', '/decoder/{id}/funktionen/csv', $app->erfordert('lesen', $fkt('csvHochladen')));
+    $router->add('POST', '/decoder/{id}/funktionen/csv/uebernehmen', $app->erfordert('lesen', $fkt('csvUebernehmen')));
     $router->add('GET', '/funktionen/vorlage.csv', $app->erfordert('lesen', $fkt('csvVorlage')));
-    $router->add('POST', '/decoder/{id}/vorlage', $app->erfordert('fahrzeug_bearbeiten', $fkt('alsVorlage')));
-    $router->add('POST', '/decoder/{id}/vorlage-anwenden', $app->erfordert('fahrzeug_bearbeiten', $fkt('vorlageAnwenden')));
+    $router->add('POST', '/decoder/{id}/vorlage', $app->erfordert('lesen', $fkt('alsVorlage')));
+    $router->add('POST', '/decoder/{id}/vorlage-anwenden', $app->erfordert('lesen', $fkt('vorlageAnwenden')));
 
     $cv = fn(string $m) => fn(Request $r, array $p = []) => $c->get(CvController::class)->$m($r, $p);
     $router->add('GET', '/decoder/{id}/cvs', $app->erfordert('lesen', $cv('zeigen')));
-    $router->add('POST', '/decoder/{id}/cvs', $app->erfordert('fahrzeug_bearbeiten', $cv('speichern')));
-    $router->add('POST', '/decoder/{id}/cvs/{cv}/loeschen', $app->erfordert('fahrzeug_bearbeiten', $cv('loeschen')));
+    $router->add('POST', '/decoder/{id}/cvs', $app->erfordert('lesen', $cv('speichern')));
+    $router->add('POST', '/decoder/{id}/cvs/{cv}/loeschen', $app->erfordert('lesen', $cv('loeschen')));
 
     $adr = fn(string $m) => fn(Request $r, array $p = []) => $c->get(AdressenController::class)->$m($r);
     $router->add('GET', '/adressen', $app->erfordert('lesen', $adr('uebersicht')));
     $router->add('GET', '/api/adresspruefung', $app->erfordert('lesen', $adr('api')));
 
     $datei = fn(string $m) => fn(Request $r, array $p = []) => $c->get(DateiController::class)->$m($r, $p);
-    $router->add('POST', '/fahrzeuge/{id}/dateien', $app->erfordert('datei_bearbeiten', $datei('hochladen')));
-    $router->add('POST', '/fahrzeuge/{id}/titelbild', $app->erfordert('datei_bearbeiten', $datei('titelbild')));
-    $router->add('POST', '/dateien/{id}/loeschen', $app->erfordert('datei_bearbeiten', $datei('loeschen')));
+    $router->add('POST', '/fahrzeuge/{id}/dateien', $app->erfordert('lesen', $datei('hochladen')));
+    $router->add('POST', '/fahrzeuge/{id}/titelbild', $app->erfordert('lesen', $datei('titelbild')));
+    $router->add('POST', '/dateien/{id}/loeschen', $app->erfordert('lesen', $datei('loeschen')));
     $router->add('GET', '/dateien/{id}', $app->erfordert('lesen', $datei('ausliefern')));
     $router->add('GET', '/dateien/{id}/{variante}', $app->erfordert('lesen', $datei('ausliefern')));
 

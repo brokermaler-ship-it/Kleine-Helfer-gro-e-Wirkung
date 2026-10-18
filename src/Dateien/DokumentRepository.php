@@ -29,7 +29,7 @@ final class DokumentRepository
     public function fuerObjekt(string $objektTyp, int $objektId): array
     {
         $st = $this->pdo->prepare(
-            "SELECT d.*, TRIM(CONCAT(COALESCE(p.vorname, ''), ' ', COALESCE(p.nachname, ''))) AS hochgeladen_von_name "
+            "SELECT d.*, (SELECT COUNT(*) FROM dokument_zuordnung za WHERE za.dokument_id = d.id) AS zuordnungen_anzahl, TRIM(CONCAT(COALESCE(p.vorname, ''), ' ', COALESCE(p.nachname, ''))) AS hochgeladen_von_name "
             . 'FROM dokument d JOIN dokument_zuordnung z ON z.dokument_id = d.id '
             . 'LEFT JOIN benutzer b ON b.id = d.hochgeladen_von LEFT JOIN person p ON p.id = b.person_id '
             . 'WHERE z.objekt_typ = ? AND z.objekt_id = ? ORDER BY d.hochgeladen_am DESC, d.id DESC'
@@ -44,6 +44,17 @@ final class DokumentRepository
         $st = $this->pdo->prepare('SELECT objekt_id FROM dokument_zuordnung WHERE dokument_id = ? AND objekt_typ = ? ORDER BY objekt_id');
         $st->execute([$dokumentId, $objektTyp]);
         return array_map('intval', $st->fetchAll(\PDO::FETCH_COLUMN));
+    }
+
+    /** @return list<array{objekt_typ:string,objekt_id:int}> alle Zuordnungen des Dokuments, gleich welchen Typs */
+    public function zuordnungen(int $dokumentId): array
+    {
+        $st = $this->pdo->prepare('SELECT objekt_typ, objekt_id FROM dokument_zuordnung WHERE dokument_id = ? ORDER BY objekt_typ, objekt_id');
+        $st->execute([$dokumentId]);
+        return array_map(
+            fn(array $z): array => ['objekt_typ' => (string) $z['objekt_typ'], 'objekt_id' => (int) $z['objekt_id']],
+            $st->fetchAll(\PDO::FETCH_ASSOC)
+        );
     }
 
     public function istZugeordnet(int $dokumentId, string $objektTyp, int $objektId): bool

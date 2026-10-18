@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Emc\Digital;
 
 use Emc\Auth\Auth;
+use Emc\Auth\Berechtigung;
 use Emc\Core\DomainFehler;
 use Emc\Core\HttpFehler;
 use Emc\Core\Request;
@@ -38,7 +39,7 @@ final class FunktionController
 
     public function speichern(Request $r, array $p): Response
     {
-        $dec = $this->ladeDecoder($p);
+        $dec = $this->ladeBearbeitbarenDecoder($p);
         $beschreibung = $r->post('beschreibung');
         $moment = $r->post('moment');
         $beschreibung = is_array($beschreibung) ? $beschreibung : [];
@@ -68,7 +69,7 @@ final class FunktionController
 
     public function csvHochladen(Request $r, array $p): Response
     {
-        $dec = $this->ladeDecoder($p);
+        $dec = $this->ladeBearbeitbarenDecoder($p);
         $meldung = $this->dateiFehler($r->file('datei'));
         if ($meldung !== null) {
             $this->session->meldung('fehler', $meldung);
@@ -97,7 +98,7 @@ final class FunktionController
 
     public function csvUebernehmen(Request $r, array $p): Response
     {
-        $dec = $this->ladeDecoder($p);
+        $dec = $this->ladeBearbeitbarenDecoder($p);
         $schluessel = 'csv_vorschau_' . $dec['id'];
         $vorschau = $this->session->hole($schluessel);
         if (!is_array($vorschau) || !isset($vorschau['zeilen'], $vorschau['fehler'])) {
@@ -128,7 +129,7 @@ final class FunktionController
 
     public function alsVorlage(Request $r, array $p): Response
     {
-        $dec = $this->ladeDecoder($p);
+        $dec = $this->ladeBearbeitbarenDecoder($p);
         $name = trim($r->text('name'));
         if ($name === '' || mb_strlen($name) > 100) {
             $this->session->meldung('fehler', 'Bitte einen Vorlagennamen mit höchstens 100 Zeichen eingeben.');
@@ -150,7 +151,7 @@ final class FunktionController
 
     public function vorlageAnwenden(Request $r, array $p): Response
     {
-        $dec = $this->ladeDecoder($p);
+        $dec = $this->ladeBearbeitbarenDecoder($p);
         $id = $r->ganzzahl('vorlage_id', 1, 2147483647);
         $vorlage = $id === null ? null : $this->vorlagen->finde($id);
         if ($vorlage === null) {
@@ -249,6 +250,18 @@ final class FunktionController
     private function ladeFahrzeug(array $dec): array
     {
         return $this->fahrzeuge->finde((int) $dec['fahrzeug_id']) ?? throw new HttpFehler(404);
+    }
+
+    /**
+     * Decoder laden und prüfen, ob der Benutzer das zugehörige Fahrzeug bearbeiten darf (sonst 403).
+     *
+     * @return array<string,mixed>
+     */
+    private function ladeBearbeitbarenDecoder(array $p): array
+    {
+        $dec = $this->ladeDecoder($p);
+        Berechtigung::verlangeFahrzeugBearbeiten($this->auth->benutzer(), $this->ladeFahrzeug($dec));
+        return $dec;
     }
 
     /** @return array<string,mixed> */

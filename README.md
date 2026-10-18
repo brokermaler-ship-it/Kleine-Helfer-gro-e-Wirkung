@@ -2,6 +2,18 @@
 
 Webanwendung „EMC 78 Lokschuppen“ des Eisenbahn Modellbahn Clubs 78 e.V. Halle („Die Modellbahnfamilie“) zur Verwaltung des Fahrzeugbestands: Fahrzeuge, Decoder (Adressen, Funktionstasten, CVs), Fotos und Dokumente, Personen und Benutzer. Die Anwendung läuft auf normalem PHP-Webspace und ist für PC, Tablet und Handy gedacht.
 
+## Rollen und Rechte
+
+| Rolle | Darf |
+|---|---|
+| **Mitglied** | alles lesen (Fahrzeuge, Decoder, Funktionen, CVs, Dateien); **eigene Fahrzeuge anlegen** (der Eigentümer ist immer das Mitglied selbst); die **selbst angelegten Fahrzeuge bearbeiten**, einschließlich Status (auch „ausgemustert“), Decoder, Funktionstasten (Formular, CSV-Import, Vorlagen), CVs sowie Fotos und Dateien dieses Fahrzeugs. Nicht erlaubt: Eigentümer ändern, Fahrzeuge löschen, Fahrzeuge anderer bearbeiten (auch nicht als Eigentümer), Personen verwalten |
+| **Bearbeiter** | zusätzlich **alle** Fahrzeuge anlegen (Eigentümer frei wählbar), bearbeiten und löschen, ebenso alle Dateien; Personen verwalten |
+| **Administrator** | zusätzlich Benutzer, Stammdaten (Spurweiten), Datensicherung und Update |
+
+Jedes Fahrzeug merkt sich, wer es angelegt hat. Fahrzeuge, die schon vor Version 0.2.0 vorhanden waren, gelten als von einem Bearbeiter angelegt; Mitglieder können sie nicht ändern. Alle Rechte werden auf dem Server für jedes einzelne Fahrzeug geprüft, nicht nur durch ausgeblendete Schaltflächen. Eine Datei, die mehreren Objekten zugeordnet ist, kann nur ein Bearbeiter löschen.
+
+Beim Update auf 0.2.0 muss nach dem Hochladen der neuen Dateien einmal im Verwaltungsmenü unter „Update“ die Datenbank-Migration `003_fahrzeug_angelegt_von` ausgeführt werden.
+
 ## Voraussetzungen
 
 - PHP ab Version 8.2 mit den Erweiterungen `pdo_mysql`, `mbstring`, `gd`, `fileinfo` und `zip`

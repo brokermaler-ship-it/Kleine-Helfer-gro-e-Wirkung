@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Emc\Digital;
 
 use Emc\Auth\Auth;
+use Emc\Auth\Berechtigung;
 use Emc\Core\HttpFehler;
 use Emc\Core\Request;
 use Emc\Core\Response;
@@ -29,6 +30,7 @@ final class DecoderController
     public function anlegen(Request $r, array $p): Response
     {
         $fz = $this->ladeFahrzeug($p);
+        Berechtigung::verlangeFahrzeugBearbeiten($this->auth->benutzer(), $fz);
         [$daten, $fehler] = $this->lies($r);
         if ($fehler !== []) {
             return $this->formular($this->anzeigeWerte($r), $fehler, $fz, null, 422);
@@ -50,6 +52,7 @@ final class DecoderController
     {
         $dec = $this->ladeDecoder($p);
         $fz = $this->fahrzeuge->finde((int) $dec['fahrzeug_id']) ?? throw new HttpFehler(404);
+        Berechtigung::verlangeFahrzeugBearbeiten($this->auth->benutzer(), $fz);
         return $this->formular($dec, [], $fz, $dec);
     }
 
@@ -57,6 +60,7 @@ final class DecoderController
     {
         $dec = $this->ladeDecoder($p);
         $fz = $this->fahrzeuge->finde((int) $dec['fahrzeug_id']) ?? throw new HttpFehler(404);
+        Berechtigung::verlangeFahrzeugBearbeiten($this->auth->benutzer(), $fz);
         [$daten, $fehler] = $this->lies($r);
         if ($fehler !== []) {
             return $this->formular($this->anzeigeWerte($r), $fehler, $fz, $dec, 422);
@@ -81,6 +85,8 @@ final class DecoderController
     public function loeschen(Request $r, array $p): Response
     {
         $dec = $this->ladeDecoder($p);
+        $fz = $this->fahrzeuge->finde((int) $dec['fahrzeug_id']) ?? throw new HttpFehler(404);
+        Berechtigung::verlangeFahrzeugBearbeiten($this->auth->benutzer(), $fz);
         $this->decoder->loeschen((int) $dec['id']);
         $alt = ['fahrzeug_id' => (int) $dec['fahrzeug_id']] + $this->protokollWerte($dec);
         $this->protokoll->schreibe(

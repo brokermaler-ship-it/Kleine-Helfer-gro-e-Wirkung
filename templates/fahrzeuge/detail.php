@@ -12,14 +12,16 @@ $fz = $fahrzeug;
             <?= $eigentumBadge($fz) ?>
         </div>
     </div>
-    <?php if ($darf('fahrzeug_bearbeiten')): ?>
+    <?php if ($darfFz($fz)): ?>
         <div class="d-flex gap-2">
             <a class="btn btn-primary" href="<?= e(url('/fahrzeuge/' . $fz['id'] . '/bearbeiten')) ?>">Bearbeiten</a>
+            <?php if ($darf('fahrzeug_bearbeiten')): ?>
             <form method="post" action="<?= e(url('/fahrzeuge/' . $fz['id'] . '/loeschen')) ?>"
                   onsubmit="return confirm('Fahrzeug endgültig löschen? Besser: Status ‚ausgemustert‘.');">
                 <?php include dirname(__DIR__) . '/partials/csrf.php'; ?>
                 <button type="submit" class="btn btn-outline-danger">Löschen</button>
             </form>
+            <?php endif; ?>
         </div>
     <?php endif; ?>
 </div>

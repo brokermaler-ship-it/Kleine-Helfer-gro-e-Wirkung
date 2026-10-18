@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace Emc\Auth;
 
+use Emc\Core\HttpFehler;
+
 final class Berechtigung
 {
     public const LESEN = 'lesen';
+    public const FAHRZEUG_ANLEGEN = 'fahrzeug_anlegen';
     public const FAHRZEUG_BEARBEITEN = 'fahrzeug_bearbeiten';
     public const PERSON_BEARBEITEN = 'person_bearbeiten';
     public const DATEI_BEARBEITEN = 'datei_bearbeiten';
@@ -17,6 +20,7 @@ final class Berechtigung
     /** Mindestrang je Aktion: 1 Mitglied, 2 Bearbeiter, 3 Admin. */
     private const MINDESTRANG = [
         self::LESEN => 1,
+        self::FAHRZEUG_ANLEGEN => 1,
         self::FAHRZEUG_BEARBEITEN => 2,
         self::PERSON_BEARBEITEN => 2,
         self::DATEI_BEARBEITEN => 2,
@@ -36,5 +40,35 @@ final class Berechtigung
             Rolle::Admin => 3,
         };
         return $rang >= self::MINDESTRANG[$aktion];
+    }
+
+    /**
+     * Zentrale Objektprüfung: Bearbeiter und Admin dürfen jedes Fahrzeug bearbeiten,
+     * Mitglieder nur die von ihnen selbst angelegten (NULL = Altbestand, gilt als von einem Bearbeiter angelegt).
+     * Das Löschen bleibt davon unberührt (nur FAHRZEUG_BEARBEITEN).
+     *
+     * @param array<string,mixed> $fahrzeug
+     */
+    public static function darfFahrzeugBearbeiten(?Benutzer $b, array $fahrzeug): bool
+    {
+        if ($b === null) {
+            return false;
+        }
+        if (self::darf($b, self::FAHRZEUG_BEARBEITEN)) {
+            return true;
+        }
+        $anleger = $fahrzeug['angelegt_von_benutzer_id'] ?? null;
+        return $anleger !== null && (int) $anleger === $b->id;
+    }
+
+    /**
+     * @param array<string,mixed> $fahrzeug
+     * @throws HttpFehler 403, wenn der Benutzer dieses Fahrzeug nicht bearbeiten darf
+     */
+    public static function verlangeFahrzeugBearbeiten(?Benutzer $b, array $fahrzeug): void
+    {
+        if (!self::darfFahrzeugBearbeiten($b, $fahrzeug)) {
+            throw new HttpFehler(403);
+        }
     }
 }

@@ -34,6 +34,34 @@ final class BerechtigungTest extends TestCase
         }
     }
 
+    public function test_fahrzeug_anlegen_ab_mitglied(): void
+    {
+        $this->assertFalse(Berechtigung::darf(null, Berechtigung::FAHRZEUG_ANLEGEN));
+        foreach ([Rolle::Mitglied, Rolle::Bearbeiter, Rolle::Admin] as $r) {
+            $this->assertTrue(Berechtigung::darf($this->benutzer($r), Berechtigung::FAHRZEUG_ANLEGEN));
+        }
+    }
+
+    public function test_darf_fahrzeug_bearbeiten_je_objekt(): void
+    {
+        $m = $this->benutzer(Rolle::Mitglied); // id 1
+        $b = $this->benutzer(Rolle::Bearbeiter);
+        $a = $this->benutzer(Rolle::Admin);
+        $eigenes = ['angelegt_von_benutzer_id' => '1'];
+        $fremdes = ['angelegt_von_benutzer_id' => 2];
+        $altbestand = ['angelegt_von_benutzer_id' => null];
+        $this->assertTrue(Berechtigung::darfFahrzeugBearbeiten($m, $eigenes));
+        $this->assertFalse(Berechtigung::darfFahrzeugBearbeiten($m, $fremdes));
+        $this->assertFalse(Berechtigung::darfFahrzeugBearbeiten($m, $altbestand));
+        $this->assertFalse(Berechtigung::darfFahrzeugBearbeiten($m, []));
+        $this->assertFalse(Berechtigung::darfFahrzeugBearbeiten(null, $eigenes));
+        foreach ([$b, $a] as $x) {
+            foreach ([$eigenes, $fremdes, $altbestand] as $fz) {
+                $this->assertTrue(Berechtigung::darfFahrzeugBearbeiten($x, $fz));
+            }
+        }
+    }
+
     public function test_unbekannte_aktion_ist_verboten(): void
     {
         $this->assertFalse(Berechtigung::darf($this->benutzer(Rolle::Admin), 'gibt_es_nicht'));

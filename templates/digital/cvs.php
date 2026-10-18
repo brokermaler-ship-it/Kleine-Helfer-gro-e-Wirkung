@@ -7,7 +7,7 @@
  * @var array<string,string> $fehler
  */
 $zurueck = url('/fahrzeuge/' . $fahrzeug['id']) . '#digital';
-$bearbeiten = $darf('fahrzeug_bearbeiten');
+$bearbeiten = $darfFz($fahrzeug);
 ?>
 <h1 class="h3 mb-1">CVs: <?= e($decoder['bezeichnung']) ?></h1>
 <p class="text-muted"><a href="<?= e($zurueck) ?>"><?= e($fahrzeug['inventarnummer']) ?> <?= e($fahrzeug['bezeichnung']) ?></a></p>

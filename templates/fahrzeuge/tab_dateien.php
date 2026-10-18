@@ -11,7 +11,8 @@ $groesse = function (int $b): string {
     }
     return number_format(max(1, $b / 1024), 0, ',', '.') . ' KB';
 };
-$bearbeiten = $darf('datei_bearbeiten');
+$bearbeiten = $darfFz($fahrzeug);
+$darfLoeschen = fn(array $d): bool => $darf('datei_bearbeiten') || ($bearbeiten && (int) ($d['zuordnungen_anzahl'] ?? 0) === 1);
 $loeschenForm = function (array $d) use ($csrf): string {
     ob_start();
     ?>
@@ -51,7 +52,7 @@ $loeschenForm = function (array $d) use ($csrf): string {
                                         <button type="submit" class="btn btn-sm btn-outline-secondary" title="Als Titelbild">&#9734; Als Titelbild</button>
                                     </form>
                                 <?php endif; ?>
-                                <?= $loeschenForm($f) ?>
+                                <?php if ($darfLoeschen($f)) { echo $loeschenForm($f); } ?>
                             </div>
                         <?php endif; ?>
                     </div>
@@ -91,7 +92,7 @@ $loeschenForm = function (array $d) use ($csrf): string {
                     <td><?= e($groesse((int) $d['groesse'])) ?></td>
                     <td><?= e(date('d.m.Y', (int) strtotime((string) $d['hochgeladen_am']))) ?></td>
                     <td><?= e($d['hochgeladen_von_name'] !== '' ? (string) $d['hochgeladen_von_name'] : '–') ?></td>
-                    <?php if ($bearbeiten): ?><td class="text-end"><?= $loeschenForm($d) ?></td><?php endif; ?>
+                    <?php if ($bearbeiten): ?><td class="text-end"><?= $darfLoeschen($d) ? $loeschenForm($d) : '' ?></td><?php endif; ?>
                 </tr>
             <?php endforeach; ?>
             </tbody>

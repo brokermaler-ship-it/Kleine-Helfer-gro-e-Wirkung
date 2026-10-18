@@ -43,7 +43,7 @@ $decoderListe = $decoderListe ?? [];
                     <?php endforeach; ?>
                 </div>
                 <div class="card-footer d-flex gap-3 small">
-                    <?php if ($darf('fahrzeug_bearbeiten')): ?>
+                    <?php if ($darfFz($fahrzeug)): ?>
                         <a href="<?= e(url('/decoder/' . $d['id'] . '/bearbeiten')) ?>">Bearbeiten</a>
                     <?php endif; ?>
                     <a href="<?= e(url('/decoder/' . $d['id'] . '/funktionen')) ?>">Funktionen</a>
@@ -53,7 +53,7 @@ $decoderListe = $decoderListe ?? [];
         </div>
     <?php endforeach; ?>
 </div>
-<?php if ($darf('fahrzeug_bearbeiten')): ?>
+<?php if ($darfFz($fahrzeug)): ?>
     <?php
     $werte = ['protokoll' => 'dcc'];
     $fehler = [];

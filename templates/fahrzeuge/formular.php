@@ -1,6 +1,6 @@
 <?php
 /** @var array<string,mixed> $werte */ /** @var array<string,string> $fehler */ /** @var ?array<string,mixed> $fahrzeug */
-/** @var ?string $konflikt */ /** @var string $stand */
+/** @var ?string $konflikt */ /** @var string $stand */ /** @var ?string $eigentuemerFest */
 /** @var list<array<string,mixed>> $spurweiten */ /** @var list<array<string,mixed>> $personen */
 include __DIR__ . '/_labels.php';
 $aktion = $fahrzeug === null ? url('/fahrzeuge') : url('/fahrzeuge/' . $fahrzeug['id']);
@@ -71,7 +71,11 @@ if ($fahrzeug !== null && $fahrzeug['eigentuemer_person_id'] !== null && !isset(
                 <div class="col-md-6"><?php $auswahl('spurweite_id', 'Spurweite', $spurOptionen, true, '– bitte wählen –'); ?></div>
                 <div class="col-md-6"><?php $auswahl('stromsystem', 'Stromsystem', $stromsysteme); ?></div>
             </div>
-            <?php $auswahl('eigentuemer_person_id', 'Eigentümer', $personOptionen, true, 'Verein'); ?>
+            <?php if (($eigentuemerFest ?? null) !== null): ?>
+                <p class="mb-3" id="eigentum-fest"><?= e($eigentuemerFest) ?></p>
+            <?php else: ?>
+                <?php $auswahl('eigentuemer_person_id', 'Eigentümer', $personOptionen, true, 'Verein'); ?>
+            <?php endif; ?>
             <div class="row">
                 <div class="col-md-6"><?php $auswahl('status', 'Status', $statusLabels); ?></div>
                 <div class="col-md-6"><?php $text('betriebsstunden', 'Betriebsstunden', false, 'Dezimalkomma erlaubt, z. B. 12,5'); ?></div>

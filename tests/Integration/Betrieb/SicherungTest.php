@@ -71,8 +71,8 @@ final class SicherungTest extends DbTestCase
         $this->assertNotFalse($zip->locateName('datenbank.sql'));
         $this->assertNotFalse($zip->locateName('info.txt'));
         $this->assertSame("binaer\0\xFF\n;\n", $zip->getFromName('dateien/2026/01/abc.bin'));
-        $this->assertStringContainsString('0.1.0', (string) $zip->getFromName('info.txt'));
-        $this->assertStringContainsString('002_spurweiten_start', (string) $zip->getFromName('info.txt'));
+        $this->assertStringContainsString(trim((string) file_get_contents(dirname(__DIR__, 3) . '/VERSION')), (string) $zip->getFromName('info.txt'));
+        $this->assertStringContainsString('003_fahrzeug_angelegt_von', (string) $zip->getFromName('info.txt'));
         $sql = (string) $zip->getFromName('datenbank.sql');
         $zip->close();
         $this->assertStringStartsWith("SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;", $sql);

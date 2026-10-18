@@ -6,7 +6,7 @@
  * @var array<int,string> $fehler
  * @var list<array<string,mixed>> $vorlagen
  */
-$bearbeiten = $darf('fahrzeug_bearbeiten');
+$bearbeiten = $darfFz($fahrzeug);
 $zurueck = url('/fahrzeuge/' . $fahrzeug['id']) . '#digital';
 $basis = url('/decoder/' . $decoder['id']);
 ?>

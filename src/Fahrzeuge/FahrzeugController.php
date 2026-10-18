@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Emc\Fahrzeuge;
 
 use Emc\Auth\Auth;
+use Emc\Auth\Berechtigung;
 use Emc\Core\HttpFehler;
 use Emc\Dateien\DokumentRepository;
 use Emc\Digital\AdressValidator;
@@ -69,12 +70,16 @@ final class FahrzeugController
 
     public function neu(Request $r): Response
     {
-        return $this->formular(['gattung' => 'lok', 'stromsystem' => '2L', 'status' => 'einsatzbereit', 'betriebsstunden' => '0'], [], null);
+        $werte = ['gattung' => 'lok', 'stromsystem' => '2L', 'status' => 'einsatzbereit', 'betriebsstunden' => '0'];
+        if (!$this->darfEigentuemerWaehlen()) {
+            $werte['eigentuemer_person_id'] = (string) $this->auth->benutzer()?->personId;
+        }
+        return $this->formular($werte, [], null);
     }
 
     public function bearbeiten(Request $r, array $p): Response
     {
-        $fz = $this->lade($p);
+        $fz = $this->ladeBearbeitbar($p);
         $werte = $fz;
         $werte['betriebsstunden'] = str_replace('.', ',', (string) (float) $fz['betriebsstunden']);
         return $this->formular($werte, [], $fz);
@@ -82,11 +87,11 @@ final class FahrzeugController
 
     public function anlegen(Request $r): Response
     {
-        [$daten, $fehler] = $this->lies($r);
+        [$daten, $fehler] = $this->lies($r, null);
         if ($fehler !== []) {
             return $this->formular($this->anzeigeWerte($daten, $r), $fehler, null, 422);
         }
-        $id = $this->fahrzeuge->anlegen($daten);
+        $id = $this->fahrzeuge->anlegen($daten, $this->auth->benutzer()?->id);
         $this->protokoll->schreibe($this->auth->benutzer()?->id, 'fahrzeug', $id, 'angelegt', Aenderungsprotokoll::diff([], $daten));
         $this->session->meldung('erfolg', 'Das Fahrzeug wurde angelegt.');
         return Response::redirect(url('/fahrzeuge/' . $id));
@@ -94,9 +99,9 @@ final class FahrzeugController
 
     public function aendern(Request $r, array $p): Response
     {
-        $fz = $this->lade($p);
+        $fz = $this->ladeBearbeitbar($p);
         $stand = $r->text('_stand'); // Stand des ursprünglich geladenen Formulars, nie der aktuelle DB-Stand
-        [$daten, $fehler] = $this->lies($r);
+        [$daten, $fehler] = $this->lies($r, $fz);
         if ($fehler !== []) {
             return $this->formular($this->anzeigeWerte($daten, $r), $fehler, $fz, 422, null, $stand);
         }
@@ -166,19 +171,42 @@ final class FahrzeugController
         return $fz;
     }
 
-    /** @return array{0:array<string,mixed>,1:array<string,string>} */
-    private function lies(Request $r): array
+    /** Nur Bearbeiter und Admin wählen den Eigentümer frei; für Mitglieder ist er serverseitig festgelegt. */
+    private function darfEigentuemerWaehlen(): bool
+    {
+        return Berechtigung::darf($this->auth->benutzer(), Berechtigung::FAHRZEUG_BEARBEITEN);
+    }
+
+    /** @return array<string,mixed> */
+    private function ladeBearbeitbar(array $p): array
+    {
+        $fz = $this->lade($p);
+        Berechtigung::verlangeFahrzeugBearbeiten($this->auth->benutzer(), $fz);
+        return $fz;
+    }
+
+    /**
+     * @param ?array<string,mixed> $fz bestehendes Fahrzeug (Ändern) oder null (Anlegen)
+     * @return array{0:array<string,mixed>,1:array<string,string>}
+     */
+    private function lies(Request $r, ?array $fz): array
     {
         $roh = [];
         foreach (self::FORMULARFELDER as $feld) {
             $roh[$feld] = $r->text($feld);
+        }
+        if (!$this->darfEigentuemerWaehlen()) {
+            // Mitglieder: Eigentümer nie aus der Eingabe, sondern beim Anlegen die eigene Person, beim Ändern der bisherige Stand.
+            $roh['eigentuemer_person_id'] = $fz === null
+                ? (string) $this->auth->benutzer()?->personId
+                : (string) ($fz['eigentuemer_person_id'] ?? '');
         }
         $daten = FahrzeugValidator::normalisiere($roh);
         $fehler = FahrzeugValidator::pruefe($daten);
         if (!isset($fehler['spurweite_id']) && $this->spurweiten->finde((int) $daten['spurweite_id']) === null) {
             $fehler['spurweite_id'] = 'Bitte eine Spurweite wählen.';
         }
-        if ($daten['eigentuemer_person_id'] !== null && $this->personen->finde((int) $daten['eigentuemer_person_id']) === null) {
+        if ($daten['eigentuemer_person_id'] !== null && $this->darfEigentuemerWaehlen() && $this->personen->finde((int) $daten['eigentuemer_person_id']) === null) {
             $fehler['eigentuemer_person_id'] = 'Bitte einen Eigentümer aus der Liste wählen.';
         }
         return [$daten, $fehler];
@@ -224,7 +252,27 @@ final class FahrzeugController
             'stand' => $stand ?? ($fz['geaendert_am'] ?? ''),
             'spurweiten' => $this->spurweiten->alle(),
             'personen' => $this->personen->alle(true),
+            'eigentuemerFest' => $this->darfEigentuemerWaehlen() ? null : $this->eigentuemerText($werte, $fz),
         ], $status);
+    }
+
+    /**
+     * Fester Eigentümer-Text im Formular für Mitglieder.
+     *
+     * @param array<string,mixed> $werte
+     * @param ?array<string,mixed> $fz
+     */
+    private function eigentuemerText(array $werte, ?array $fz): string
+    {
+        $eigene = $this->auth->benutzer();
+        $personId = $fz === null ? $eigene?->personId : ($fz['eigentuemer_person_id'] === null ? null : (int) $fz['eigentuemer_person_id']);
+        if ($personId === null) {
+            return 'Eigentum: Verein';
+        }
+        if ($eigene !== null && $personId === $eigene->personId) {
+            return 'Eigentum: ' . $eigene->anzeigename . ' (selbst angelegte Fahrzeuge gehören dir)';
+        }
+        return 'Eigentum: ' . (string) ($fz['eigentuemer_name'] ?? '');
     }
 
     /** @param array<string,mixed> $daten */
