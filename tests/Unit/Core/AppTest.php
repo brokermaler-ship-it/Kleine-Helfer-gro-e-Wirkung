@@ -69,4 +69,13 @@ final class AppTest extends TestCase
         $this->assertSame(500, $antwort->status);
         $this->assertStringContainsString('geheime Details', $antwort->body);
     }
+
+    public function test_datenbankdienste_sind_registriert_und_verbinden_erst_bei_bedarf(): void
+    {
+        $app = App::erzeuge(['db_dsn' => 'mysql:host=127.0.0.1;port=1;dbname=gibtsnicht', 'db_benutzer' => 'x', 'db_passwort' => 'y']);
+        $antwort = $app->handle(new Request('GET', '/gibtsnicht'));
+        $this->assertSame(404, $antwort->status);
+        $this->expectException(\PDOException::class);
+        $app->container()->get(\Emc\Betrieb\Migrator::class);
+    }
 }

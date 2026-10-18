@@ -17,7 +17,13 @@
         },
         "files": ["src/Core/helpers.php"]
     },
+    "autoload-dev": {
+        "psr-4": {
+            "Emc\\Tests\\": "tests/"
+        }
+    },
     "config": {
+        "preferred-install": "dist",
         "platform": {
             "php": "8.2.0"
         }

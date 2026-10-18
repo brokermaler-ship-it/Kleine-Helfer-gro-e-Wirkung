@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Emc\Core;
 
+use Emc\Betrieb\Einstellungen;
+use Emc\Betrieb\Migrator;
+
 final class App
 {
     private Container $container;
@@ -20,6 +23,16 @@ final class App
         $this->container->set('config', fn() => $this->config);
         $this->container->set('router', fn() => $this->router);
         $this->container->set('view', fn() => $this->view);
+        $this->container->set('pdo', fn() => Database::verbinde(
+            (string) ($this->config['db_dsn'] ?? ''),
+            (string) ($this->config['db_benutzer'] ?? ''),
+            (string) ($this->config['db_passwort'] ?? '')
+        ));
+        $this->container->set(Migrator::class, fn(Container $c) => new Migrator(
+            $c->get('pdo'),
+            dirname(__DIR__, 2) . '/migrations'
+        ));
+        $this->container->set(Einstellungen::class, fn(Container $c) => new Einstellungen($c->get('pdo')));
 
         $routen = dirname(__DIR__) . '/routes.php';
         if (is_file($routen)) {
