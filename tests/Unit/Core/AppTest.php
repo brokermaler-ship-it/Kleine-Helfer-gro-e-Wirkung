@@ -7,13 +7,18 @@ namespace Emc\Tests\Unit\Core;
 use Emc\Core\App;
 use Emc\Core\Request;
 use Emc\Core\Response;
-use PHPUnit\Framework\TestCase;
+use Emc\Core\Session;
+use Emc\Tests\Integration\DbTestCase;
 
-final class AppTest extends TestCase
+/** Läuft gegen die Testdatenbank, da die Middleware Schema und Anmeldung prüft. */
+final class AppTest extends DbTestCase
 {
+    private array $sitzung = [];
+
     private function app(bool $debug = false): App
     {
-        $app = App::erzeuge(['app_name' => 'Test', 'debug' => $debug]);
+        $this->sitzung['benutzer_id'] = $this->legeBenutzerAn('max@verein.de');
+        $app = App::erzeuge(['debug' => $debug] + self::testConfig(), new Session($this->sitzung));
         $router = $app->container()->get('router');
         $router->add('GET', '/eigen404', fn() => new Response('Seite nicht gefunden.', 404));
         $router->add('GET', '/kaputt', function () {
@@ -32,7 +37,7 @@ final class AppTest extends TestCase
 
     public function test_falsche_methode_zeigt_405_seite_mit_allow(): void
     {
-        $antwort = $this->app()->handle(new Request('POST', '/kaputt'));
+        $antwort = $this->app()->handle(new Request('POST', '/kaputt', [], ['_csrf' => $this->sitzung['_csrf'] = str_repeat('c', 64)]));
         $this->assertSame(405, $antwort->status);
         $this->assertSame('GET', $antwort->headers['Allow']);
         $this->assertStringContainsString('Methode nicht erlaubt', $antwort->body);
@@ -72,10 +77,23 @@ final class AppTest extends TestCase
 
     public function test_datenbankdienste_sind_registriert_und_verbinden_erst_bei_bedarf(): void
     {
-        $app = App::erzeuge(['db_dsn' => 'mysql:host=127.0.0.1;port=1;dbname=gibtsnicht', 'db_benutzer' => 'x', 'db_passwort' => 'y']);
-        $antwort = $app->handle(new Request('GET', '/gibtsnicht'));
-        $this->assertSame(404, $antwort->status);
+        $sitzung = [];
+        $app = App::erzeuge(['db_dsn' => 'mysql:host=127.0.0.1;port=1;dbname=gibtsnicht', 'db_benutzer' => 'x', 'db_passwort' => 'y'], new Session($sitzung));
+        $this->assertInstanceOf(App::class, $app);
         $this->expectException(\PDOException::class);
         $app->container()->get(\Emc\Betrieb\Migrator::class);
+    }
+
+    public function test_ohne_erreichbare_datenbank_liefert_die_app_eine_500_seite(): void
+    {
+        $sitzung = [];
+        $app = App::erzeuge(['db_dsn' => 'mysql:host=127.0.0.1;port=1;dbname=gibtsnicht', 'db_benutzer' => 'x', 'db_passwort' => 'y'], new Session($sitzung));
+        $prev = ini_set('error_log', '/dev/null');
+        try {
+            $antwort = $app->handle(new Request('GET', '/login'));
+        } finally {
+            ini_set('error_log', (string) $prev);
+        }
+        $this->assertSame(500, $antwort->status);
     }
 }

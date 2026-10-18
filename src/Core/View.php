@@ -6,13 +6,36 @@ namespace Emc\Core;
 
 final class View
 {
+    /** @var array<string,mixed> */
+    private array $globale = [];
+    /** @var array<string,callable> */
+    private array $spaet = [];
+
     public function __construct(private string $templateDir)
     {
+    }
+
+    /** Wert, der in jedem Template verfügbar ist (Aufrufdaten haben Vorrang). */
+    public function teile(string $k, mixed $v): void
+    {
+        $this->globale[$k] = $v;
+    }
+
+    /** Wie teile(), der Wert wird aber erst beim Rendern ermittelt (z. B. Meldungen, die dabei verbraucht werden). */
+    public function teileSpaet(string $k, callable $quelle): void
+    {
+        $this->spaet[$k] = $quelle;
     }
 
     /** @param array<string,mixed> $daten */
     public function render(string $template, array $daten = [], ?string $layout = 'layout'): string
     {
+        foreach ($this->spaet as $k => $quelle) {
+            if (!array_key_exists($k, $daten)) {
+                $daten[$k] = $quelle();
+            }
+        }
+        $daten += $this->globale;
         $inhalt = $this->include($template, $daten);
         if ($layout === null) {
             return $inhalt;

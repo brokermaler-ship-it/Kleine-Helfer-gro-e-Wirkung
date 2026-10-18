@@ -54,4 +54,32 @@ abstract class DbTestCase extends TestCase
         }
         $this->pdo->exec('SET FOREIGN_KEY_CHECKS=1');
     }
+
+    /** @return array<string,mixed> */
+    protected static function testConfig(): array
+    {
+        return [
+            'app_name' => 'Test',
+            'db_dsn' => getenv('TEST_DB_DSN') ?: 'mysql:host=127.0.0.1;dbname=emc_test;charset=utf8mb4',
+            'db_benutzer' => getenv('TEST_DB_BENUTZER') ?: 'root',
+            'db_passwort' => getenv('TEST_DB_PASSWORT') !== false ? (string) getenv('TEST_DB_PASSWORT') : '',
+        ];
+    }
+
+    /** Legt Person und Benutzer an und liefert die Benutzer-ID. */
+    protected function legeBenutzerAn(
+        string $email,
+        string $passwort = 'geheim-passwort-1',
+        string $rolle = 'mitglied',
+        bool $aktiv = true,
+        bool $mussAendern = false
+    ): int {
+        $this->pdo->prepare('INSERT INTO person (vorname, nachname, email) VALUES (?, ?, ?)')
+            ->execute(['Max', 'Muster', $email]);
+        $personId = (int) $this->pdo->lastInsertId();
+        $this->pdo->prepare(
+            'INSERT INTO benutzer (person_id, email, passwort_hash, rolle, aktiv, muss_passwort_aendern) VALUES (?, ?, ?, ?, ?, ?)'
+        )->execute([$personId, strtolower($email), password_hash($passwort, PASSWORD_DEFAULT), $rolle, $aktiv ? 1 : 0, $mussAendern ? 1 : 0]);
+        return (int) $this->pdo->lastInsertId();
+    }
 }

@@ -9,27 +9,9 @@
     <link rel="stylesheet" href="<?= e(url('assets/app.css')) ?>">
 </head>
 <body>
-<nav class="navbar navbar-expand-lg bg-body-tertiary border-bottom">
-    <div class="container">
-        <a class="navbar-brand" href="<?= e(url('/')) ?>"><?= e($app_name ?? '') ?></a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#hauptmenue"
-                aria-controls="hauptmenue" aria-expanded="false" aria-label="Menü umschalten">
-            <span class="navbar-toggler-icon"></span>
-        </button>
-        <div class="collapse navbar-collapse" id="hauptmenue">
-            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                <?php /* Navigation: Task 3 */ ?>
-            </ul>
-            <div class="d-flex">
-                <?php /* Benutzermenü: Task 3 */ ?>
-            </div>
-        </div>
-    </div>
-</nav>
+<?php include __DIR__ . '/partials/navigation.php'; ?>
 <main class="container mt-4">
-    <?php foreach (($meldungen ?? []) as $meldung): ?>
-        <div class="alert alert-<?= e($meldung['art'] ?? 'info') ?>" role="alert"><?= e($meldung['text'] ?? '') ?></div>
-    <?php endforeach; ?>
+    <?php include __DIR__ . '/partials/meldungen.php'; ?>
     <?= $inhalt ?>
 </main>
 <script src="<?= e(url('assets/vendor/bootstrap/bootstrap.bundle.min.js')) ?>"></script>
