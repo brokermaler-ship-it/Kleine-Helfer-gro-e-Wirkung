@@ -279,7 +279,7 @@ Jede Stufe ist für sich nutzbar und bekommt einen eigenen Umsetzungsplan.
 |---|---|
 | **1 – Grundgerüst & Fahrzeugkatalog** | Login, Rollen, Personen, Spurweiten, Fahrzeuge mit Decoder, Funktionen, CVs, Fotos und Dokumenten (Grundfunktion), Adressprüfung, CSV-Import Funktionen, Funktionsvorlagen, Datensicherung, Migrationen |
 | **1b – OneDrive-Dateiablage** | Speicher-Schnittstelle, Microsoft-Anbindung, Übertragung und Nachübertragung, lesbare Ordnerstruktur, Umzug vorhandener Dateien (4.11) |
-| **2 – Wartung & Reparatur** | Wartungsarten, -pläne, -protokoll, Fälligkeitsübersicht, Reparaturen, Defekt melden, QR-Codes für Fahrzeuge, PDF-Import Funktionen |
+| **2 – Wartung & Reparatur** | **Zuerst:** vollständige Löschung einer Person nach DSGVO (inkl. Bereinigung personenbezogener Daten im Änderungsprotokoll); danach Wartungsarten, -pläne, -protokoll, Fälligkeitsübersicht, Reparaturen, Defekt melden, QR-Codes für Fahrzeuge, PDF-Import Funktionen |
 | **3 – Anlagen** | Anlagen-Dossier, Module, Bauteile, Zubehöradressen, Anordnungen, Wartung/Reparatur an Anlagen, QR-Codes für Module |
 | **4 – Veranstaltungen** | Kalender, Anlagen mit Anordnung, Fahrzeuganmeldung mit Prüfungen, Betriebsstunden |
 | **5 – Boxen & Packlisten** | Boxen, Standardinhalt, Packliste je Veranstaltung, mobiles Abhaken, Rückgabe, Druck, QR-Codes für Boxen |
