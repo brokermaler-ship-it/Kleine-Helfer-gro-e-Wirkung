@@ -66,6 +66,14 @@ final class HttpZugriffTest extends DbTestCase
         $this->assertSame(419, $this->app()->handle(new Request('POST', '/logout', [], ['_csrf' => 'falsch']))->status);
     }
 
+    public function test_csrf_token_nur_im_query_string_wird_abgelehnt(): void
+    {
+        $this->anmelden();
+        $t = $this->csrf();
+        $a = $this->app()->handle(new Request('POST', '/logout', ['_csrf' => $t]));
+        $this->assertSame(419, $a->status);
+    }
+
     public function test_login_post_ohne_csrf_liefert_419(): void
     {
         $this->legeBenutzerAn('max@verein.de');

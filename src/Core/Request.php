@@ -61,6 +61,12 @@ final class Request
         return $this->post[$key] ?? $this->query[$key] ?? $default;
     }
 
+    /** Nur aus dem POST-Body (nicht aus der URL). */
+    public function post(string $key, mixed $default = null): mixed
+    {
+        return $this->post[$key] ?? $default;
+    }
+
     public function query(string $key, mixed $default = null): mixed
     {
         return $this->query[$key] ?? $default;

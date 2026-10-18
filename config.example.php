@@ -10,4 +10,6 @@ return [
     'upload_max_mb' => 64,
     'app_name' => 'EMC 78 Halle – Fahrzeugverwaltung',
     'debug' => false,
+    // Sitzungs-Cookie nur über HTTPS senden; auf false nur für lokale Entwicklung ohne HTTPS.
+    'cookie_secure' => true,
 ];

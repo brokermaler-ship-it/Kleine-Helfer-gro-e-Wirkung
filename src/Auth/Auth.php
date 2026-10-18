@@ -12,7 +12,8 @@ final class Auth
     public const SPERRE_MINUTEN = 15;
     private const SESSION_KEY = 'benutzer_id';
 
-    private static ?string $attrappenHash = null;
+    /** Vorberechneter bcrypt-Hash (Kosten 10) für unbekannte E-Mails: gleiche Rechenzeit, kein password_hash je Anfrage. */
+    private const ATTRAPPE = '$2y$10$N3RKsKsuGQBFYUWpIQyp..zwSKRjz27CPnRIFDoLb/jx9nVvPagpG';
     private ?Benutzer $geladen = null;
     private ?int $geladenId = null;
 
@@ -33,7 +34,7 @@ final class Auth
         $zeile = $st->fetch(\PDO::FETCH_ASSOC);
 
         // Immer genau eine Passwortprüfung, damit Antwortzeit und Meldung nichts über die E-Mail verraten.
-        $hash = $zeile !== false ? (string) $zeile['passwort_hash'] : $this->attrappenHash();
+        $hash = $zeile !== false ? (string) $zeile['passwort_hash'] : self::ATTRAPPE;
         $richtig = password_verify($passwort, $hash) && $zeile !== false;
 
         if (!$richtig) {
@@ -108,10 +109,5 @@ final class Auth
     {
         $this->pdo->prepare('INSERT INTO login_versuch (email, ip, zeitpunkt, erfolgreich) VALUES (?, ?, NOW(), ?)')
             ->execute([mb_substr($email, 0, 190), mb_substr($ip, 0, 45), $erfolgreich ? 1 : 0]);
-    }
-
-    private function attrappenHash(): string
-    {
-        return self::$attrappenHash ??= password_hash(bin2hex(random_bytes(8)), PASSWORD_DEFAULT);
     }
 }

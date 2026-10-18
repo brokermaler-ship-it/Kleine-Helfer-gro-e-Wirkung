@@ -36,7 +36,7 @@ final class App
             $c->get('pdo'),
             $this->migrationsVerzeichnis
         ));
-        $this->container->set('session', fn() => $session ?? new Session());
+        $this->container->set('session', fn() => $session ?? new Session(cookieSecure: (bool) ($this->config['cookie_secure'] ?? true)));
         $this->container->set(Csrf::class, fn(Container $c) => new Csrf($c->get('session')));
         $this->container->set(Auth::class, fn(Container $c) => new Auth($c->get('pdo'), $c->get('session')));
         $this->container->set(AuthController::class, fn(Container $c) => new AuthController(
@@ -116,7 +116,7 @@ final class App
 
         // 2. CSRF-Schutz für alle POST-Anfragen.
         if ($request->isPost()) {
-            $token = $request->input(Csrf::FELD);
+            $token = $request->post(Csrf::FELD);
             if (!$this->container->get(Csrf::class)->pruefe(is_string($token) ? $token : null)) {
                 return $this->fehlerSeite(419);
             }

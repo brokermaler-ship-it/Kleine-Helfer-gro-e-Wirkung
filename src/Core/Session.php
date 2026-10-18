@@ -13,7 +13,7 @@ final class Session
     private int $erneuerungen = 0;
 
     /** @param array<string,mixed>|null $speicher */
-    public function __construct(?array &$speicher = null)
+    public function __construct(?array &$speicher = null, bool $cookieSecure = true)
     {
         if ($speicher !== null) {
             $this->nativ = false;
@@ -22,13 +22,12 @@ final class Session
         }
         $this->nativ = true;
         if (session_status() !== PHP_SESSION_ACTIVE) {
-            $https = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
             ini_set('session.use_strict_mode', '1');
             ini_set('session.use_only_cookies', '1');
             session_set_cookie_params([
                 'lifetime' => 0,
                 'path' => '/',
-                'secure' => $https,
+                'secure' => $cookieSecure,
                 'httponly' => true,
                 'samesite' => 'Lax',
             ]);
