@@ -214,6 +214,17 @@ Grafischer Editor im Browser (PC und Tablet) für Anlagen und Module, aufbauend 
 
 **Technik:** SVG-basiert im Browser mit eigenem JavaScript (keine Installation nötig); Speichern der Positionen in `anordnung_modul` bzw. am Bauteil.
 
+### 4.11 Dateiablage im OneDrive des Vereins
+
+Wunsch des Vorsitzenden: Alle hochgeladenen **Fotos und Dokumente** liegen im OneDrive des EMC statt nur auf dem Webspace. Die Datenbank (Fahrzeug-, Anlagen-, Wartungsdaten) bleibt auf STRATO – eine Datenbank kann nicht im OneDrive betrieben werden.
+
+- **Anbindung** über Microsoft Graph (OAuth 2.0 mit dauerhafter Freigabe/Refresh-Token). Einmalige Einrichtung durch den Kontoinhaber: App-Registrierung bei Microsoft, danach „Mit OneDrive verbinden“ in der Verwaltung. Tokens verschlüsselt in der Datenbank, Schlüssel in `config.php`.
+- **Lesbare Ordnerstruktur**, damit der Vorstand direkt im OneDrive blättern kann: `EMC78-Fahrzeugverwaltung/Fahrzeuge/EMC-0001 V 200 060/<Datei>`, später `…/Anlagen/<Anlage>/<Modul>/…`.
+- **Ablauf beim Hochladen:** Datei wird geprüft (4.7), zuerst lokal gespeichert, dann ins OneDrive übertragen; Status je Datei „im OneDrive“ / „wartet auf Übertragung“. Ist OneDrive nicht erreichbar, wird später automatisch nachübertragen (beim nächsten Aufruf bzw. per Cron, falls im Paket verfügbar).
+- **Anzeige:** Vorschaubilder und Anzeigegrößen werden für schnelle Darstellung auf dem Webspace zwischengespeichert; Originale werden bei Bedarf über die App aus dem OneDrive geladen. Zugriff weiterhin nur nach Anmeldung (keine öffentlichen OneDrive-Links).
+- **Technik:** Speicher-Schnittstelle mit zwei Umsetzungen (lokal, OneDrive), damit die App auch ohne Anbindung voll funktioniert; Umzug vorhandener Dateien per Knopfdruck.
+- **Konto:** offen, siehe Abschnitt 7 – empfohlen ist ein eigenes Vereinskonto statt eines Privatkontos (Abhängigkeit von einer Person, Datenschutz).
+
 ## 5. Technik
 
 **Aufbau**
@@ -267,6 +278,7 @@ Jede Stufe ist für sich nutzbar und bekommt einen eigenen Umsetzungsplan.
 | Stufe | Inhalt |
 |---|---|
 | **1 – Grundgerüst & Fahrzeugkatalog** | Login, Rollen, Personen, Spurweiten, Fahrzeuge mit Decoder, Funktionen, CVs, Fotos und Dokumenten (Grundfunktion), Adressprüfung, CSV-Import Funktionen, Funktionsvorlagen, Datensicherung, Migrationen |
+| **1b – OneDrive-Dateiablage** | Speicher-Schnittstelle, Microsoft-Anbindung, Übertragung und Nachübertragung, lesbare Ordnerstruktur, Umzug vorhandener Dateien (4.11) |
 | **2 – Wartung & Reparatur** | Wartungsarten, -pläne, -protokoll, Fälligkeitsübersicht, Reparaturen, Defekt melden, QR-Codes für Fahrzeuge, PDF-Import Funktionen |
 | **3 – Anlagen** | Anlagen-Dossier, Module, Bauteile, Zubehöradressen, Anordnungen, Wartung/Reparatur an Anlagen, QR-Codes für Module |
 | **4 – Veranstaltungen** | Kalender, Anlagen mit Anordnung, Fahrzeuganmeldung mit Prüfungen, Betriebsstunden |
@@ -284,6 +296,7 @@ Der **WinTrack-Probelauf** wird vorgezogen und vor Stufe 3 durchgeführt, damit 
 2. **WinTrack-Probelauf:** Beispieldatei und Exporte einer Vereinsanlage bereitstellen.
 3. **Stammlisten:** Welche Spurweiten und Wartungsarten nutzt der Verein (Startbestand)?
 4. **Gestaltung:** Vereinslogo und -farben, falls vorhanden.
+5. **OneDrive-Konto:** Privates Konto von Ulrich Bühling oder eigenes Vereinskonto (empfohlen, z. B. kostenloses Microsoft-Konto des Vereins, das mit Ulrich Bühling geteilt wird)? Vorstandsbeschluss zum Datenschutz.
 
 ## 8. Nicht Bestandteil
 
