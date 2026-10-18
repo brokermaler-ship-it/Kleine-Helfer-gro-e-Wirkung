@@ -1,0 +1,3 @@
+/* Eigene Anpassungen zu Bootstrap */
+body { min-height: 100vh; }
+main { padding-bottom: 2rem; }

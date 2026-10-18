@@ -1,0 +1,35 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  phpunit:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: test
+          MARIADB_DATABASE: emc_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      TEST_DB_DSN: mysql:host=127.0.0.1;port=3306;dbname=emc_test;charset=utf8mb4
+      TEST_DB_BENUTZER: root
+      TEST_DB_PASSWORT: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, gd, fileinfo, exif, zip
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist
+      - run: vendor/bin/phpunit

@@ -1,0 +1,8 @@
+RewriteEngine On
+
+# Geschützte Ordner und Dateien niemals ausliefern
+RewriteRule ^(src|templates|migrations|storage|vendor|tests|bin)(/|$) - [F,L]
+RewriteRule ^(config\.php|composer\..*)$ - [F,L]
+
+# Alles Übrige nach public/ umleiten
+RewriteRule ^(?!public/)(.*)$ public/$1 [L]

@@ -1,0 +1,25 @@
+{
+    "name": "emc78/verwaltung",
+    "description": "Fahrzeug- und Anlagenverwaltung des EMC 78 Halle e.V.",
+    "type": "project",
+    "require": {
+        "php": ">=8.2",
+        "ext-pdo": "*",
+        "ext-gd": "*",
+        "ext-fileinfo": "*"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11"
+    },
+    "autoload": {
+        "psr-4": {
+            "Emc\\": "src/"
+        },
+        "files": ["src/Core/helpers.php"]
+    },
+    "config": {
+        "platform": {
+            "php": "8.2.0"
+        }
+    }
+}
