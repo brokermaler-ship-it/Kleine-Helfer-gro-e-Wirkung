@@ -72,6 +72,28 @@ final class Request
         return $this->query[$key] ?? $default;
     }
 
+    /** Textwert (POST vor GET); bei fehlendem oder Nicht-String-Wert (z. B. `?x[]=1`) der Standardwert. Trimmt nicht. */
+    public function text(string $key, string $default = ''): string
+    {
+        $wert = $this->input($key);
+        return is_string($wert) ? $wert : $default;
+    }
+
+    /** Ganzzahl im Bereich [$min, $max]; null bei fehlendem, ungültigem oder außerhalb liegendem Wert. */
+    public function ganzzahl(string $key, int $min, int $max): ?int
+    {
+        $wert = $this->input($key);
+        if (!is_string($wert)) {
+            return null;
+        }
+        $wert = trim($wert);
+        if (preg_match('/^-?\d{1,18}$/', $wert) !== 1) {
+            return null;
+        }
+        $zahl = (int) $wert;
+        return $zahl >= $min && $zahl <= $max ? $zahl : null;
+    }
+
     public function file(string $key): ?array
     {
         return $this->files[$key] ?? null;

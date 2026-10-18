@@ -8,6 +8,7 @@ use Emc\Core\App;
 use Emc\Core\Request;
 use Emc\Core\Response;
 use Emc\Core\Router;
+use Emc\Fahrzeuge\FahrzeugController;
 use Emc\Personen\BenutzerController;
 use Emc\Personen\KontoController;
 use Emc\Personen\PersonController;
@@ -25,6 +26,15 @@ return function (Router $router, App $app): void {
 
     $router->add('GET', '/install', fn(Request $r) => $c->get(InstallController::class)->formular($r));
     $router->add('POST', '/install', fn(Request $r) => $c->get(InstallController::class)->installiere($r));
+
+    $fz = fn(string $m) => fn(Request $r, array $p = []) => $c->get(FahrzeugController::class)->$m($r, $p);
+    $router->add('GET', '/fahrzeuge', $app->erfordert('lesen', $fz('liste')));
+    $router->add('GET', '/fahrzeuge/neu', $app->erfordert('fahrzeug_bearbeiten', $fz('neu')));
+    $router->add('POST', '/fahrzeuge', $app->erfordert('fahrzeug_bearbeiten', $fz('anlegen')));
+    $router->add('GET', '/fahrzeuge/{id}', $app->erfordert('lesen', $fz('anzeigen')));
+    $router->add('GET', '/fahrzeuge/{id}/bearbeiten', $app->erfordert('fahrzeug_bearbeiten', $fz('bearbeiten')));
+    $router->add('POST', '/fahrzeuge/{id}', $app->erfordert('fahrzeug_bearbeiten', $fz('aendern')));
+    $router->add('POST', '/fahrzeuge/{id}/loeschen', $app->erfordert('fahrzeug_bearbeiten', $fz('loeschen')));
 
     $person = fn(string $m) => fn(Request $r, array $p = []) => $c->get(PersonController::class)->$m($r, $p);
     $router->add('GET', '/personen', $app->erfordert('person_bearbeiten', $person('liste')));

@@ -10,6 +10,8 @@ use Emc\Auth\Berechtigung;
 use Emc\Auth\InstallController;
 use Emc\Betrieb\Einstellungen;
 use Emc\Betrieb\Migrator;
+use Emc\Fahrzeuge\FahrzeugController;
+use Emc\Fahrzeuge\FahrzeugRepository;
 use Emc\Personen\BenutzerController;
 use Emc\Personen\BenutzerRepository;
 use Emc\Personen\KontoController;
@@ -82,6 +84,16 @@ final class App
         $this->container->set(SpurweiteController::class, fn(Container $c) => new SpurweiteController(
             $this->view,
             $c->get(SpurweiteRepository::class),
+            $c->get('session')
+        ));
+        $this->container->set(FahrzeugRepository::class, fn(Container $c) => new FahrzeugRepository($c->get('pdo')));
+        $this->container->set(FahrzeugController::class, fn(Container $c) => new FahrzeugController(
+            $this->view,
+            $c->get(FahrzeugRepository::class),
+            $c->get(SpurweiteRepository::class),
+            $c->get(PersonRepository::class),
+            $c->get(Aenderungsprotokoll::class),
+            $c->get(Auth::class),
             $c->get('session')
         ));
         $this->container->set(KontoController::class, fn(Container $c) => new KontoController(

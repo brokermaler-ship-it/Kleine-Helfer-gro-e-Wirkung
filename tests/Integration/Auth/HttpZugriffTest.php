@@ -19,7 +19,6 @@ final class HttpZugriffTest extends DbTestCase
     {
         $app = App::erzeuge(self::testConfig(), new Session($this->sitzung));
         $router = $app->container()->get('router');
-        $router->add('GET', '/fahrzeuge', fn() => new Response('Liste'));
         $router->add('GET', '/admin', $app->erfordert('benutzer_verwalten', fn() => new Response('Admin')));
         $router->add('GET', '/konto/passwort', fn() => new Response('Passwortseite'));
         return $app;
@@ -48,7 +47,7 @@ final class HttpZugriffTest extends DbTestCase
         $this->anmelden();
         $a = $this->app()->handle(new Request('GET', '/fahrzeuge'));
         $this->assertSame(200, $a->status);
-        $this->assertSame('Liste', $a->body);
+        $this->assertStringContainsString('Keine Fahrzeuge gefunden.', $a->body);
     }
 
     public function test_login_seite_ist_oeffentlich_und_hat_csrf_feld(): void
@@ -180,7 +179,7 @@ final class HttpZugriffTest extends DbTestCase
     {
         $this->anmelden('mitglied');
         $body = $this->app()->handle(new Request('GET', '/fahrzeuge'))->body;
-        $this->assertSame('Liste', $body); // eigene Antwort ohne Layout
+        $this->assertStringContainsString('Keine Fahrzeuge gefunden.', $body);
         $seite = $this->app()->handle(new Request('GET', '/gibtsnicht'));
         $this->assertStringContainsString('Fahrzeuge', $seite->body);
         $this->assertStringContainsString('Abmelden', $seite->body);
