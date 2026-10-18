@@ -82,11 +82,11 @@ final class FahrzeugController
     public function aendern(Request $r, array $p): Response
     {
         $fz = $this->lade($p);
+        $stand = $r->text('_stand'); // Stand des ursprünglich geladenen Formulars, nie der aktuelle DB-Stand
         [$daten, $fehler] = $this->lies($r);
         if ($fehler !== []) {
-            return $this->formular($this->anzeigeWerte($daten, $r), $fehler, $fz, 422);
+            return $this->formular($this->anzeigeWerte($daten, $r), $fehler, $fz, 422, null, $stand);
         }
-        $stand = $r->text('_stand');
         try {
             $this->fahrzeuge->aktualisieren((int) $fz['id'], $daten, $stand);
         } catch (KonfliktFehler $e) {

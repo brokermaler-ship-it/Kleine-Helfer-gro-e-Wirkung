@@ -123,6 +123,28 @@ final class FahrzeugHttpTest extends DbTestCase
         $this->assertSame('BR 218', $this->pdo->query("SELECT bezeichnung FROM fahrzeug WHERE id = $id")->fetchColumn());
     }
 
+    public function test_validierungsfehler_behaelt_urspruenglichen_stand(): void
+    {
+        $this->anmelden('bearbeiter');
+        $this->post('/fahrzeuge', $this->formdaten());
+        $id = (int) $this->pdo->query('SELECT id FROM fahrzeug')->fetchColumn();
+        $s0 = (string) $this->pdo->query("SELECT geaendert_am FROM fahrzeug WHERE id = $id")->fetchColumn();
+
+        // B speichert zwischenzeitlich.
+        $this->assertSame(303, $this->post("/fahrzeuge/$id", $this->formdaten(['bezeichnung' => 'Von B', '_stand' => $s0]))->status);
+
+        // A sendet ungültige Daten mit dem alten Stand.
+        $fehler = $this->post("/fahrzeuge/$id", $this->formdaten(['bezeichnung' => '', '_stand' => $s0]));
+        $this->assertSame(422, $fehler->status);
+        $this->assertStringContainsString('name="_stand" value="' . $s0 . '"', $fehler->body);
+
+        // A korrigiert und sendet den Stand aus der 422-Antwort: Konflikt, B bleibt erhalten.
+        preg_match('/name="_stand" value="([^"]*)"/', $fehler->body, $m);
+        $neu = $this->post("/fahrzeuge/$id", $this->formdaten(['bezeichnung' => 'Von A', '_stand' => $m[1]]));
+        $this->assertSame(409, $neu->status);
+        $this->assertSame('Von B', $this->pdo->query("SELECT bezeichnung FROM fahrzeug WHERE id = $id")->fetchColumn());
+    }
+
     public function test_aendern_protokolliert_nur_unterschiede(): void
     {
         $this->anmelden('bearbeiter');
