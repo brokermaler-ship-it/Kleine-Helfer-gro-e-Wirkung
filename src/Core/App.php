@@ -36,11 +36,10 @@ final class App
     public function handle(Request $request): Response
     {
         try {
-            $antwort = $this->router->dispatch($request);
-            if ($antwort->status === 404 && $antwort->body === 'Seite nicht gefunden.') {
-                return $this->fehlerSeite(404);
-            }
-            return $antwort;
+            return $this->router->dispatchOderWirf($request);
+        } catch (HttpFehler $f) {
+            $header = $f->erlaubt !== [] ? ['Allow' => implode(', ', $f->erlaubt)] : [];
+            return $this->fehlerSeite($f->status, null, $header);
         } catch (\Throwable $t) {
             error_log(sprintf('%s: %s in %s:%d', $t::class, $t->getMessage(), $t->getFile(), $t->getLine()));
             return $this->fehlerSeite(500, !empty($this->config['debug']) ? $t->getMessage() : null);
@@ -63,7 +62,8 @@ final class App
         return $this->view;
     }
 
-    private function fehlerSeite(int $status, ?string $detail = null): Response
+    /** @param array<string,string> $header */
+    private function fehlerSeite(int $status, ?string $detail = null, array $header = []): Response
     {
         try {
             $html = $this->view->render('fehler/' . $status, [
@@ -74,6 +74,6 @@ final class App
         } catch (\Throwable $t) {
             $html = 'Es ist ein technischer Fehler aufgetreten.';
         }
-        return new Response($html, $status, ['Content-Type' => 'text/html; charset=utf-8']);
+        return new Response($html, $status, $header + ['Content-Type' => 'text/html; charset=utf-8']);
     }
 }

@@ -19,17 +19,29 @@ final class Router
         ];
     }
 
+    /** Liefert bei fehlender Route eine schlichte 404-/405-Antwort. */
     public function dispatch(Request $request): Response
     {
+        try {
+            return $this->dispatchOderWirf($request);
+        } catch (HttpFehler $f) {
+            $header = $f->erlaubt !== [] ? ['Allow' => implode(', ', $f->erlaubt)] : [];
+            return new Response($f->getMessage(), $f->status, $header);
+        }
+    }
+
+    /** @throws HttpFehler wenn keine Route passt (404) oder die Methode nicht erlaubt ist (405) */
+    public function dispatchOderWirf(Request $request): Response
+    {
         $pfad = $this->normalisiere($request->path());
-        $pfadGefunden = false;
+        $erlaubt = [];
 
         foreach ($this->routen as $route) {
             if (!preg_match($route['regex'], $pfad, $treffer)) {
                 continue;
             }
-            $pfadGefunden = true;
             if ($route['method'] !== $request->method()) {
+                $erlaubt[] = $route['method'];
                 continue;
             }
             $params = [];
@@ -41,9 +53,7 @@ final class Router
             return ($route['handler'])($request, $params);
         }
 
-        return $pfadGefunden
-            ? new Response('Methode nicht erlaubt.', 405)
-            : new Response('Seite nicht gefunden.', 404);
+        throw new HttpFehler($erlaubt !== [] ? 405 : 404, array_values(array_unique($erlaubt)));
     }
 
     private function normalisiere(string $pfad): string

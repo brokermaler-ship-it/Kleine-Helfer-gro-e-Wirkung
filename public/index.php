@@ -18,4 +18,6 @@ if (!is_file($wurzel . '/config.php')) {
 
 $config = require $wurzel . '/config.php';
 
+ini_set('display_errors', empty($config['debug']) ? '0' : '1');
+
 App::erzeuge($config)->handle(Request::fromGlobals($config))->send();
