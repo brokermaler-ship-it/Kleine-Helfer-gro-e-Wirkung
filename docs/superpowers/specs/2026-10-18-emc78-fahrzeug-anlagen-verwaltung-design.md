@@ -91,9 +91,9 @@ Gilt gleichermaßen für **Fahrzeuge, Anlagen, Module und Bauteile** (auch Mitgl
 
 **Aufbau:** Anleitung Schritt für Schritt mit Fotos, Aufbauzeit, benötigte Personen, Platzbedarf, Stromanschluss.
 
-**Modul:** Bezeichnung, Nummer, Maße, Anschlüsse, Zustand, Fotos, QR-Code, Wartung/Reparatur.
+**Modul:** Bezeichnung, Nummer, Maße, **Übergänge** (Position an der Modulkante, Anzahl Gleise – für das Einrasten im Plan-Editor), Plan-Hintergrund (WinTrack-Export als Bild), Zustand, Fotos, QR-Code, Wartung/Reparatur.
 
-**Bauteil:** Art (Weiche, Weichenantrieb, Signal, Entkupplungsgleis, Beleuchtung, Rückmelder, Decoder, Sonstiges), Bezeichnung (z. B. W12), Typ/Hersteller, **Zubehöradresse**, Modul, Zustand, Foto, Reparaturhistorie.
+**Bauteil:** Art (Weiche, Weichenantrieb, Signal, Entkupplungsgleis, Beleuchtung, Rückmelder, Decoder, Sonstiges), Bezeichnung (z. B. W12), Typ/Hersteller, **Zubehöradresse**, Modul, **Position auf dem Plan** (siehe 4.10), Zustand, Foto, Reparaturhistorie, ggf. Herkunft aus WinTrack-Import.
 
 - Zubehöradressen werden **je Anlage** auf Eindeutigkeit geprüft (Warnung wie bei Fahrzeugen).
 
@@ -162,12 +162,46 @@ Einheitlich für alle Objekte; eine Datei kann mehreren Objekten zugeordnet sein
 
 - **3D-Ansicht** (three.js): drehen, zoomen, verschieben, auch mobil; Zuordnung zu Anlage, Modul, Bauteil oder Fahrzeug.
 - **Druckdatei-Bibliothek:** Kategorie (Ersatzteil, Gebäude, Zubehör, Hilfsmittel), Verwendungszweck mit Verknüpfung zu Fahrzeug/Bauteil, Maßstab, Material, Druckeinstellungen, Fotos des Drucks, **Versionen**, **Quelle und Lizenz**.
-- **Modulplan Stufe 1 (2D):** Anordnung (4.3) als Draufsicht im Raster; Klick auf Modul öffnet Dossier; offene Defekte als rote Markierung.
-- **Modulplan Stufe 2 (3D):** Liegen 3D-Modelle der Module vor, werden sie anhand der Anordnung zu einer begehbaren, anklickbaren 3D-Szene zusammengesetzt.
+- **Modulplan in 3D:** Die 2D-Ansicht und Bearbeitung übernimmt der Plan-Editor (4.10). Liegen 3D-Modelle der Module vor, werden sie anhand der Anordnung zu einer begehbaren, anklickbaren 3D-Szene zusammengesetzt.
 
-### 4.9 WinTrack-Import (wird geprüft)
+### 4.9 WinTrack-Import und Abgleich (wird geprüft)
 
-WinTrack speichert in einem proprietären, nicht dokumentierten Format. Vor einer Zusage erfolgt ein **Probelauf** mit einer echten Vereinsdatei und den in WinTrack verfügbaren Exporten (Stückliste, Bild, ggf. 3D-Export). Ziel wäre, aus der Stückliste automatisch Bauteile (Weichen, Signale) einer Anlage anzulegen. Ist das Format nicht lesbar, wird mit den Exporten gearbeitet.
+WinTrack ist das Planungswerkzeug des Vereins und bleibt es; die App ersetzt WinTrack nicht. WinTrack speichert in einem proprietären, nicht dokumentierten Format. Vor einer Zusage erfolgt ein **Probelauf** mit einer echten Vereinsdatei und den in WinTrack verfügbaren Exporten (Stückliste, Bild, ggf. 3D-Export).
+
+**Import:** Aus der Stückliste (bzw. der Datei selbst, falls lesbar) werden Weichen, Signale und weitere Bauteile einer Anlage bzw. eines Moduls erkannt.
+
+**Abgleich-Tabelle:** Die erkannten Teile erscheinen in einer Tabelle; je Zeile wird zugeordnet bzw. ergänzt: Bezeichnung, Modul, Zubehöradresse, Antrieb, Decoder. Nichts wird ohne Bestätigung übernommen.
+
+**Erneuter Import:** Wurde der Plan in WinTrack geändert, zeigt die App nur die **Unterschiede** an (neu, entfallen, geändert); bereits gepflegte Daten (Adressen, Reparaturhistorie) bleiben erhalten. Entfallene Bauteile werden nicht gelöscht, sondern als „nicht mehr im Plan“ markiert.
+
+Ist das Format nicht lesbar, wird mit den Exporten gearbeitet (Bild als Plan-Hintergrund, Stückliste als CSV/Text).
+
+### 4.10 Plan-Editor
+
+Grafischer Editor im Browser (PC und Tablet) für Anlagen und Module, aufbauend auf den WinTrack-Plänen.
+
+**Anordnungen bearbeiten**
+
+- Module per **Ziehen und Ablegen** auf dem Raster platzieren, drehen (in 90°-Schritten, bei Bedarf frei), entfernen.
+- **Einrasten an den Übergängen:** passende Modulübergänge werden beim Annähern verbunden; nicht passende Übergänge (z. B. andere Gleisanzahl) werden markiert.
+- Rastermaß je Anordnung einstellbar; Varianten anlegen, kopieren, umbenennen; für variable Anlagen „Anordnung für Veranstaltung aus Vorlage erzeugen“.
+- Anzeige von Gesamtmaß und Platzbedarf der Anordnung.
+
+**Plan-Hintergrund aus WinTrack**
+
+- Je Modul bzw. Anlage wird der WinTrack-Plan als Bild (Export) hinterlegt, maßstäblich ausgerichtet (Skalierung über zwei Referenzpunkte mit bekanntem Abstand).
+- Im Anordnungs-Editor werden die Modulpläne gedreht und an ihrer Position mit angezeigt, sodass der Gesamtgleisplan der jeweiligen Anordnung sichtbar ist.
+
+**Bauteile auf dem Plan**
+
+- Klick auf eine Stelle im Plan → Bauteil anlegen bzw. ein vorhandenes (z. B. aus dem WinTrack-Abgleich) dort verorten.
+- Symbole je Bauteilart; Beschriftung mit Bezeichnung und Adresse ein-/ausblendbar.
+- **Statusfarben:** offene Defekte rot, Wartung fällig gelb.
+- Klick auf ein Bauteil zeigt Adresse, Antrieb, Historie und die Schaltfläche **„Defekt melden“** (auch für Mitglieder).
+
+**Ansichtsmodus** für alle Mitglieder (nur Lesen, zoomen, verschieben, auch am Handy); Bearbeiten nur für Bearbeiter.
+
+**Technik:** SVG-basiert im Browser mit eigenem JavaScript (keine Installation nötig); Speichern der Positionen in `anordnung_modul` bzw. am Bauteil.
 
 ## 5. Technik
 
@@ -180,7 +214,7 @@ WinTrack speichert in einem proprietären, nicht dokumentierten Format. Vor eine
 
 **Datenmodell (Übersicht der Tabellen)**
 
-`person`, `benutzer`, `spurweite`, `fahrzeug`, `decoder`, `funktion`, `funktionsvorlage`, `cv_wert`, `anlage`, `modul`, `bauteil`, `anordnung`, `anordnung_modul`, `wartungsart`, `wartungsplan`, `wartung`, `reparatur`, `ersatzteil`, `veranstaltung`, `veranstaltung_tag`, `veranstaltung_anlage`, `anmeldung`, `anmeldung_tag`, `box`, `box_inhalt`, `packposition` (Status je Veranstaltung), `dokument`, `dokument_zuordnung`, `druckdatei`, `aenderungsprotokoll`.
+`person`, `benutzer`, `spurweite`, `fahrzeug`, `decoder`, `funktion`, `funktionsvorlage`, `cv_wert`, `anlage`, `modul`, `bauteil`, `anordnung`, `anordnung_modul`, `modul_uebergang`, `import_lauf` (WinTrack-Importe für den Abgleich), `wartungsart`, `wartungsplan`, `wartung`, `reparatur`, `ersatzteil`, `veranstaltung`, `veranstaltung_tag`, `veranstaltung_anlage`, `anmeldung`, `anmeldung_tag`, `box`, `box_inhalt`, `packposition` (Status je Veranstaltung), `dokument`, `dokument_zuordnung`, `druckdatei`, `aenderungsprotokoll`.
 
 Objektübergreifende Bezüge (Wartungsplan, Reparatur, Dokumentzuordnung, QR-Code) verwenden das Paar `objekt_typ` + `objekt_id` (Typen: fahrzeug, anlage, modul, bauteil, box, veranstaltung).
 
@@ -227,8 +261,10 @@ Jede Stufe ist für sich nutzbar und bekommt einen eigenen Umsetzungsplan.
 | **4 – Veranstaltungen** | Kalender, Anlagen mit Anordnung, Fahrzeuganmeldung mit Prüfungen, Betriebsstunden |
 | **5 – Boxen & Packlisten** | Boxen, Standardinhalt, Packliste je Veranstaltung, mobiles Abhaken, Rückgabe, Druck, QR-Codes für Boxen |
 | **6 – Dateien & 3D** | Erweiterte Dateiverwaltung (Umwandlung, Video), Volltextsuche, 3D-Ansicht, Druckdatei-Bibliothek |
-| **7 – Modulplan** | 2D-Modulplan, danach 3D-Szene |
-| **8 – Importe** | JMRI- und Rocrail-Import; WinTrack-Import nach erfolgreichem Probelauf (Probelauf kann jederzeit vorgezogen werden) |
+| **7 – Plan-Editor** | Anordnungs-Editor mit Einrasten, WinTrack-Plan als Hintergrund, Bauteile auf dem Plan mit Statusfarben und „Defekt melden“; danach 3D-Szene |
+| **8 – Importe** | WinTrack-Import mit Abgleich-Tabelle und Unterschiedsanzeige (nach erfolgreichem Probelauf); JMRI- und Rocrail-Import |
+
+Der **WinTrack-Probelauf** wird vorgezogen und vor Stufe 3 durchgeführt, damit Datenmodell für Module und Bauteile auf das Ergebnis abgestimmt werden kann.
 
 ## 7. Offene Punkte
 
@@ -239,6 +275,7 @@ Jede Stufe ist für sich nutzbar und bekommt einen eigenen Umsetzungsplan.
 
 ## 8. Nicht Bestandteil
 
+- Eigener Gleisplan-Editor als Ersatz für WinTrack (Gleise zeichnen, Herstellerbibliotheken).
 - Direktes Auslesen oder Programmieren von Decodern (dafür weiter JMRI DecoderPro o. ä.).
 - Mitgliederverwaltung mit Beiträgen, Buchhaltung.
 - Öffentliche Ansicht für die Vereinswebseite (kann später ergänzt werden).
