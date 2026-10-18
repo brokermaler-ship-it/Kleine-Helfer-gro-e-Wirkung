@@ -40,7 +40,7 @@ $loeschenForm = function (array $d) use ($csrf): string {
                     <div class="card-body p-2 small">
                         <div class="text-truncate" title="<?= e((string) $f['titel']) ?>"><?= e((string) $f['titel']) ?></div>
                         <?php if ((int) $f['id'] === (int) $fahrzeug['titelbild_dokument_id']): ?>
-                            <span class="badge text-bg-primary">&#9733; Titelbild</span>
+                            <span class="badge text-bg-dark">&#9733; Titelbild</span>
                         <?php endif; ?>
                         <?php if ($bearbeiten): ?>
                             <div class="d-flex gap-1 mt-1">

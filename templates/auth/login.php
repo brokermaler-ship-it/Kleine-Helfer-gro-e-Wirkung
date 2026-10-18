@@ -2,7 +2,7 @@
 <div class="row justify-content-center">
     <div class="col-md-6 col-lg-4">
         <div class="text-center login-kopf">
-            <span class="login-logo"><img src="<?= e(url('assets/marke/logo-512.png')) ?>" alt="EMC 78 Halle – Eisenbahn Modellbahn Club 78 e.V." width="512" height="512"></span>
+            <span class="login-logo"><img src="<?= e(url('assets/marke/logo-512.png')) ?>" alt="<?= e($app_name ?? 'EMC 78 Lokschuppen') ?>" width="512" height="512"></span>
             <img class="login-slogan" src="<?= e(url('assets/marke/slogan-600.png')) ?>" alt="Die Modellbahnfamilie" width="599" height="371">
             <p class="login-name h5 mb-0"><?= e($app_name ?? '') ?></p>
         </div>

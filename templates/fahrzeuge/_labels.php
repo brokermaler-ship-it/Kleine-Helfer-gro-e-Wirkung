@@ -6,7 +6,7 @@ $statusKlassen = ['einsatzbereit' => 'success', 'in_wartung' => 'warning', 'defe
 $epochen = ['I', 'II', 'III', 'IV', 'V', 'VI'];
 $eigentumBadge = function (array $fz): string {
     if ($fz['eigentuemer_person_id'] === null) {
-        return '<span class="badge text-bg-primary">Verein</span>';
+        return '<span class="badge text-bg-dark">Verein</span>';
     }
     return '<span class="badge text-bg-warning">extern – Eigentum von ' . e((string) $fz['eigentuemer_name']) . '</span>';
 };
