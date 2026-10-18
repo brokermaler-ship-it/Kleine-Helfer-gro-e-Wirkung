@@ -1,6 +1,97 @@
+/*
+ * EMC 78 Lokschuppen – Vereinsgestaltung
+ * Die Vereinsfarben stehen nur hier. Zum Anpassen genügen diese fünf Werte (und --emc-rot-rgb passend dazu).
+ * Kontrast (WCAG): Weiß auf --emc-rot 4,90:1, Weiß auf --emc-rot-dunkel 6,88:1, --emc-schwarz auf Weiß 17,26:1.
+ * Roter Text auf hellgrauem Grund (4,45:1) erreicht AA nicht; Links und Textrot nutzen deshalb --emc-rot-dunkel.
+ */
+:root {
+    --emc-rot: #E30311;
+    --emc-rot-dunkel: #B8020E;
+    --emc-schwarz: #1B1B18;
+    --emc-grau: #C6C6C6;
+    --emc-grau-hell: #F4F4F4;
+    --emc-rot-rgb: 227, 3, 17;
+
+    --bs-primary: var(--emc-rot);
+    --bs-primary-rgb: var(--emc-rot-rgb);
+    --bs-link-color: var(--emc-rot-dunkel);
+    --bs-link-color-rgb: 184, 2, 14;
+    --bs-link-hover-color: var(--emc-schwarz);
+    --bs-link-hover-color-rgb: 27, 27, 24;
+    --bs-body-color: var(--emc-schwarz);
+    --bs-body-color-rgb: 27, 27, 24;
+    --bs-body-bg: #FFFFFF;
+    --bs-heading-color: var(--emc-schwarz);
+    --bs-border-color: var(--emc-grau);
+    --bs-tertiary-bg: var(--emc-grau-hell);
+    --bs-focus-ring-color: rgba(var(--emc-rot-rgb), .35);
+}
+
+body { min-height: 100vh; display: flex; flex-direction: column; color: var(--emc-schwarz); background: #FFFFFF; }
+main { padding-bottom: 2rem; flex: 1 0 auto; }
+
+/* Bootstrap-Komponenten auf Vereinsrot abbilden */
+.btn-primary {
+    --bs-btn-bg: var(--emc-rot); --bs-btn-border-color: var(--emc-rot); --bs-btn-color: #fff;
+    --bs-btn-hover-bg: var(--emc-rot-dunkel); --bs-btn-hover-border-color: var(--emc-rot-dunkel); --bs-btn-hover-color: #fff;
+    --bs-btn-active-bg: var(--emc-rot-dunkel); --bs-btn-active-border-color: var(--emc-rot-dunkel); --bs-btn-active-color: #fff;
+    --bs-btn-focus-shadow-rgb: var(--emc-rot-rgb);
+    --bs-btn-disabled-bg: var(--emc-rot); --bs-btn-disabled-border-color: var(--emc-rot);
+}
+.btn-outline-primary {
+    --bs-btn-color: var(--emc-rot-dunkel); --bs-btn-border-color: var(--emc-rot);
+    --bs-btn-hover-bg: var(--emc-rot-dunkel); --bs-btn-hover-border-color: var(--emc-rot-dunkel); --bs-btn-hover-color: #fff;
+    --bs-btn-active-bg: var(--emc-rot-dunkel); --bs-btn-active-border-color: var(--emc-rot-dunkel); --bs-btn-active-color: #fff;
+    --bs-btn-focus-shadow-rgb: var(--emc-rot-rgb);
+    --bs-btn-disabled-color: var(--emc-rot); --bs-btn-disabled-border-color: var(--emc-rot);
+}
+.btn-link { --bs-btn-color: var(--emc-rot-dunkel); --bs-btn-hover-color: var(--emc-schwarz); }
+.text-bg-primary { background-color: var(--emc-rot) !important; color: #fff !important; }
+.text-primary { color: var(--emc-rot-dunkel) !important; }
+.form-control:focus, .form-select:focus { border-color: var(--emc-rot); box-shadow: 0 0 0 .25rem rgba(var(--emc-rot-rgb), .25); }
+.btn:focus-visible, .nav-link:focus-visible, .page-link:focus-visible, .form-check-input:focus { box-shadow: 0 0 0 .25rem rgba(var(--emc-rot-rgb), .35); }
+.form-check-input:checked { background-color: var(--emc-rot); border-color: var(--emc-rot); }
+.form-check-input:focus { border-color: var(--emc-rot); }
+.nav-tabs { --bs-nav-tabs-link-active-color: var(--emc-schwarz); --bs-nav-link-color: var(--emc-rot-dunkel); --bs-nav-link-hover-color: var(--emc-schwarz); }
+.nav-tabs .nav-link.active { border-bottom: 3px solid var(--emc-rot); font-weight: 600; }
+.nav-pills { --bs-nav-pills-link-active-bg: var(--emc-rot); }
+.pagination { --bs-pagination-color: var(--emc-rot-dunkel); --bs-pagination-hover-color: var(--emc-schwarz); --bs-pagination-active-bg: var(--emc-rot); --bs-pagination-active-border-color: var(--emc-rot); --bs-pagination-focus-color: var(--emc-schwarz); --bs-pagination-focus-box-shadow: 0 0 0 .25rem rgba(var(--emc-rot-rgb), .25); }
+.dropdown-menu { --bs-dropdown-link-active-bg: var(--emc-rot); }
+.progress-bar { background-color: var(--emc-rot); }
+.list-group { --bs-list-group-active-bg: var(--emc-rot); --bs-list-group-active-border-color: var(--emc-rot); }
+
+/* Kopfzeile */
+.emc-navbar { background: var(--emc-rot); --bs-navbar-color: #fff; --bs-navbar-hover-color: #fff; --bs-navbar-active-color: #fff; --bs-navbar-brand-color: #fff; --bs-navbar-brand-hover-color: #fff; border-bottom: 3px solid var(--emc-rot-dunkel); }
+.emc-navbar .navbar-brand { font-weight: 700; letter-spacing: .02em; }
+.emc-navbar .nav-link { color: #fff; }
+.emc-navbar .nav-link:hover, .emc-navbar .nav-link:focus { color: #fff; text-decoration: underline; }
+.emc-navbar .navbar-toggler { border-color: rgba(255, 255, 255, .7); }
+.navbar-logo { display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 50%; background: #fff; flex-shrink: 0; }
+.navbar-logo img { width: 34px; height: auto; display: block; }
+
+/* Fußzeile */
+.emc-fuss { border-top: 1px solid var(--emc-grau); background: var(--emc-grau-hell); color: var(--emc-schwarz); flex-shrink: 0; }
+.emc-fuss .slogan { color: var(--emc-rot-dunkel); font-style: italic; font-weight: 600; }
+
+.abschnitt-titel { border-left: 4px solid var(--emc-rot); padding-left: .6rem; margin-bottom: .75rem; }
+.meine-karte { border-color: var(--emc-grau); }
+.meine-karte:hover { border-color: var(--emc-rot); }
+
+/* Anmeldeseite im Look der Vereinsfahne */
+body.login-seite { background: #fff; position: relative; }
+/* Gleisgrafik als dezenter Hintergrund (Pfad relativ zu app.css, funktioniert unter jeder basis_url) */
+body.login-seite::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: .6; background: url('marke/gleis-1200.png') no-repeat center bottom / min(100%, 900px) auto; }
+.swoosh { display: block; width: 100%; height: clamp(70px, 14vw, 170px); }
+body.login-seite main { margin-top: 0 !important; }
+.login-kopf { margin-top: -2.5rem; margin-bottom: 1rem; position: relative; }
+.login-logo { display: inline-block; width: clamp(160px, 44vw, 220px); background: #fff; border-radius: 50%; box-shadow: 0 .25rem 1rem rgba(0, 0, 0, .15); padding: 0; }
+.login-logo img { display: block; width: 100%; height: auto; }
+.login-slogan { display: block; width: min(58%, 240px); height: auto; margin: .5rem auto .25rem; }
+.login-name { color: var(--emc-schwarz); font-weight: 700; }
+.login-karte { background: rgba(255, 255, 255, .94); border-color: var(--emc-grau); box-shadow: 0 .25rem 1rem rgba(0, 0, 0, .08); }
+body.login-seite .emc-fuss { background: rgba(244, 244, 244, .92); }
+
 /* Eigene Anpassungen zu Bootstrap */
-body { min-height: 100vh; }
-main { padding-bottom: 2rem; }
 
 /* Fahrzeugkatalog */
 .fahrzeug-bild { width: 64px; height: 48px; object-fit: cover; border-radius: .25rem; flex-shrink: 0; }
@@ -9,3 +100,10 @@ main { padding-bottom: 2rem; }
 /* Funktionstabelle: "Nur belegte Tasten" per Checkbox ohne JavaScript */
 #nur-belegt:checked ~ .table-responsive .funktionen-tabelle tr.leer,
 #nur-belegt:checked ~ form .funktionen-tabelle tr.leer { display: none; }
+
+@media (min-width: 768px) and (max-height: 900px) {
+    .login-kopf { margin-top: -3rem; margin-bottom: .5rem; }
+    .login-logo { width: 170px; }
+    .login-slogan { width: 200px; margin: .5rem auto .25rem; }
+    .login-name { font-size: 1rem; }
+}

@@ -38,6 +38,8 @@ final class AuthController
 
         $ergebnis = $this->auth->anmelden($email, $passwort, $ip);
         if ($ergebnis === AnmeldeErgebnis::Erfolg) {
+            $name = $this->auth->benutzer()?->rufname() ?? '';
+            $this->session->meldung('erfolg', 'Willkommen in der Modellbahnfamilie' . ($name !== '' ? ', ' . $name : '') . '!');
             return Response::redirect(url($ziel));
         }
         $text = match ($ergebnis) {
@@ -71,6 +73,7 @@ final class AuthController
     {
         $html = $this->view->render('auth/login', [
             'titel' => 'Anmelden',
+            'login_seite' => true,
             'ziel' => $ziel,
             'email' => $email,
             'fehler' => $fehler,

@@ -64,6 +64,13 @@ final class FahrzeugRepository
         return $st->fetchAll(\PDO::FETCH_ASSOC);
     }
 
+    /** Nicht ausgemusterte Fahrzeuge, die einer Person gehören (für „Meine Fahrzeuge“). @return list<array<string,mixed>> */
+    public function sucheEigene(int $personId): array
+    {
+        $filter = new FahrzeugFilter(personId: $personId);
+        return $this->suche($filter);
+    }
+
     /** @return ?array<string,mixed> */
     public function finde(int $id): ?array
     {

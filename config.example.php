@@ -8,7 +8,7 @@ return [
     'basis_url' => '',
     'speicher_pfad' => __DIR__ . '/storage',
     'upload_max_mb' => 64,
-    'app_name' => 'EMC 78 Halle – Fahrzeugverwaltung',
+    'app_name' => 'EMC 78 Lokschuppen',
     'debug' => false,
     // Sitzungs-Cookie nur über HTTPS senden; auf false nur für lokale Entwicklung ohne HTTPS.
     'cookie_secure' => true,

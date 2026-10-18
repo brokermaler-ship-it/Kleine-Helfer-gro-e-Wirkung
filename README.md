@@ -1,6 +1,6 @@
-# EMC 78 Halle – Fahrzeugverwaltung
+# EMC 78 Lokschuppen
 
-Webanwendung des Modelleisenbahnclubs EMC 78 Halle e. V. zur Verwaltung des Fahrzeugbestands: Fahrzeuge, Decoder (Adressen, Funktionstasten, CVs), Fotos und Dokumente, Personen und Benutzer. Die Anwendung läuft auf normalem PHP-Webspace und ist für PC, Tablet und Handy gedacht.
+Webanwendung „EMC 78 Lokschuppen“ des Eisenbahn Modellbahn Clubs 78 e.V. Halle („Die Modellbahnfamilie“) zur Verwaltung des Fahrzeugbestands: Fahrzeuge, Decoder (Adressen, Funktionstasten, CVs), Fotos und Dokumente, Personen und Benutzer. Die Anwendung läuft auf normalem PHP-Webspace und ist für PC, Tablet und Handy gedacht.
 
 ## Voraussetzungen
 
@@ -79,7 +79,11 @@ Die Anwendung lässt sich wie eine App auf den Startbildschirm legen (sie öffne
 - **Android (Chrome):** Seite öffnen, anmelden, Chrome-Menü (drei Punkte) → **„App installieren“** bzw. **„Zum Startbildschirm hinzufügen“**.
 - **iPhone/iPad (Safari):** Seite in Safari öffnen, **Teilen**-Symbol → **„Zum Home-Bildschirm“**.
 
-Das Symbol zeigt zunächst ein schlichtes „EMC 78“. Sobald ein Vereinslogo vorliegt, werden die drei Bilddateien in `public/assets/icons/` (`icon-192.png`, `icon-512.png`, `apple-touch-icon.png`) ersetzt.
+Das Symbol zeigt das Vereinslogo auf weißem Grund. Es wird aus `public/assets/marke/logo-512.png` mit `php bin/erzeuge-bilder.php` erzeugt (`icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon.png` in `public/assets/icons/`).
+
+## Gestaltung anpassen
+
+Alle Vereinsfarben stehen als CSS-Variablen ganz oben in `public/assets/app.css` (`--emc-rot`, `--emc-rot-dunkel`, `--emc-schwarz`, `--emc-grau`, `--emc-grau-hell`, dazu `--emc-rot-rgb`); Bootstrap ist dort auf diese Werte abgebildet. Logo, Slogan und Gleisgrafik liegen in `public/assets/marke/`. Den Anzeigenamen stellt `app_name` in der `config.php` ein.
 
 ## Link auf der Vereinswebseite
 
@@ -151,4 +155,4 @@ bash bin/release.sh
 
 Das Skript baut aus dem aktuellen Stand von `HEAD` (nur eingecheckte Dateien) im Ordner `build/` ein Paket ohne Tests (nur die Beispielfotos der Testumgebung liegen bei) und Entwicklungsdateien, installiert die Produktions-Abhängigkeiten und erzeugt `dist/emc78-verwaltung-<Version>.zip`. Die Version steht in der Datei `VERSION`.
 
-Die App-Symbole (`public/assets/icons/`) und die Beispielfotos (`tests/fixtures/demo/`) sind mit `php bin/erzeuge-bilder.php` erzeugte Platzhalter und eingecheckt; das Skript muss nur laufen, wenn sich das Aussehen ändern soll.
+Die App-Symbole (`public/assets/icons/`, aus dem Vereinslogo) und die Beispielfotos (`tests/fixtures/demo/`, Platzhalter) sind mit `php bin/erzeuge-bilder.php` erzeugt und eingecheckt; das Skript muss nur laufen, wenn sich das Aussehen ändern soll.

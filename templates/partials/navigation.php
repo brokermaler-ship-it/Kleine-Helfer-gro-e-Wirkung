@@ -5,9 +5,12 @@ $darf = $darf ?? fn(string $aktion): bool => false;
 $benutzer = $benutzer ?? null;
 use Emc\Auth\Berechtigung;
 ?>
-<nav class="navbar navbar-expand-lg bg-body-tertiary border-bottom">
+<nav class="navbar navbar-expand-lg emc-navbar navbar-dark">
     <div class="container">
-        <a class="navbar-brand" href="<?= e(url('/')) ?>"><?= e($app_name ?? '') ?></a>
+        <a class="navbar-brand d-flex align-items-center gap-2" href="<?= e(url('/')) ?>" aria-label="<?= e($app_name ?? '') ?>">
+            <span class="navbar-logo"><img src="<?= e(url('assets/marke/logo-128.png')) ?>" alt="" width="36" height="36"></span>
+            <span>Lokschuppen</span>
+        </a>
         <?php if ($benutzer !== null): ?>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#hauptmenue"
                 aria-controls="hauptmenue" aria-expanded="false" aria-label="Menü umschalten">

@@ -100,6 +100,7 @@ final class Auth
             trim($z['vorname'] . ' ' . $z['nachname']),
             Rolle::from((string) $z['rolle']),
             (int) $z['muss_passwort_aendern'] === 1,
+            trim((string) $z['vorname']),
         );
         return $this->geladen;
     }

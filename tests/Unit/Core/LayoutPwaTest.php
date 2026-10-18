@@ -13,7 +13,7 @@ final class LayoutPwaTest extends TestCase
     {
         $GLOBALS['emc_basis_url'] = $basis;
         $view = new View(dirname(__DIR__, 3) . '/templates');
-        $view->teile('app_name', 'EMC 78 Halle – Fahrzeugverwaltung');
+        $view->teile('app_name', 'EMC 78 Lokschuppen');
         $view->teile('testumgebung', $test);
         return $view->render('fehler/404', ['titel' => 'Nicht gefunden']);
     }
@@ -29,9 +29,29 @@ final class LayoutPwaTest extends TestCase
         $this->assertStringContainsString('<link rel="manifest" href="/mitglieder/manifest.webmanifest">', $html);
         $this->assertStringContainsString('rel="apple-touch-icon"', $html);
         $this->assertStringContainsString('href="/mitglieder/assets/icons/apple-touch-icon.png"', $html);
-        $this->assertStringContainsString('<meta name="theme-color"', $html);
+        $this->assertStringContainsString('<meta name="theme-color" content="#E30311">', $html);
         $this->assertStringContainsString('<meta name="apple-mobile-web-app-capable" content="yes">', $html);
-        $this->assertStringContainsString('<meta name="apple-mobile-web-app-title" content="EMC 78">', $html);
+        $this->assertStringContainsString('<meta name="apple-mobile-web-app-title" content="Lokschuppen">', $html);
+    }
+
+    public function test_titel_navigation_und_fusszeile_tragen_den_vereinsnamen(): void
+    {
+        $html = $this->rendere(false);
+        $this->assertStringContainsString('<title>Nicht gefunden – EMC 78 Lokschuppen</title>', $html);
+        $this->assertStringContainsString('Eisenbahn Modellbahn Club 78 e.V. Halle · <span class="slogan">Die Modellbahnfamilie</span>', $html);
+        $this->assertStringContainsString('<footer', $html);
+        $this->assertStringContainsString('src="/mitglieder/assets/marke/logo-128.png"', $html);
+        $this->assertStringContainsString('>Lokschuppen</span>', $html);
+    }
+
+    public function test_css_hat_vereinsfarben_als_variablen(): void
+    {
+        $css = (string) file_get_contents(dirname(__DIR__, 3) . '/public/assets/app.css');
+        $this->assertStringContainsString('--emc-rot: #E30311;', $css);
+        $this->assertStringContainsString('--emc-rot-dunkel: #B8020E;', $css);
+        $this->assertStringContainsString('--emc-schwarz: #1B1B18;', $css);
+        $this->assertStringContainsString('--emc-grau: #C6C6C6;', $css);
+        $this->assertStringContainsString('--emc-grau-hell: #F4F4F4;', $css);
     }
 
     public function test_testumgebung_leiste_nur_wenn_aktiv(): void
@@ -43,8 +63,10 @@ final class LayoutPwaTest extends TestCase
     public function test_manifest_ist_gueltig_und_relativ(): void
     {
         $m = json_decode((string) file_get_contents(dirname(__DIR__, 3) . '/public/manifest.webmanifest'), true, 512, JSON_THROW_ON_ERROR);
-        $this->assertSame('EMC 78 Halle – Fahrzeugverwaltung', $m['name']);
-        $this->assertSame('EMC 78', $m['short_name']);
+        $this->assertSame('EMC 78 Lokschuppen', $m['name']);
+        $this->assertSame('Lokschuppen', $m['short_name']);
+        $this->assertSame('#E30311', $m['theme_color']);
+        $this->assertSame('#FFFFFF', strtoupper($m['background_color']));
         $this->assertSame('./', $m['start_url']);
         $this->assertSame('./', $m['scope']);
         $this->assertSame('standalone', $m['display']);
@@ -52,6 +74,9 @@ final class LayoutPwaTest extends TestCase
         $groessen = array_column($m['icons'], 'sizes');
         $this->assertContains('192x192', $groessen);
         $this->assertContains('512x512', $groessen);
+        $maskable = array_filter($m['icons'], fn($i) => ($i['purpose'] ?? '') === 'maskable');
+        $this->assertCount(1, $maskable);
+        $this->assertSame('assets/icons/icon-maskable-512.png', array_values($maskable)[0]['src']);
         foreach ($m['icons'] as $icon) {
             $this->assertFileExists(dirname(__DIR__, 3) . '/public/' . $icon['src']);
         }

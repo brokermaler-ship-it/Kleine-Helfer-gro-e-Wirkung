@@ -43,8 +43,11 @@ final class FahrzeugController
     public function liste(Request $r): Response
     {
         $filter = FahrzeugFilter::ausRequest($r);
+        $benutzer = $this->auth->benutzer();
+        $meine = $benutzer !== null && !$filter->istGesetzt() ? $this->fahrzeuge->sucheEigene($benutzer->personId) : [];
         return $this->html('fahrzeuge/liste', [
             'titel' => 'Fahrzeuge',
+            'meine' => $meine,
             'fahrzeuge' => $this->fahrzeuge->suche($filter),
             'filter' => $filter,
             'spurweiten' => $this->spurweiten->alle(),

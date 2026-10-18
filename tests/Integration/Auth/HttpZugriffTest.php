@@ -102,6 +102,37 @@ final class HttpZugriffTest extends DbTestCase
         $this->assertArrayHasKey('benutzer_id', $this->sitzung);
     }
 
+    public function test_login_erfolgreich_begruesst_mit_vornamen(): void
+    {
+        $this->legeBenutzerAn('max@verein.de');
+        $this->app()->handle(new Request('POST', '/login', [], [
+            'email' => 'max@verein.de', 'passwort' => 'geheim-passwort-1', 'ziel' => '/fahrzeuge', '_csrf' => $this->csrf(),
+        ]));
+        $this->assertSame(
+            [['typ' => 'erfolg', 'text' => 'Willkommen in der Modellbahnfamilie, Max!']],
+            $this->sitzung['_meldungen'] ?? null
+        );
+    }
+
+    public function test_begruessung_nimmt_anzeigename_wenn_vorname_leer(): void
+    {
+        $id = $this->legeBenutzerAn('max@verein.de');
+        $this->pdo->exec("UPDATE person SET vorname = '', nachname = 'Muster' WHERE id = (SELECT person_id FROM benutzer WHERE id = $id)");
+        $this->app()->handle(new Request('POST', '/login', [], [
+            'email' => 'max@verein.de', 'passwort' => 'geheim-passwort-1', '_csrf' => $this->csrf(),
+        ]));
+        $this->assertSame('Willkommen in der Modellbahnfamilie, Muster!', $this->sitzung['_meldungen'][0]['text'] ?? null);
+    }
+
+    public function test_fehlgeschlagene_anmeldung_begruesst_nicht(): void
+    {
+        $this->legeBenutzerAn('max@verein.de');
+        $this->app()->handle(new Request('POST', '/login', [], [
+            'email' => 'max@verein.de', 'passwort' => 'falsch', '_csrf' => $this->csrf(),
+        ]));
+        $this->assertArrayNotHasKey('_meldungen', $this->sitzung);
+    }
+
     #[DataProvider('unsichereZiele')]
     public function test_ziel_wird_gegen_open_redirect_geschuetzt(string $ziel): void
     {

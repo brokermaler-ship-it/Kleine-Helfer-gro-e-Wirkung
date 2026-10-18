@@ -272,7 +272,7 @@ final class App
     {
         $c = $this->container;
         $auth = fn() => $c->get(Auth::class);
-        $this->view->teile('app_name', $this->config['app_name'] ?? '');
+        $this->view->teile('app_name', $this->config['app_name'] ?? 'EMC 78 Lokschuppen');
         $this->view->teile('testumgebung', $this->istTestumgebung());
         $this->view->teile('csrf', $c->get(Csrf::class));
         $this->view->teile('darf', fn(string $aktion): bool => Berechtigung::darf($auth()->benutzer(), $aktion));
@@ -429,7 +429,7 @@ final class App
         try {
             $html = $this->view->render('fehler/' . $status, [
                 'titel' => 'Fehler',
-                'app_name' => $this->config['app_name'] ?? '',
+                'app_name' => $this->config['app_name'] ?? 'EMC 78 Lokschuppen',
                 'detail' => $detail,
             ]);
         } catch (\Throwable $t) {

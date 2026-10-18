@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Erzeugt die schlichten Platzhalter-Bilder (App-Symbole und Demo-Fotos) mit GD.
+ * Erzeugt die App-Symbole (aus public/assets/marke/logo-512.png) und die Demo-Fotos mit GD.
  * Nur bei Bedarf von Hand ausführen: php bin/erzeuge-bilder.php
  * Die erzeugten Dateien sind eingecheckt; das Skript wird zum Betrieb nicht gebraucht.
  */
@@ -34,21 +34,26 @@ function zentriert(GdImage $bild, string $text, int $mitteX, int $mitteY, float 
     imagettftext($bild, $groesse, 0, (int) ($mitteX - $breite / 2 - $box[0]), (int) ($mitteY + $hoehe / 2 - $box[1]), $farbe, $font, $text);
 }
 
-function symbol(int $px, string $ziel): void
+/**
+ * App-Symbol aus dem Vereinslogo: Logo auf weißem Grund, zentriert.
+ * $anteil = Breite des Logos relativ zur Symbolgröße (0,8 = ca. 10 % Rand; maskable: 0,70 für die Safe-Zone).
+ */
+function symbol(int $px, string $ziel, float $anteil = 0.8): void
 {
-    $b = imagecreatetruecolor($px, $px);
-    $gruen = imagecolorallocate($b, 0x1f, 0x4d, 0x3a);
-    imagefilledrectangle($b, 0, 0, $px, $px, $gruen);
-    $weiss = imagecolorallocate($b, 255, 255, 255);
-    // Zwei Gleisschwellen und Schienen als schlichtes Motiv.
-    $hell = imagecolorallocate($b, 0x8f, 0xc9, 0xaa);
-    imagesetthickness($b, max(2, intdiv($px, 64)));
-    imageline($b, (int) ($px * .12), (int) ($px * .78), (int) ($px * .88), (int) ($px * .78), $hell);
-    imageline($b, (int) ($px * .12), (int) ($px * .84), (int) ($px * .88), (int) ($px * .84), $hell);
-    for ($x = 0.16; $x < 0.9; $x += 0.12) {
-        imageline($b, (int) ($px * $x), (int) ($px * .75), (int) ($px * $x - $px * .02), (int) ($px * .87), $hell);
+    $logo = imagecreatefrompng(dirname(__DIR__) . '/public/assets/marke/logo-512.png');
+    if ($logo === false) {
+        fwrite(STDERR, "public/assets/marke/logo-512.png fehlt.\n");
+        exit(1);
     }
-    zentriert($b, 'EMC 78', intdiv($px, 2), (int) ($px * .42), $px * 0.14, $weiss);
+    imagealphablending($logo, true);
+    $b = imagecreatetruecolor($px, $px);
+    imagefilledrectangle($b, 0, 0, $px, $px, imagecolorallocate($b, 255, 255, 255));
+    imagealphablending($b, true);
+    $lw = imagesx($logo);
+    $lh = imagesy($logo);
+    $zielBreite = (int) round($px * $anteil);
+    $zielHoehe = (int) round($zielBreite * $lh / $lw);
+    imagecopyresampled($b, $logo, intdiv($px - $zielBreite, 2), intdiv($px - $zielHoehe, 2), 0, 0, $zielBreite, $zielHoehe, $lw, $lh);
     imagepng($b, $ziel, 9);
 }
 
@@ -99,6 +104,7 @@ $icons = $wurzel . '/public/assets/icons';
 @mkdir($icons, 0775, true);
 symbol(192, $icons . '/icon-192.png');
 symbol(512, $icons . '/icon-512.png');
+symbol(512, $icons . '/icon-maskable-512.png', 0.70);
 symbol(180, $icons . '/apple-touch-icon.png');
 
 $demo = $wurzel . '/tests/fixtures/demo';

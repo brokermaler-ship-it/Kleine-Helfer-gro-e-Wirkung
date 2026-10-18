@@ -13,6 +13,13 @@ final class Benutzer
         public readonly string $anzeigename,
         public readonly Rolle $rolle,
         public readonly bool $mussPasswortAendern,
+        public readonly string $vorname = '',
     ) {
+    }
+
+    /** Rufname für persönliche Ansprache: Vorname der Person, sonst der Anzeigename. */
+    public function rufname(): string
+    {
+        return $this->vorname !== '' ? $this->vorname : $this->anzeigename;
     }
 }

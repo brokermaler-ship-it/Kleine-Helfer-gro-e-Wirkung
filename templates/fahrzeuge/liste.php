@@ -1,6 +1,6 @@
 <?php
 /** @var list<array<string,mixed>> $fahrzeuge */ /** @var \Emc\Fahrzeuge\FahrzeugFilter $filter */
-/** @var list<array<string,mixed>> $spurweiten */ /** @var list<array<string,mixed>> $personen */
+/** @var list<array<string,mixed>> $meine */ /** @var list<array<string,mixed>> $spurweiten */ /** @var list<array<string,mixed>> $personen */
 include __DIR__ . '/_labels.php';
 $titelbild = fn(array $fz): string => $fz['titelbild_dokument_id'] === null
     ? '<div class="fahrzeug-bild fahrzeug-bild-leer" aria-hidden="true">&#128642;</div>'
@@ -13,6 +13,30 @@ $adressen = fn(array $fz): string => $fz['adressen'] === null ? '–' : e((strin
         <a class="btn btn-primary" href="<?= e(url('/fahrzeuge/neu')) ?>">Fahrzeug anlegen</a>
     <?php endif; ?>
 </div>
+
+<?php if (($meine ?? []) !== []): ?>
+    <section class="meine-fahrzeuge mb-4" aria-labelledby="meine-fahrzeuge-titel">
+        <h2 class="h5 abschnitt-titel" id="meine-fahrzeuge-titel">Meine Fahrzeuge</h2>
+        <div class="row g-2">
+            <?php foreach ($meine as $fz): ?>
+                <div class="col-12 col-md-6 col-lg-4">
+                    <a class="card h-100 text-decoration-none text-reset meine-karte" href="<?= e(url('/fahrzeuge/' . $fz['id'])) ?>">
+                        <div class="card-body d-flex gap-3">
+                            <?= $titelbild($fz) ?>
+                            <div class="flex-grow-1">
+                                <h3 class="h6 mb-1"><?= e($fz['bezeichnung']) ?></h3>
+                                <div class="small text-muted"><?= e($fz['inventarnummer']) ?> · <?= e($fz['spurweite_name']) ?></div>
+                                <div class="small">Adresse: <?= $adressen($fz) ?></div>
+                                <div class="mt-1"><span class="badge text-bg-<?= e($statusKlassen[$fz['status']] ?? 'secondary') ?>"><?= e($statusLabels[$fz['status']] ?? $fz['status']) ?></span></div>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    </section>
+    <h2 class="h5 abschnitt-titel">Alle Fahrzeuge</h2>
+<?php endif; ?>
 
 <button class="btn btn-outline-secondary d-md-none mb-2" type="button" data-bs-toggle="collapse" data-bs-target="#filterleiste"
         aria-expanded="<?= $filter->istGesetzt() ? 'true' : 'false' ?>" aria-controls="filterleiste">Suche und Filter</button>

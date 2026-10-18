@@ -197,4 +197,52 @@ final class FahrzeugHttpTest extends DbTestCase
         $this->assertSame(404, $this->get('/fahrzeuge/abc')->status);
         $this->assertSame(404, $this->get('/fahrzeuge/99999999999999')->status);
     }
+
+    private function eigeneFahrzeugeVorbereiten(): void
+    {
+        $uid = $this->anmelden('mitglied');
+        $pid = (int) $this->pdo->query("SELECT person_id FROM benutzer WHERE id = $uid")->fetchColumn();
+        $this->pdo->prepare('INSERT INTO person (vorname, nachname) VALUES (?, ?)')->execute(['Fritz', 'Fremd']);
+        $fremdId = (int) $this->pdo->lastInsertId();
+        $ins = $this->pdo->prepare('INSERT INTO fahrzeug (inventarnummer, bezeichnung, spurweite_id, gattung, stromsystem, status, eigentuemer_person_id) VALUES (?, ?, ?, ?, ?, ?, ?)');
+        $ins->execute(['EMC-0001', 'Meine V 200', $this->spurweite, 'lok', '2L', 'einsatzbereit', $pid]);
+        $ins->execute(['EMC-0002', 'Meine alte Dampflok', $this->spurweite, 'lok', '2L', 'ausgemustert', $pid]);
+        $ins->execute(['EMC-0003', 'Fremder Wagen', $this->spurweite, 'wagen', '2L', 'einsatzbereit', $fremdId]);
+        $ins->execute(['EMC-0004', 'Vereinslok', $this->spurweite, 'lok', '2L', 'einsatzbereit', null]);
+    }
+
+    public function test_liste_zeigt_meine_fahrzeuge_oben_und_alle_darunter(): void
+    {
+        $this->eigeneFahrzeugeVorbereiten();
+        $body = $this->get('/fahrzeuge')->body;
+        $this->assertStringContainsString('Meine Fahrzeuge', $body);
+        $this->assertStringContainsString('Alle Fahrzeuge', $body);
+        $meine = strpos($body, 'Meine Fahrzeuge');
+        $alle = strpos($body, 'Alle Fahrzeuge');
+        $this->assertLessThan($alle, $meine);
+        $abschnitt = substr($body, $meine, $alle - $meine);
+        $this->assertStringContainsString('Meine V 200', $abschnitt);
+        $this->assertStringNotContainsString('Meine alte Dampflok', $body);
+        $this->assertStringNotContainsString('Fremder Wagen', $abschnitt);
+        $this->assertStringNotContainsString('Vereinslok', $abschnitt);
+        $this->assertStringContainsString('Fremder Wagen', substr($body, $alle));
+    }
+
+    public function test_meine_fahrzeuge_nicht_bei_aktivem_filter(): void
+    {
+        $this->eigeneFahrzeugeVorbereiten();
+        $body = $this->get('/fahrzeuge', ['q' => 'V 200'])->body;
+        $this->assertStringNotContainsString('Meine Fahrzeuge', $body);
+        $this->assertStringNotContainsString('Alle Fahrzeuge', $body);
+    }
+
+    public function test_meine_fahrzeuge_nicht_ohne_eigene_fahrzeuge(): void
+    {
+        $this->anmelden('mitglied');
+        $this->pdo->prepare('INSERT INTO fahrzeug (inventarnummer, bezeichnung, spurweite_id, gattung, stromsystem, status) VALUES (?, ?, ?, ?, ?, ?)')
+            ->execute(['EMC-0001', 'Vereinslok', $this->spurweite, 'lok', '2L', 'einsatzbereit']);
+        $body = $this->get('/fahrzeuge')->body;
+        $this->assertStringNotContainsString('Meine Fahrzeuge', $body);
+        $this->assertStringContainsString('Vereinslok', $body);
+    }
 }
