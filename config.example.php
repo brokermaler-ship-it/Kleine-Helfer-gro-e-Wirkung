@@ -12,4 +12,7 @@ return [
     'debug' => false,
     // Sitzungs-Cookie nur über HTTPS senden; auf false nur für lokale Entwicklung ohne HTTPS.
     'cookie_secure' => true,
+    // Nur für die Testinstanz (test.emc78.de): zeigt eine gelbe Leiste, die Testzugänge auf der Anmeldeseite
+    // und unter Verwaltung → Testdaten das Laden von Beispieldaten. Im Echtbetrieb immer false.
+    'testumgebung' => false,
 ];

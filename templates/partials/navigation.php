@@ -31,6 +31,9 @@ use Emc\Auth\Berechtigung;
                 if ($darf(Berechtigung::BETRIEB)) {
                     $verwaltung['/admin/sicherung'] = 'Sicherung';
                     $verwaltung['/admin/update'] = 'Update';
+                    if (!empty($testumgebung)) {
+                        $verwaltung['/admin/testdaten'] = 'Testdaten';
+                    }
                 }
                 if ($verwaltung !== []): ?>
                     <li class="nav-item dropdown">

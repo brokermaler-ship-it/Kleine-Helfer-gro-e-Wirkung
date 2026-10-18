@@ -25,6 +25,9 @@ final class SicherungController
 
     public function herunterladen(Request $r): Response
     {
+        // Große Dateibestände brauchen länger als die übliche Laufzeitgrenze; ein Abbruch durch den Browser soll nichts halbfertig lassen.
+        @set_time_limit(0);
+        ignore_user_abort(true);
         $temp = tempnam(sys_get_temp_dir(), 'emc_zip');
         if ($temp === false) {
             $this->session->meldung('fehler', 'Die Sicherung konnte nicht erstellt werden.');

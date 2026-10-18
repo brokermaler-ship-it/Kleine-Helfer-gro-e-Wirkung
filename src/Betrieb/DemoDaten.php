@@ -1,0 +1,282 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Emc\Betrieb;
+
+use Emc\Auth\Rolle;
+use Emc\Core\App;
+use Emc\Core\DomainFehler;
+use Emc\Dateien\Bildbearbeitung;
+use Emc\Dateien\DokumentRepository;
+use Emc\Dateien\UploadFehler;
+use Emc\Dateien\UploadService;
+use Emc\Digital\CvRepository;
+use Emc\Digital\DecoderRepository;
+use Emc\Digital\FunktionRepository;
+use Emc\Digital\FunktionsvorlageRepository;
+use Emc\Fahrzeuge\FahrzeugRepository;
+use Emc\Personen\BenutzerRepository;
+use Emc\Personen\PersonRepository;
+
+/**
+ * Beispieldaten für die Testumgebung (erfundene Personen, plausible Modellbahn-Fahrzeuge).
+ * Nutzt die echten Repositories und den UploadService, damit die Daten wie echte Eingaben gültig sind.
+ */
+final class DemoDaten
+{
+    public const PASSWORT = 'Test-EMC78!';
+    private const BEHALTEN = ['schema_migration', 'spurweite'];
+
+    private \PDO $pdo;
+    private string $speicherPfad;
+    private string $fotoVerzeichnis;
+
+    public function __construct(private App $app)
+    {
+        $c = $app->container();
+        $this->pdo = $c->get('pdo');
+        $this->speicherPfad = (string) ($app->config()['speicher_pfad'] ?? dirname(__DIR__, 2) . '/storage');
+        $this->fotoVerzeichnis = dirname(__DIR__, 2) . '/tests/fixtures/demo';
+    }
+
+    public function erzeuge(bool $zuruecksetzen): void
+    {
+        if (empty($this->app->config()['testumgebung'])) {
+            throw new DomainFehler('Beispieldaten nur in der Testumgebung');
+        }
+        if ($zuruecksetzen) {
+            $this->leere();
+        } elseif ((int) $this->pdo->query('SELECT COUNT(*) FROM person')->fetchColumn() > 0) {
+            throw new DomainFehler('Es sind bereits Daten vorhanden. Mit --zuruecksetzen werden sie gelöscht und durch Beispieldaten ersetzt.');
+        }
+
+        $personen = $this->personen();
+        $this->benutzer($personen);
+
+        $c = $this->app->container();
+        $fahrzeuge = $c->get(FahrzeugRepository::class);
+        $decoder = $c->get(DecoderRepository::class);
+        $spur = [];
+        foreach ($this->pdo->query('SELECT id, name FROM spurweite')->fetchAll(\PDO::FETCH_ASSOC) as $z) {
+            $spur[(string) $z['name']] = (int) $z['id'];
+        }
+
+        $ids = [];
+        foreach ($this->fahrzeugDaten() as $schluessel => $d) {
+            $eigner = $d['eigner'] === null ? null : $personen[$d['eigner']];
+            $ids[$schluessel] = $fahrzeuge->anlegen([
+                'bezeichnung' => $d['bezeichnung'],
+                'baureihe' => $d['baureihe'],
+                'bahnverwaltung' => $d['bahn'],
+                'epoche' => $d['epoche'],
+                'gattung' => $d['gattung'],
+                'hersteller' => $d['hersteller'],
+                'artikelnummer' => $d['artikel'],
+                'spurweite_id' => $spur[$d['spur']],
+                'stromsystem' => $d['strom'] ?? '2L',
+                'eigentuemer_person_id' => $eigner,
+                'status' => $d['status'] ?? 'einsatzbereit',
+                'betriebsstunden' => $d['stunden'] ?? 0,
+                'notiz' => $d['notiz'] ?? null,
+            ]);
+            foreach ($d['decoder'] as $dec) {
+                $dec['id'] = $decoder->anlegen($ids[$schluessel], $dec);
+                $ids['decoder:' . $schluessel . ':' . $dec['bezeichnung']] = $dec['id'];
+            }
+        }
+
+        $this->funktionenUndCvs($ids);
+        $this->fotos($ids);
+    }
+
+    /** Leert alle Tabellen außer schema_migration und spurweite sowie storage/dateien. */
+    private function leere(): void
+    {
+        $tabellen = array_map('strval', $this->pdo->query("SHOW FULL TABLES WHERE Table_type = 'BASE TABLE'")->fetchAll(\PDO::FETCH_COLUMN));
+        $this->pdo->exec('SET FOREIGN_KEY_CHECKS=0');
+        try {
+            foreach ($tabellen as $t) {
+                if (!in_array($t, self::BEHALTEN, true)) {
+                    $this->pdo->exec('TRUNCATE TABLE `' . str_replace('`', '', $t) . '`');
+                }
+            }
+        } finally {
+            $this->pdo->exec('SET FOREIGN_KEY_CHECKS=1');
+        }
+
+        $wurzel = rtrim($this->speicherPfad, '/') . '/dateien';
+        if (!is_dir($wurzel)) {
+            return;
+        }
+        $iter = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($wurzel, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::CHILD_FIRST
+        );
+        foreach ($iter as $f) {
+            if ($f->isDir()) {
+                @rmdir($f->getPathname());
+            } elseif ($f->getFilename() !== '.gitkeep') {
+                @unlink($f->getPathname());
+            }
+        }
+    }
+
+    /** @return array<string,int> Schlüssel => Personen-ID */
+    private function personen(): array
+    {
+        $repo = $this->app->container()->get(PersonRepository::class);
+        $liste = [
+            'anja' => ['Anja', 'Beispielmann', 'admin@test.emc78.de', 'Test-Administratorin'],
+            'bernd' => ['Bernd', 'Probemeier', 'bearbeiter@test.emc78.de', 'Test-Bearbeiter'],
+            'carla' => ['Carla', 'Mustermann', 'mitglied@test.emc78.de', 'Test-Mitglied'],
+            'dieter' => ['Dieter', 'Testfeld', null, 'Ohne Zugang'],
+            'eva' => ['Eva', 'Musterfrau', null, 'Ohne Zugang'],
+            'frank' => ['Frank', 'Demonstrant', null, 'Ohne Zugang'],
+        ];
+        $ids = [];
+        foreach ($liste as $k => [$vor, $nach, $mail, $notiz]) {
+            $ids[$k] = $repo->speichern(['vorname' => $vor, 'nachname' => $nach, 'email' => $mail, 'notiz' => $notiz]);
+        }
+        return $ids;
+    }
+
+    /** @param array<string,int> $personen */
+    private function benutzer(array $personen): void
+    {
+        $repo = $this->app->container()->get(BenutzerRepository::class);
+        foreach ([['anja', 'admin@test.emc78.de', Rolle::Admin], ['bernd', 'bearbeiter@test.emc78.de', Rolle::Bearbeiter], ['carla', 'mitglied@test.emc78.de', Rolle::Mitglied]] as [$p, $mail, $rolle]) {
+            $id = $repo->anlegen($personen[$p], $mail, $rolle, self::PASSWORT);
+            $repo->passwortSetzen($id, self::PASSWORT, false);
+        }
+    }
+
+    /** @return array<string,array<string,mixed>> */
+    private function fahrzeugDaten(): array
+    {
+        $esu = fn(string $bez, ?int $adr, string $typ = 'LokSound 5', bool $sound = true): array => [
+            'bezeichnung' => $bez, 'hersteller' => 'ESU', 'typ' => $typ, 'firmware' => $sound ? '5.0.0' : null,
+            'sound' => $sound, 'protokoll' => 'dcc', 'adresse' => $adr,
+        ];
+        return [
+            'v200' => ['bezeichnung' => 'V 200 060', 'baureihe' => 'V 200', 'bahn' => 'DB', 'epoche' => 'III', 'gattung' => 'lok',
+                'hersteller' => 'Roco', 'artikel' => '72900', 'spur' => 'H0', 'eigner' => null, 'stunden' => 42.5,
+                'notiz' => 'Vereinslok für den Ausstellungsbetrieb.', 'decoder' => [$esu('Motor und Sound', 60)]],
+            'br218' => ['bezeichnung' => 'BR 218 217-8', 'baureihe' => '218', 'bahn' => 'DB', 'epoche' => 'IV', 'gattung' => 'lok',
+                'hersteller' => 'Piko', 'artikel' => '57901', 'spur' => 'H0', 'eigner' => 'anja', 'stunden' => 18.0,
+                'decoder' => [$esu('Motor und Sound', 218)]],
+            'br01' => ['bezeichnung' => 'BR 01 118', 'baureihe' => '01', 'bahn' => 'DB', 'epoche' => 'III', 'gattung' => 'lok',
+                'hersteller' => 'Märklin', 'artikel' => '39011', 'spur' => 'H0', 'strom' => '3L', 'eigner' => null, 'stunden' => 120.0,
+                'decoder' => [[
+                    'bezeichnung' => 'Motor und Sound', 'hersteller' => 'Märklin', 'typ' => 'mSD3', 'firmware' => '3.1.0',
+                    'sound' => true, 'protokoll' => 'mfx', 'adresse' => null,
+                ]]],
+            'vt98' => ['bezeichnung' => 'VT 98 9731', 'baureihe' => 'VT 98', 'bahn' => 'DB', 'epoche' => 'III', 'gattung' => 'triebwagen',
+                'hersteller' => 'Fleischmann', 'artikel' => '4440', 'spur' => 'H0', 'eigner' => 'bernd', 'stunden' => 7.5,
+                'decoder' => [$esu('Motor', 98, 'LokPilot 5', false)]],
+            'e94' => ['bezeichnung' => 'E 94 279', 'baureihe' => 'E 94', 'bahn' => 'DB', 'epoche' => 'III', 'gattung' => 'lok',
+                'hersteller' => 'Roco', 'artikel' => '73000', 'spur' => 'H0', 'eigner' => 'carla', 'stunden' => 31.0,
+                'notiz' => 'Absichtlich dieselbe Adresse wie die Köf II (Beispiel für die Adresswarnung).',
+                'decoder' => [$esu('Motor', 3, 'LokPilot 5', false)]],
+            'koef' => ['bezeichnung' => 'Köf II', 'baureihe' => 'Köf II', 'bahn' => 'DB', 'epoche' => 'III', 'gattung' => 'lok',
+                'hersteller' => 'Brawa', 'artikel' => '41500', 'spur' => 'H0', 'eigner' => 'dieter', 'stunden' => 55.0,
+                'decoder' => [$esu('Motor', 3, 'LokPilot Micro', false)]],
+            'silberling' => ['bezeichnung' => 'Silberling ABnrzb 704', 'baureihe' => 'ABnrzb 704', 'bahn' => 'DB', 'epoche' => 'IV', 'gattung' => 'wagen',
+                'hersteller' => 'Roco', 'artikel' => '45050', 'spur' => 'H0', 'eigner' => null,
+                'decoder' => [[
+                    'bezeichnung' => 'Innenbeleuchtung', 'hersteller' => 'Viessmann', 'typ' => 'Licht-Funktionsdecoder', 'firmware' => null,
+                    'sound' => false, 'protokoll' => 'dcc', 'adresse' => 2001,
+                ], [
+                    'bezeichnung' => 'Schlusslicht', 'hersteller' => 'Viessmann', 'typ' => 'Licht-Funktionsdecoder', 'firmware' => null,
+                    'sound' => false, 'protokoll' => 'dcc', 'adresse' => 2002,
+                ]]],
+            'gueterwagen' => ['bezeichnung' => 'Hochbordwagen Eaos 106', 'baureihe' => 'Eaos 106', 'bahn' => 'DB', 'epoche' => 'IV', 'gattung' => 'wagen',
+                'hersteller' => 'Roco', 'artikel' => '76020', 'spur' => 'H0', 'eigner' => 'eva', 'decoder' => []],
+            'br103' => ['bezeichnung' => 'BR 103 113-7', 'baureihe' => '103', 'bahn' => 'DB', 'epoche' => 'IV', 'gattung' => 'lok',
+                'hersteller' => 'Brawa', 'artikel' => '43000', 'spur' => 'H0', 'eigner' => 'dieter', 'status' => 'ausgemustert', 'stunden' => 210.0,
+                'notiz' => 'Ausgemustert: Getriebeschaden, Ersatzteile nicht mehr lieferbar.', 'decoder' => [$esu('Motor und Sound', 103)]],
+            'br64' => ['bezeichnung' => 'BR 64 419', 'baureihe' => '64', 'bahn' => 'DB', 'epoche' => 'III', 'gattung' => 'lok',
+                'hersteller' => 'Minitrix', 'artikel' => '12532', 'spur' => 'N', 'eigner' => null, 'status' => 'in_wartung', 'stunden' => 9.0,
+                'notiz' => 'Schleifer wird erneuert. Adresse 3 ist in N nicht doppelt, weil die Adressprüfung je Spurweite gilt.',
+                'decoder' => [$esu('Motor', 3, 'LokPilot Nano', false)]],
+            'br185' => ['bezeichnung' => 'BR 185 276-4', 'baureihe' => '185.2', 'bahn' => 'DB', 'epoche' => 'VI', 'gattung' => 'lok',
+                'hersteller' => 'Minitrix', 'artikel' => '16852', 'spur' => 'N', 'eigner' => 'frank', 'status' => 'ausgeliehen', 'stunden' => 4.0,
+                'decoder' => [$esu('Motor', 185, 'LokPilot 5 Nano', false)]],
+            'bymb' => ['bezeichnung' => 'Eilzugwagen Bymb 421', 'baureihe' => 'Bymb 421', 'bahn' => 'DB', 'epoche' => 'IV', 'gattung' => 'wagen',
+                'hersteller' => 'Fleischmann', 'artikel' => '814401', 'spur' => 'N', 'eigner' => 'carla', 'decoder' => []],
+        ];
+    }
+
+    /** @param array<string,int> $ids */
+    private function funktionenUndCvs(array $ids): void
+    {
+        $c = $this->app->container();
+        $funktionen = $c->get(FunktionRepository::class);
+        $vorlagen = $c->get(FunktionsvorlageRepository::class);
+        $cvs = $c->get(CvRepository::class);
+
+        $f = fn(int $t, string $b, string $s = 'dauer') => ['taste' => $t, 'beschreibung' => $b, 'schaltart' => $s];
+        $v200 = $ids['decoder:v200:Motor und Sound'];
+        $funktionen->ersetzen($v200, [
+            $f(0, 'Spitzensignal und Schlusslicht'), $f(1, 'Motorgeräusch'), $f(2, 'Signalhorn', 'moment'),
+            $f(3, 'Rangiergang'), $f(4, 'Anfahr- und Bremsverzögerung aus'), $f(5, 'Führerstandsbeleuchtung'),
+            $f(6, 'Kompressor'), $f(8, 'Druckluft ablassen', 'moment'),
+        ]);
+        $vorlagen->ausDecoder($v200, 'ESU LokSound 5 – Diesellok', 'LokSound 5');
+
+        $vorlagen->aufDecoderAnwenden((int) $this->pdo->query('SELECT id FROM funktionsvorlage LIMIT 1')->fetchColumn(), $ids['decoder:br218:Motor und Sound']);
+        $funktionen->ersetzen($ids['decoder:br01:Motor und Sound'], [
+            $f(0, 'Spitzenlicht'), $f(1, 'Dampfgeräusch'), $f(2, 'Pfeife', 'moment'), $f(3, 'Glocke', 'moment'),
+            $f(4, 'Kohle schaufeln', 'moment'), $f(5, 'Wasser nachfüllen', 'moment'),
+        ]);
+        $funktionen->ersetzen($ids['decoder:silberling:Innenbeleuchtung'], [$f(0, 'Innenbeleuchtung')]);
+        $funktionen->ersetzen($ids['decoder:vt98:Motor'], [$f(0, 'Spitzenlicht'), $f(1, 'Innenbeleuchtung')]);
+
+        foreach ([
+            [$v200, [[1, 60, 'Lokadresse (kurz)'], [2, 3, 'Anfahrspannung'], [3, 25, 'Anfahrverzögerung'], [4, 20, 'Bremsverzögerung'], [5, 180, 'Höchstgeschwindigkeit'], [29, 6, 'Konfiguration, 28/128 Fahrstufen']]],
+            [$ids['decoder:br218:Motor und Sound'], [[1, 3, null], [3, 20, 'Anfahrverzögerung'], [4, 15, 'Bremsverzögerung'], [29, 14, 'Lange Adresse aktiv']]],
+            [$ids['decoder:vt98:Motor'], [[2, 4, 'Anfahrspannung'], [5, 200, null]]],
+        ] as [$decoder, $werte]) {
+            foreach ($werte as [$cv, $wert, $kommentar]) {
+                $cvs->speichern($decoder, $cv, $wert, $kommentar);
+            }
+        }
+    }
+
+    /** @param array<string,int> $ids */
+    private function fotos(array $ids): void
+    {
+        if (!is_dir($this->fotoVerzeichnis)) {
+            return; // z. B. in einem Paket ohne Beispielfotos: Daten ohne Bilder anlegen
+        }
+        $c = $this->app->container();
+        $dokumente = $c->get(DokumentRepository::class);
+        $upload = new UploadService(
+            $this->pdo,
+            $this->speicherPfad,
+            max(1, (int) ($this->app->config()['upload_max_mb'] ?? 64)) * 1048576,
+            new Bildbearbeitung(),
+            static fn(string $tmp): bool => is_file($tmp),
+            static fn(string $von, string $nach): bool => copy($von, $nach),
+        );
+        foreach ([
+            ['v200', 'diesel.jpg', 'V 200 060 im Bahnhof'],
+            ['br218', 'diesel.jpg', 'BR 218 vor dem Schnellzug'],
+            ['br01', 'dampf.jpg', 'BR 01 118 Seitenansicht'],
+            ['silberling', 'wagen.jpg', 'Silberling Bauart n'],
+            ['vt98', 'wagen.jpg', 'Schienenbus VT 98'],
+        ] as [$fahrzeug, $datei, $titel]) {
+            $pfad = $this->fotoVerzeichnis . '/' . $datei;
+            if (!is_file($pfad)) {
+                continue;
+            }
+            try {
+                $id = $upload->speichere(['name' => $datei, 'tmp_name' => $pfad, 'error' => UPLOAD_ERR_OK, 'size' => filesize($pfad)], $titel, 'foto', null);
+            } catch (UploadFehler) {
+                continue;
+            }
+            $dokumente->zuordnen($id, 'fahrzeug', $ids[$fahrzeug]);
+            $dokumente->setzeTitelbild($ids[$fahrzeug], $id);
+        }
+    }
+}

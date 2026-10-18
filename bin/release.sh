@@ -15,6 +15,9 @@ rm -f "$ZIEL"
 # Nur versionierte Dateien aus HEAD; build/ bekommt bewusst kein .git.
 git archive HEAD | tar -x -C build
 rm -rf build/tests build/docs build/.github build/.superpowers build/phpunit.xml build/.gitignore build/.gitattributes
+# Die Beispielfotos der Testumgebung gehören ins Paket (Tests selbst nicht).
+mkdir -p build/tests/fixtures
+git archive HEAD tests/fixtures/demo | tar -x -C build
 rm -f build/config.php build/bin/release.sh
 find build/storage/dateien -mindepth 1 ! -name '.gitkeep' -delete 2>/dev/null || true
 

@@ -9,6 +9,7 @@ use Emc\Core\Request;
 use Emc\Core\Response;
 use Emc\Core\Router;
 use Emc\Betrieb\SicherungController;
+use Emc\Betrieb\TestdatenController;
 use Emc\Betrieb\UpdateController;
 use Emc\Dateien\DateiController;
 use Emc\Digital\AdressenController;
@@ -103,6 +104,12 @@ return function (Router $router, App $app): void {
     $upd = fn(string $m) => fn(Request $r, array $p = []) => $c->get(UpdateController::class)->$m($r);
     $router->add('GET', '/admin/update', $app->erfordert('betrieb', $upd('zeigen')));
     $router->add('POST', '/admin/update', $app->erfordert('betrieb', $upd('ausfuehren')));
+
+    if (!empty($app->config()['testumgebung'])) {
+        $test = fn(string $m) => fn(Request $r, array $p = []) => $c->get(TestdatenController::class)->$m($r);
+        $router->add('GET', '/admin/testdaten', $app->erfordert('betrieb', $test('zeigen')));
+        $router->add('POST', '/admin/testdaten', $app->erfordert('betrieb', $test('neuLaden')));
+    }
 
     $router->add('GET', '/konto/passwort', fn(Request $r) => $c->get(KontoController::class)->passwortForm($r));
     $router->add('POST', '/konto/passwort', fn(Request $r) => $c->get(KontoController::class)->passwortAendern($r));

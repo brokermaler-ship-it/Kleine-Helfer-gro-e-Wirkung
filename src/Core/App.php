@@ -8,10 +8,12 @@ use Emc\Auth\Auth;
 use Emc\Auth\AuthController;
 use Emc\Auth\Berechtigung;
 use Emc\Auth\InstallController;
+use Emc\Betrieb\DemoDaten;
 use Emc\Betrieb\Einstellungen;
 use Emc\Betrieb\Migrator;
 use Emc\Betrieb\Sicherung;
 use Emc\Betrieb\SicherungController;
+use Emc\Betrieb\TestdatenController;
 use Emc\Betrieb\UpdateController;
 use Emc\Dateien\Bildbearbeitung;
 use Emc\Dateien\DateiController;
@@ -184,6 +186,13 @@ final class App
             $c->get(Migrator::class),
             $c->get('session')
         ));
+        $this->container->set(DemoDaten::class, fn() => new DemoDaten($this));
+        $this->container->set(TestdatenController::class, fn(Container $c) => new TestdatenController(
+            $this->view,
+            $c->get(DemoDaten::class),
+            $c->get(Auth::class),
+            $c->get('session')
+        ));
         $this->container->set(KontoController::class, fn(Container $c) => new KontoController(
             $this->view,
             $c->get(BenutzerRepository::class),
@@ -238,6 +247,7 @@ final class App
         $c = $this->container;
         $auth = fn() => $c->get(Auth::class);
         $this->view->teile('app_name', $this->config['app_name'] ?? '');
+        $this->view->teile('testumgebung', !empty($this->config['testumgebung']));
         $this->view->teile('csrf', $c->get(Csrf::class));
         $this->view->teile('darf', fn(string $aktion): bool => Berechtigung::darf($auth()->benutzer(), $aktion));
         $this->view->teileSpaet('benutzer', fn() => $auth()->benutzer());
