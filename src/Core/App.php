@@ -12,8 +12,13 @@ use Emc\Betrieb\Einstellungen;
 use Emc\Betrieb\Migrator;
 use Emc\Digital\AdressenController;
 use Emc\Digital\Adresspruefung;
+use Emc\Digital\CvController;
+use Emc\Digital\CvRepository;
 use Emc\Digital\DecoderController;
 use Emc\Digital\DecoderRepository;
+use Emc\Digital\FunktionController;
+use Emc\Digital\FunktionRepository;
+use Emc\Digital\FunktionsvorlageRepository;
 use Emc\Fahrzeuge\FahrzeugController;
 use Emc\Fahrzeuge\FahrzeugRepository;
 use Emc\Personen\BenutzerController;
@@ -109,6 +114,28 @@ final class App
             $c->get(DecoderRepository::class),
             $c->get(FahrzeugRepository::class),
             $c->get(Adresspruefung::class),
+            $c->get(Aenderungsprotokoll::class),
+            $c->get(Auth::class),
+            $c->get('session')
+        ));
+        $this->container->set(FunktionRepository::class, fn(Container $c) => new FunktionRepository($c->get('pdo')));
+        $this->container->set(FunktionsvorlageRepository::class, fn(Container $c) => new FunktionsvorlageRepository($c->get('pdo')));
+        $this->container->set(CvRepository::class, fn(Container $c) => new CvRepository($c->get('pdo')));
+        $this->container->set(FunktionController::class, fn(Container $c) => new FunktionController(
+            $this->view,
+            $c->get(DecoderRepository::class),
+            $c->get(FahrzeugRepository::class),
+            $c->get(FunktionRepository::class),
+            $c->get(FunktionsvorlageRepository::class),
+            $c->get(Aenderungsprotokoll::class),
+            $c->get(Auth::class),
+            $c->get('session')
+        ));
+        $this->container->set(CvController::class, fn(Container $c) => new CvController(
+            $this->view,
+            $c->get(DecoderRepository::class),
+            $c->get(FahrzeugRepository::class),
+            $c->get(CvRepository::class),
             $c->get(Aenderungsprotokoll::class),
             $c->get(Auth::class),
             $c->get('session')

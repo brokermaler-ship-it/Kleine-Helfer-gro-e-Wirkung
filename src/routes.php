@@ -9,7 +9,9 @@ use Emc\Core\Request;
 use Emc\Core\Response;
 use Emc\Core\Router;
 use Emc\Digital\AdressenController;
+use Emc\Digital\CvController;
 use Emc\Digital\DecoderController;
+use Emc\Digital\FunktionController;
 use Emc\Fahrzeuge\FahrzeugController;
 use Emc\Personen\BenutzerController;
 use Emc\Personen\KontoController;
@@ -43,6 +45,20 @@ return function (Router $router, App $app): void {
     $router->add('GET', '/decoder/{id}/bearbeiten', $app->erfordert('fahrzeug_bearbeiten', $dec('bearbeiten')));
     $router->add('POST', '/decoder/{id}', $app->erfordert('fahrzeug_bearbeiten', $dec('aendern')));
     $router->add('POST', '/decoder/{id}/loeschen', $app->erfordert('fahrzeug_bearbeiten', $dec('loeschen')));
+
+    $fkt = fn(string $m) => fn(Request $r, array $p = []) => $c->get(FunktionController::class)->$m($r, $p);
+    $router->add('GET', '/decoder/{id}/funktionen', $app->erfordert('lesen', $fkt('zeigen')));
+    $router->add('POST', '/decoder/{id}/funktionen', $app->erfordert('fahrzeug_bearbeiten', $fkt('speichern')));
+    $router->add('POST', '/decoder/{id}/funktionen/csv', $app->erfordert('fahrzeug_bearbeiten', $fkt('csvHochladen')));
+    $router->add('POST', '/decoder/{id}/funktionen/csv/uebernehmen', $app->erfordert('fahrzeug_bearbeiten', $fkt('csvUebernehmen')));
+    $router->add('GET', '/funktionen/vorlage.csv', $app->erfordert('lesen', $fkt('csvVorlage')));
+    $router->add('POST', '/decoder/{id}/vorlage', $app->erfordert('fahrzeug_bearbeiten', $fkt('alsVorlage')));
+    $router->add('POST', '/decoder/{id}/vorlage-anwenden', $app->erfordert('fahrzeug_bearbeiten', $fkt('vorlageAnwenden')));
+
+    $cv = fn(string $m) => fn(Request $r, array $p = []) => $c->get(CvController::class)->$m($r, $p);
+    $router->add('GET', '/decoder/{id}/cvs', $app->erfordert('lesen', $cv('zeigen')));
+    $router->add('POST', '/decoder/{id}/cvs', $app->erfordert('fahrzeug_bearbeiten', $cv('speichern')));
+    $router->add('POST', '/decoder/{id}/cvs/{cv}/loeschen', $app->erfordert('fahrzeug_bearbeiten', $cv('loeschen')));
 
     $adr = fn(string $m) => fn(Request $r, array $p = []) => $c->get(AdressenController::class)->$m($r);
     $router->add('GET', '/adressen', $app->erfordert('lesen', $adr('uebersicht')));

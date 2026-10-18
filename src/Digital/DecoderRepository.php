@@ -15,7 +15,12 @@ final class DecoderRepository
     /** @return list<array<string,mixed>> */
     public function fuerFahrzeug(int $fahrzeugId): array
     {
-        $st = $this->pdo->prepare('SELECT * FROM decoder WHERE fahrzeug_id = ? ORDER BY id');
+        $st = $this->pdo->prepare(
+            'SELECT d.*,
+                    (SELECT COUNT(*) FROM funktion f WHERE f.decoder_id = d.id) AS funktionen_anzahl,
+                    (SELECT COUNT(*) FROM cv_wert c WHERE c.decoder_id = d.id) AS cv_anzahl
+             FROM decoder d WHERE d.fahrzeug_id = ? ORDER BY d.id'
+        );
         $st->execute([$fahrzeugId]);
         return $st->fetchAll(\PDO::FETCH_ASSOC);
     }

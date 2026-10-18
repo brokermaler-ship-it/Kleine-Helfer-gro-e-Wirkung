@@ -5,3 +5,7 @@ main { padding-bottom: 2rem; }
 /* Fahrzeugkatalog */
 .fahrzeug-bild { width: 64px; height: 48px; object-fit: cover; border-radius: .25rem; flex-shrink: 0; }
 .fahrzeug-bild-leer { display: flex; align-items: center; justify-content: center; background: var(--bs-tertiary-bg); color: var(--bs-secondary-color); font-size: 1.5rem; }
+
+/* Funktionstabelle: "Nur belegte Tasten" per Checkbox ohne JavaScript */
+#nur-belegt:checked ~ .table-responsive .funktionen-tabelle tr.leer,
+#nur-belegt:checked ~ form .funktionen-tabelle tr.leer { display: none; }

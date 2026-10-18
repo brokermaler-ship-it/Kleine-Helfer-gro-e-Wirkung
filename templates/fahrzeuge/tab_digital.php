@@ -34,6 +34,8 @@ $decoderListe = $decoderListe ?? [];
                             <?= $d['adresse'] === null ? '–' : e((string) $d['adresse']) ?>
                             <?php if ($d['adressart'] !== null): ?><span class="text-muted">(<?= e($d['adressart']) ?>)</span><?php endif; ?>
                         </dd>
+                        <dt class="col-4">Belegung</dt>
+                        <dd class="col-8"><?= (int) $d['funktionen_anzahl'] ?> Tasten belegt, <?= (int) $d['cv_anzahl'] ?> CVs</dd>
                     </dl>
                     <?php foreach ($d['konflikte'] as $k): ?>
                         <div class="small text-warning-emphasis mt-1">⚠️ Auch vergeben an
