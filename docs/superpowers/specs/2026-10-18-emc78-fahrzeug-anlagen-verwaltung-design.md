@@ -26,6 +26,9 @@ Eine vereinsinterne Web-Anwendung für den EMC 78 Halle e.V. (Modellbahn), die
 |---|---|
 | Betrieb | Vorhandener Vereins-Webspace/Server. Annahme: PHP ≥ 8.2 und MySQL ≥ 8 / MariaDB ≥ 10.6 (bei Inbetriebnahme prüfen) |
 | Oberfläche | Responsive (PC, Tablet, Handy), deutschsprachig |
+| Mobil | Android (Chrome) und iOS (Safari); als **installierbare Web-App (PWA)** zum Startbildschirm hinzufügbar (eigenes Symbol, Vollbild), kein App Store |
+| Erreichbarkeit | Mitgliederbereich mit Login, verlinkt von **www.emc78.de**; Betrieb unter Subdomain (empfohlen `mitglieder.emc78.de`) oder Unterordner (`www.emc78.de/mitglieder`) |
+| Testumgebung | Eigene Installation (z. B. `test.emc78.de`) mit **Beispieldaten** und deutlichem Hinweis „Testumgebung“, um Mitglieder einzubinden |
 | Pflege | Durch einen Vereinsverantwortlichen gemeinsam mit Claude → einfache Technik, kein Build-Prozess auf dem Server, Deployment per FTP |
 | Stromsystem | Standard 2-Leiter; 3-Leiter wählbar |
 | Protokoll | Standard DCC; Motorola, mfx, Selectrix wählbar |

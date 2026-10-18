@@ -597,6 +597,31 @@ public function test_admin_fuehrt_update_aus(): void { /* POST /admin/update →
 
 ---
 
+### Task 11: Installierbare Web-App, Testumgebung mit Beispieldaten
+
+**Files:**
+- Create: `public/manifest.webmanifest`, `public/assets/icons/{icon-192.png,icon-512.png,apple-touch-icon.png}` (schlichtes Symbol „EMC 78“, bis ein Vereinslogo vorliegt), `bin/demo-daten.php`, `tests/fixtures/demo/` (2–3 kleine Beispielfotos)
+- Modify: `templates/layout.php`, `config.example.php`, `src/Core/App.php`, `README.md`
+- Test: `tests/Integration/Betrieb/DemoDatenTest.php`, `tests/Unit/Core/LayoutPwaTest.php`
+
+**Interfaces:**
+- Consumes: Repositories aus Tasks 4–9, `UploadService` (Task 9), `Migrator` (Task 2)
+- Produces:
+  - Config-Schlüssel `testumgebung` (bool, Standard `false`). Ist er `true`, zeigt das Layout oben eine gelbe Leiste „Testumgebung – Daten können jederzeit zurückgesetzt werden.“
+  - `manifest.webmanifest`: `name` = `app_name`-Standard „EMC 78 Halle – Fahrzeugverwaltung“, `short_name` „EMC 78“, `start_url` und `scope` relativ zu `basis_url` (`./`), `display` `standalone`, `lang` `de`, Icons 192/512.
+  - Layout-Kopf: `<link rel="manifest">`, `<meta name="theme-color">`, `<link rel="apple-touch-icon">`, `<meta name="apple-mobile-web-app-capable" content="yes">`, `<meta name="apple-mobile-web-app-title" content="EMC 78">`; alle Pfade über `url()`, damit Unterordner-Installation funktioniert. Kein Service Worker (Offline ist kein Ziel; Daten müssen aktuell sein).
+  - `bin/demo-daten.php [--zuruecksetzen]`: CLI; bricht ab, wenn `testumgebung` nicht `true` ist („Beispieldaten nur in der Testumgebung“). Legt an: 6 Personen, Benutzer `admin@test.emc78.de` (Admin), `bearbeiter@test.emc78.de`, `mitglied@test.emc78.de` mit Passwort `Test-EMC78!` (ohne Passwortwechsel-Zwang), 12 Fahrzeuge in H0 und N (Verein und Mitglieder gemischt, ein ausgemustertes), Decoder mit absichtlich **einer doppelten Adresse** in H0, Funktionsbelegungen inkl. einer Vorlage, CVs, Fotos aus `tests/fixtures/demo/`. `--zuruecksetzen` leert vorher alle Tabellen außer `schema_migration` und `spurweite` und `storage/dateien`.
+
+- [ ] **Step 1: Failing tests** – `DemoDatenTest::test_bricht_ausserhalb_testumgebung_ab`; `test_legt_beispieldaten_mit_doppelter_adresse_an` (12 Fahrzeuge, `Adresspruefung::uebersicht(H0)` enthält mindestens zwei Zeilen mit `doppelt` true, Anmeldung als `mitglied@test.emc78.de` mit `Test-EMC78!` ergibt `AnmeldeErgebnis::Erfolg`); `test_zuruecksetzen_ist_wiederholbar` (zweimal mit `--zuruecksetzen` → weiterhin 12 Fahrzeuge). `LayoutPwaTest`: gerendertes Layout mit `basis_url` `/mitglieder` enthält `href="/mitglieder/manifest.webmanifest"` und `apple-touch-icon`; mit `testumgebung` true enthält es „Testumgebung“, sonst nicht.
+- [ ] **Step 2: Run** `vendor/bin/phpunit --filter 'DemoDaten|LayoutPwa'` → FAIL.
+- [ ] **Step 3: Implementieren** (Demo-Logik als Klasse `src/Betrieb/DemoDaten.php` mit `__construct(App $app)` und `erzeuge(bool $zuruecksetzen): void`; `bin/demo-daten.php` ruft sie nur auf).
+- [ ] **Step 4: Run** → PASS.
+- [ ] **Step 5: README ergänzen** – Abschnitte „Installation als Subdomain (empfohlen: mitglieder.emc78.de)“, „Installation im Unterordner (www.emc78.de/mitglieder, `basis_url` = `/mitglieder`)“, „Testumgebung einrichten (test.emc78.de, `testumgebung` = true, `php bin/demo-daten.php --zuruecksetzen` bzw. ohne SSH: Admin-Seite folgt später)“, „Auf dem Handy installieren“ (Android: Chrome-Menü → „App installieren“/„Zum Startbildschirm“; iPhone: Safari → Teilen → „Zum Home-Bildschirm“), „Link auf der Vereinswebseite“.
+- [ ] **Step 6: Manuell prüfen** – Playwright mit Gerätebeschreibung „iPhone 13“ und „Pixel 7“: Login als `mitglied@test.emc78.de`, Fahrzeugliste, Detail, Adressübersicht mit Warnung; Screenshots nach `docs/screenshots/` (für die Vorstellung im Verein).
+- [ ] **Step 7: Commit** – `git commit -m "Installierbare Web-App und Testumgebung mit Beispieldaten hinzufügen"`
+
+---
+
 ## Spec-Abdeckung (Stufe 1)
 
 | Spec | Task |
@@ -608,5 +633,6 @@ public function test_admin_fuehrt_update_aus(): void { /* POST /admin/update →
 | 4.1 Funktionstasten, CSV-Import, Vorlagen, CV-Liste | 8 |
 | 4.7 Dateien Grundfunktion, Sicherheit | 9 |
 | 5 Sicherheit (Login, Sperre, CSRF, Sitzung), Migrationen, Sicherung, README, Fehler/Warnung, Tests | 3, 2, 10, alle |
+| 2 Mobil (PWA), Erreichbarkeit über emc78.de, Testumgebung | 11 |
 
 Bewusst **nicht** in Stufe 1 (laut Spec spätere Stufen): PDF-Import der Funktionstasten, QR-Codes, Wartung/Reparatur (Stufe 2); erweiterte Dateitypen, Volltextsuche (Stufe 6). **Passwort-Zurücksetzen per E-Mail** wird nachgereicht, sobald der Mailversand des Webspace geklärt ist (Spec, offener Punkt 1); bis dahin setzt ein Administrator ein neues Startpasswort (Task 4).
