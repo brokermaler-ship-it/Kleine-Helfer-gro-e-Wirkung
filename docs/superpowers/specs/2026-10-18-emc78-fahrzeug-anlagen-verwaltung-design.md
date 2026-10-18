@@ -37,7 +37,7 @@ Eine vereinsinterne Web-Anwendung für den EMC 78 Halle e.V. (Modellbahn), die
 
 | Rolle | Darf |
 |---|---|
-| **Mitglied** | Alles lesen · Defekte melden (Fahrzeug, Anlage, Modul, Bauteil) · Wartungen an **eigenen** Fahrzeugen eintragen |
+| **Mitglied** | Alles lesen · **eigene Fahrzeuge anlegen** (Eigentümer = das Mitglied) und **selbst angelegte Fahrzeuge bearbeiten** (inkl. Decoder, Funktionstasten, CVs, Fotos/Dokumente, Status; Löschen nur Bearbeiter) · Defekte melden (Fahrzeug, Anlage, Modul, Bauteil) · Wartungen an **eigenen** Fahrzeugen eintragen |
 | **Bearbeiter** (z. B. Fahrzeugwart) | Zusätzlich: Fahrzeuge, Wartung, Reparaturen, Anlagen, Veranstaltungen, Boxen, Dateien anlegen und ändern |
 | **Administrator** | Zusätzlich: Benutzer und Rollen verwalten, Stammlisten (Spurweiten, Wartungsarten …), Datensicherung |
 
