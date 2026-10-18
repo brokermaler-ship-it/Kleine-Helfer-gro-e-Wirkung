@@ -167,6 +167,11 @@ final class DemoDatenTest extends DbTestCase
         $this->assertSame('admin', (string) $this->pdo->query("SELECT rolle FROM benutzer WHERE email = 'admin@test.emc78.de'")->fetchColumn());
         $this->assertSame('bearbeiter', (string) $this->pdo->query("SELECT rolle FROM benutzer WHERE email = 'bearbeiter@test.emc78.de'")->fetchColumn());
         $this->assertSame(0, (int) $this->pdo->query('SELECT COUNT(*) FROM benutzer WHERE muss_passwort_aendern = 1')->fetchColumn());
+
+        $carla = (int) $this->pdo->query("SELECT id FROM benutzer WHERE email = 'mitglied@test.emc78.de'")->fetchColumn();
+        $von = $this->pdo->query("SELECT bezeichnung FROM fahrzeug WHERE angelegt_von_benutzer_id = $carla ORDER BY bezeichnung")->fetchAll(\PDO::FETCH_COLUMN);
+        $this->assertSame(['E 94 279', 'Eilzugwagen Bymb 421'], $von);
+        $this->assertSame(0, (int) $this->pdo->query('SELECT COUNT(*) FROM fahrzeug WHERE angelegt_von_benutzer_id IS NULL')->fetchColumn());
     }
 
     public function test_zuruecksetzen_ist_wiederholbar(): void

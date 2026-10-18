@@ -349,6 +349,29 @@ final class MitgliederRechteTest extends DbTestCase
         $this->assertSame(0, (int) $this->pdo->query('SELECT COUNT(*) FROM dokument')->fetchColumn());
     }
 
+    public function test_titelbild_mit_dokument_eines_anderen_fahrzeugs_wird_abgelehnt(): void
+    {
+        $eigen = $this->fahrzeug($this->mitgliedA);
+        $fremd = $this->fahrzeug($this->bearbeiter);
+        $dok = $this->dokument($fremd, 'foto_gedreht.jpg', 'foto');
+        $this->als($this->mitgliedA);
+        $r = $this->post("/fahrzeuge/$eigen/titelbild", ['dokument_id' => (string) $dok]);
+        $this->assertSame(303, $r->status);
+        $this->assertNull($this->feld($eigen, 'titelbild_dokument_id'));
+        $this->assertNull($this->feld($fremd, 'titelbild_dokument_id'));
+    }
+
+    public function test_mitglied_aenderungskonflikt_ergibt_409_und_fremde_aenderung_bleibt(): void
+    {
+        $fz = $this->fahrzeug($this->mitgliedA);
+        $this->als($this->mitgliedA);
+        $alterStand = (string) $this->feld($fz, 'geaendert_am');
+        $this->pdo->exec("UPDATE fahrzeug SET bezeichnung = 'Von anderem', geaendert_am = DATE_ADD(geaendert_am, INTERVAL 1 SECOND) WHERE id = $fz");
+        $r = $this->post("/fahrzeuge/$fz", $this->fahrzeugDaten(['bezeichnung' => 'Veraltet', '_stand' => $alterStand]));
+        $this->assertSame(409, $r->status);
+        $this->assertSame('Von anderem', $this->feld($fz, 'bezeichnung'));
+    }
+
     // ---- Bearbeiter behalten alle Rechte ----
 
     public function test_bearbeiter_darf_cv_wert_und_datei_an_jedem_fahrzeug(): void

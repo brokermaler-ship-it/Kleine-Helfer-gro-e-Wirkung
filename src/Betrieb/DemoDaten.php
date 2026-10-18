@@ -69,6 +69,11 @@ final class DemoDaten
             $spur[(string) $z['name']] = (int) $z['id'];
         }
 
+        // Carlas eigene Fahrzeuge hat sie selbst angelegt (darf sie als Mitglied bearbeiten); alle anderen gelten als von Bernd (Bearbeiter) angelegt.
+        $anleger = [];
+        foreach (['carla' => 'mitglied@test.emc78.de', 'bernd' => 'bearbeiter@test.emc78.de'] as $schluessel => $email) {
+            $anleger[$schluessel] = (int) $this->pdo->query('SELECT id FROM benutzer WHERE email = ' . $this->pdo->quote($email))->fetchColumn();
+        }
         $ids = [];
         foreach ($this->fahrzeugDaten() as $schluessel => $d) {
             $eigner = $d['eigner'] === null ? null : $personen[$d['eigner']];
@@ -86,7 +91,7 @@ final class DemoDaten
                 'status' => $d['status'] ?? 'einsatzbereit',
                 'betriebsstunden' => $d['stunden'] ?? 0,
                 'notiz' => $d['notiz'] ?? null,
-            ]);
+            ], $anleger[$d['eigner'] === 'carla' ? 'carla' : 'bernd']);
             foreach ($d['decoder'] as $dec) {
                 $dec['id'] = $decoder->anlegen($ids[$schluessel], $dec);
                 $ids['decoder:' . $schluessel . ':' . $dec['bezeichnung']] = $dec['id'];
