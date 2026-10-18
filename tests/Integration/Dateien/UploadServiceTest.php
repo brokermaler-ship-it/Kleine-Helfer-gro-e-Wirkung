@@ -189,4 +189,26 @@ final class UploadServiceTest extends DbTestCase
         $this->assertFileDoesNotExist($pfad . '.vorschau.jpg');
         $this->assertNull($this->pdo->query("SELECT titelbild_dokument_id FROM fahrzeug WHERE id = $fz")->fetchColumn());
     }
+
+    public function test_zu_wenig_speicher_ergibt_keine_varianten_aber_gueltigen_upload(): void
+    {
+        $service = new UploadService(
+            $this->pdo, $this->speicher, 64 * 1048576, new Bildbearbeitung(fn(): int => 1048576),
+            fn(string $t): bool => is_file($t), fn(string $a, string $b): bool => copy($a, $b)
+        );
+        $id = $service->speichere($this->upload('foto_gedreht.jpg'), '', 'foto', null);
+        $dok = $this->repo->finde($id);
+        $this->assertSame(0, (int) $dok['hat_anzeige']);
+        $this->assertFileExists($this->speicher . '/' . $dok['pfad']);
+        $this->assertFileDoesNotExist($this->speicher . '/' . $dok['pfad'] . '.vorschau.jpg');
+    }
+
+    public function test_speicherbudget_unbegrenzt_oder_ausreichend_erzeugt_varianten(): void
+    {
+        $b = new Bildbearbeitung(fn(): ?int => null);
+        $ziel = $this->speicher . '/x';
+        $this->assertTrue($b->erzeugeVarianten(dirname(__DIR__, 2) . '/fixtures/dateien/foto_gedreht.jpg', $ziel));
+        $b = new Bildbearbeitung(fn(): int => 10 ** 9);
+        $this->assertTrue($b->erzeugeVarianten(dirname(__DIR__, 2) . '/fixtures/dateien/foto_gedreht.jpg', $ziel));
+    }
 }

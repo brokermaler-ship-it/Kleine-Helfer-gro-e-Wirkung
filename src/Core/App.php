@@ -289,7 +289,7 @@ final class App
         }
         $mb = min(max(1, (int) ($this->config['upload_max_mb'] ?? 64)), max(1, intdiv($max, 1048576)));
         $this->container->get('session')->meldung('fehler', 'Die Datei ist zu groß (höchstens ' . $mb . ' MB).');
-        return Response::redirect($this->gleicheHerkunft($request) ?? '/');
+        return Response::redirect($this->gleicheHerkunft($request) ?? url('/'));
     }
 
     /** Relativer Pfad des Referers, nur wenn er vom selben Host stammt. */

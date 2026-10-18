@@ -7,8 +7,29 @@ namespace Emc\Dateien;
 /** Erzeugt aufrechte, verkleinerte JPEG-Varianten (Anzeige 1600 px, Vorschau 400 px). */
 final class Bildbearbeitung
 {
-    private const MAX_PIXEL = 60000000;
+    private const MAX_PIXEL = 40000000;
     private const QUALITAET = 82;
+
+    private ?\Closure $budget;
+
+    /** @param ?\Closure():?int $budget frei verfügbarer Speicher in Byte (null = unbegrenzt); Standard: memory_limit abzüglich Verbrauch */
+    public function __construct(?\Closure $budget = null)
+    {
+        $this->budget = $budget;
+    }
+
+    private function verfuegbar(): ?int
+    {
+        if ($this->budget !== null) {
+            return ($this->budget)();
+        }
+        $roh = trim((string) ini_get('memory_limit'));
+        if ($roh === '-1') {
+            return null;
+        }
+        $limit = UploadService::iniBytes($roh);
+        return $limit <= 0 ? null : $limit - memory_get_usage(true);
+    }
 
     public function erzeugeVarianten(string $quelle, string $zielBasis): bool
     {
@@ -18,6 +39,12 @@ final class Bildbearbeitung
         $info = @getimagesize($quelle);
         if ($info === false || $info[0] < 1 || $info[1] < 1 || $info[0] * $info[1] > self::MAX_PIXEL) {
             return false;
+        }
+        $drehen = $this->orientierung($quelle, $info[2]) > 1;
+        $bedarf = (int) ($info[0] * $info[1] * 5 * ($drehen ? 2 : 1)) + 16 * 1048576 + (int) (@filesize($quelle) ?: 0);
+        $frei = $this->verfuegbar();
+        if ($frei !== null && $bedarf > $frei) {
+            return false; // lieber ohne Varianten als ein nicht abfangbarer Speicherfehler
         }
         $daten = @file_get_contents($quelle);
         $bild = $daten === false ? false : @imagecreatefromstring($daten);

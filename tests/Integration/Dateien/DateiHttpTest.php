@@ -259,4 +259,26 @@ final class DateiHttpTest extends DbTestCase
         $this->assertStringContainsString('anleitung.pdf', $r->body);
         $this->assertStringContainsString('Als Titelbild', $r->body);
     }
+
+    public function test_fahrzeug_loeschen_entfernt_exklusive_und_behaelt_geteilte_dokumente(): void
+    {
+        $this->anmelden('bearbeiter');
+        $repo = new DokumentRepository($this->pdo, $this->speicher);
+        $exklusiv = $this->dokument('anleitung.pdf', 'anleitung');
+        $geteilt = $this->dokument('foto_gedreht.jpg', 'foto');
+        $this->pdo->exec("INSERT INTO fahrzeug (inventarnummer, bezeichnung, spurweite_id) SELECT 'EMC-0002', 'Wagen', id FROM spurweite LIMIT 1");
+        $zweites = (int) $this->pdo->lastInsertId();
+        $repo->zuordnen($geteilt, 'fahrzeug', $zweites);
+        $pfadE = $this->speicher . '/' . $repo->finde($exklusiv)['pfad'];
+        $pfadG = $this->speicher . '/' . $repo->finde($geteilt)['pfad'];
+
+        $this->assertSame(303, $this->post("/fahrzeuge/{$this->fz}/loeschen")->status);
+
+        $this->assertNull($repo->finde($exklusiv));
+        $this->assertFileDoesNotExist($pfadE);
+        $this->assertNotNull($repo->finde($geteilt));
+        $this->assertFileExists($pfadG);
+        $this->assertFileExists($pfadG . '.vorschau.jpg');
+        $this->assertSame([$zweites], $repo->objekte($geteilt, 'fahrzeug'));
+    }
 }

@@ -36,7 +36,7 @@ final class FahrzeugController
         private Session $session,
         private DecoderRepository $decoder,
         private Adresspruefung $adresspruefung,
-        private ?DokumentRepository $dokumente = null,
+        private DokumentRepository $dokumente,
     ) {
     }
 
@@ -60,7 +60,7 @@ final class FahrzeugController
             'fahrzeug' => $fz,
             'verlauf' => $this->protokoll->fuerObjekt('fahrzeug', (int) $fz['id']),
             'decoderListe' => $this->decoderMitPruefung($fz),
-            'dateien' => $this->dokumente?->fuerObjekt('fahrzeug', (int) $fz['id']) ?? [],
+            'dateien' => $this->dokumente->fuerObjekt('fahrzeug', (int) $fz['id']),
         ]);
     }
 
@@ -116,6 +116,7 @@ final class FahrzeugController
     public function loeschen(Request $r, array $p): Response
     {
         $fz = $this->lade($p);
+        $this->dokumente->entferneVonObjekt('fahrzeug', (int) $fz['id']);
         $this->fahrzeuge->loeschen((int) $fz['id']);
         $alt = $this->vergleichswerte($fz);
         $this->protokoll->schreibe(

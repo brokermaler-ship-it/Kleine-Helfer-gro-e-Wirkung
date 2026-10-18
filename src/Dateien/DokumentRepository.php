@@ -87,6 +87,25 @@ final class DokumentRepository
         }
     }
 
+    /**
+     * Löst alle Dokumente vom Objekt: Dokumente ohne weitere Zuordnung werden samt Dateien gelöscht,
+     * geteilte behalten ihre übrigen Zuordnungen.
+     */
+    public function entferneVonObjekt(string $objektTyp, int $objektId): void
+    {
+        foreach ($this->fuerObjekt($objektTyp, $objektId) as $dok) {
+            $id = (int) $dok['id'];
+            $st = $this->pdo->prepare('SELECT COUNT(*) FROM dokument_zuordnung WHERE dokument_id = ? AND NOT (objekt_typ = ? AND objekt_id = ?)');
+            $st->execute([$id, $objektTyp, $objektId]);
+            if ((int) $st->fetchColumn() === 0) {
+                $this->loeschen($id);
+            } else {
+                $this->pdo->prepare('DELETE FROM dokument_zuordnung WHERE dokument_id = ? AND objekt_typ = ? AND objekt_id = ?')
+                    ->execute([$id, $objektTyp, $objektId]);
+            }
+        }
+    }
+
     /** Absoluter Pfad innerhalb des Speicherordners; null bei verdächtigem Pfad. */
     public function absoluterPfad(string $relativ): ?string
     {
