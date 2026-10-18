@@ -24,10 +24,10 @@ Eine vereinsinterne Web-Anwendung für den EMC 78 Halle e.V. (Modellbahn), die
 
 | Thema | Festlegung |
 |---|---|
-| Betrieb | Vorhandener Vereins-Webspace/Server. Annahme: PHP ≥ 8.2 und MySQL ≥ 8 / MariaDB ≥ 10.6 (bei Inbetriebnahme prüfen) |
+| Betrieb | Vereins-Webhosting bei **STRATO** (emc78.de). PHP ≥ 8.2 und MySQL ≥ 8 / MariaDB ≥ 10.6 im STRATO-Kundenbereich wählen bzw. prüfen |
 | Oberfläche | Responsive (PC, Tablet, Handy), deutschsprachig |
 | Mobil | Android (Chrome) und iOS (Safari); als **installierbare Web-App (PWA)** zum Startbildschirm hinzufügbar (eigenes Symbol, Vollbild), kein App Store |
-| Erreichbarkeit | Mitgliederbereich mit Login, verlinkt von **www.emc78.de**; Betrieb unter Subdomain (empfohlen `mitglieder.emc78.de`) oder Unterordner (`www.emc78.de/mitglieder`) |
+| Erreichbarkeit | Mitgliederbereich mit Login, verlinkt von **www.emc78.de**; Betrieb unter der Subdomain **`mitglieder.emc78.de`** (Ziel-Verzeichnis im STRATO-Webspace: `…/mitglieder/public`) |
 | Testumgebung | Eigene Installation (z. B. `test.emc78.de`) mit **Beispieldaten** und deutlichem Hinweis „Testumgebung“, um Mitglieder einzubinden |
 | Pflege | Durch einen Vereinsverantwortlichen gemeinsam mit Claude → einfache Technik, kein Build-Prozess auf dem Server, Deployment per FTP |
 | Stromsystem | Standard 2-Leiter; 3-Leiter wählbar |
@@ -280,7 +280,7 @@ Der **WinTrack-Probelauf** wird vorgezogen und vor Stufe 3 durchgeführt, damit 
 
 ## 7. Offene Punkte
 
-1. **Webspace prüfen:** Anbieter, PHP-Version, Datenbank, Upload-Grenze, verfügbare Bildbibliothek (GD/Imagick), E-Mail-Versand.
+1. **STRATO-Paket prüfen:** Tarif (SSH-Zugang?), Anzahl Datenbanken (Live + Test), PHP-Version, Upload-Grenze, E-Mail-Versand.
 2. **WinTrack-Probelauf:** Beispieldatei und Exporte einer Vereinsanlage bereitstellen.
 3. **Stammlisten:** Welche Spurweiten und Wartungsarten nutzt der Verein (Startbestand)?
 4. **Gestaltung:** Vereinslogo und -farben, falls vorhanden.
