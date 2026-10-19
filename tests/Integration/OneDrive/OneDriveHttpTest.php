@@ -27,7 +27,7 @@ final class OneDriveHttpTest extends OneDriveTestCase
     /** @return array<string,mixed> */
     private function konfig(): array
     {
-        return ['speicher_pfad' => $this->speicher, 'basis_url' => 'https://verein.example/emc'] + self::testConfig();
+        return ['speicher_pfad' => $this->speicher, 'basis_url' => '/emc', 'oeffentliche_url' => 'https://verein.example'] + self::testConfig();
     }
 
     private function anmelden(string $email, string $rolle): void
@@ -95,6 +95,30 @@ final class OneDriveHttpTest extends OneDriveTestCase
         self::assertSame(1, preg_match('/<code[^>]*id="schluessel-vorschlag"[^>]*>([A-Za-z0-9+\/=]{44})</', $r->body, $m));
         self::assertSame(32, strlen((string) base64_decode($m[1], true)));
         self::assertNull($this->einstellungen->hole('app_schluessel'));
+    }
+
+    public function testRueckrufUrlInContainerUndSeiteIdentischUndAbsolut(): void
+    {
+        $app = $this->app();
+        $r = new \ReflectionProperty(\Emc\OneDrive\OAuth::class, 'rueckrufUrl');
+        $url = $r->getValue($app->container()->get(\Emc\OneDrive\OAuth::class));
+        self::assertSame('https://verein.example/emc/admin/onedrive/rueckruf', $url);
+        self::assertStringContainsString($url, $app->handle(new Request('GET', '/admin/onedrive'))->body);
+    }
+
+    public function testOhneOeffentlicheUrlOderMitHttpNichtKonfiguriert(): void
+    {
+        foreach ([null, 'http://verein.example'] as $wert) {
+            $config = $this->konfig() + ['onedrive_client_id' => 'cid', 'onedrive_client_secret' => 'sec', 'app_schluessel' => base64_encode(str_repeat('k', 32))];
+            unset($config['oeffentliche_url']);
+            if ($wert !== null) {
+                $config['oeffentliche_url'] = $wert;
+            }
+            $app = App::erzeuge($config, new Session($this->sitzung));
+            $body = $app->handle(new Request('GET', '/admin/onedrive'))->body;
+            self::assertStringContainsString('oeffentliche_url', $body);
+            self::assertStringNotContainsString('Mit OneDrive verbinden', $body);
+        }
     }
 
     public function testSeiteKonfiguriertZeigtVerbindenKnopfUndStatus(): void

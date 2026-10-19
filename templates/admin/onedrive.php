@@ -1,5 +1,5 @@
 <?php
-/** @var string $rueckrufUrl */ /** @var bool $konfiguriert */ /** @var string $schluesselVorschlag */
+/** @var ?string $rueckrufUrl */ /** @var bool $urlFehlt */ /** @var bool $konfiguriert */ /** @var string $schluesselVorschlag */
 /** @var bool $clientIdFehlt */ /** @var bool $secretFehlt */ /** @var bool $schluesselFehlt */
 /** @var string $status */ /** @var string $konto */ /** @var ?array{drive_id:string,item_id:string,name:string} $ziel */
 /** @var array{wartet:int,fehler:int,erledigt:int} $zaehler */ /** @var string $letzterFehler */
@@ -14,7 +14,11 @@ $statusKlasse = ['verbunden' => 'success', 'abgelaufen' => 'warning', 'getrennt'
     <div class="card-body">
         <h2 class="h6">Rückruf-URL</h2>
         <p class="mb-1">Diese Adresse bei der App-Registrierung (Microsoft Entra) als Weiterleitungs-URI eintragen:</p>
-        <input type="text" class="form-control font-monospace" readonly value="<?= e($rueckrufUrl) ?>" onclick="this.select()" aria-label="Rückruf-URL">
+        <?php if ($rueckrufUrl !== null): ?>
+            <input type="text" class="form-control font-monospace" readonly value="<?= e($rueckrufUrl) ?>" onclick="this.select()" aria-label="Rückruf-URL">
+        <?php else: ?>
+            <p class="text-warning-emphasis mb-0">Erst <code>oeffentliche_url</code> in der <code>config.php</code> setzen (z. B. <code>https://mitglieder.emc78.de</code>, nur https); dann erscheint hier die Rückruf-URL.</p>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -27,6 +31,7 @@ $statusKlasse = ['verbunden' => 'success', 'abgelaufen' => 'warning', 'getrennt'
                 <li>Ein Client-Secret erzeugen.</li>
                 <li>In der <code>config.php</code> eintragen:
                     <ul>
+                        <li><code>oeffentliche_url</code> <?= $urlFehlt ? '<span class="badge text-bg-warning">fehlt oder nicht https</span>' : '<span class="badge text-bg-success">gesetzt</span>' ?></li>
                         <li><code>onedrive_client_id</code> <?= $clientIdFehlt ? '<span class="badge text-bg-warning">fehlt</span>' : '<span class="badge text-bg-success">gesetzt</span>' ?></li>
                         <li><code>onedrive_client_secret</code> <?= $secretFehlt ? '<span class="badge text-bg-warning">fehlt</span>' : '<span class="badge text-bg-success">gesetzt</span>' ?></li>
                         <li><code>app_schluessel</code> <?= $schluesselFehlt ? '<span class="badge text-bg-warning">fehlt oder ungültig</span>' : '<span class="badge text-bg-warning">ungültig (32 Byte, base64)</span>' ?></li>

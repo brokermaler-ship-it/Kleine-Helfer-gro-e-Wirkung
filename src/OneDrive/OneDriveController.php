@@ -39,9 +39,10 @@ final class OneDriveController
     {
         $daten = [
             'titel' => 'OneDrive',
-            'rueckrufUrl' => $this->rueckrufUrl($r),
+            'rueckrufUrl' => $this->rueckrufUrl(),
             'konfiguriert' => $this->bereitgestellt(),
             'schluesselVorschlag' => base64_encode(random_bytes(32)),
+            'urlFehlt' => Uebertragung::rueckrufUrl($this->config) === null,
             'clientIdFehlt' => trim((string) ($this->config['onedrive_client_id'] ?? '')) === '',
             'secretFehlt' => trim((string) ($this->config['onedrive_client_secret'] ?? '')) === '',
             'schluesselFehlt' => trim((string) ($this->config['app_schluessel'] ?? '')) === '',
@@ -322,14 +323,9 @@ final class OneDriveController
         }
     }
 
-    private function rueckrufUrl(Request $r): string
+    private function rueckrufUrl(): ?string
     {
-        $basis = rtrim((string) ($this->config['basis_url'] ?? ''), '/');
-        if (preg_match('#^https?://#i', $basis) !== 1) {
-            $host = $r->server('HTTP_HOST');
-            $basis = 'https://' . (is_string($host) && $host !== '' ? $host : 'ihre-domain') . $basis;
-        }
-        return $basis . '/admin/onedrive/rueckruf';
+        return Uebertragung::rueckrufUrl($this->config);
     }
 
     private function zurueck(string $typ, string $text, string $pfad = '/admin/onedrive'): Response

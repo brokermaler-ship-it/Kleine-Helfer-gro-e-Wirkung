@@ -30,7 +30,20 @@ final class Uebertragung
                 return false;
             }
         }
-        return true;
+        return self::rueckrufUrl($config) !== null;
+    }
+
+    /**
+     * Einzige Quelle der OAuth-Rückruf-URL (Container und Verwaltungsseite): oeffentliche_url (nur https, aus der config.php,
+     * nie aus dem Host-Header) + basis_url (Pfadpräfix) + Rückrufpfad. Null, solange oeffentliche_url fehlt oder nicht https ist.
+     */
+    public static function rueckrufUrl(array $config): ?string
+    {
+        $oeffentlich = rtrim(trim((string) ($config['oeffentliche_url'] ?? '')), '/');
+        if (preg_match('#^https://[A-Za-z0-9.-]+(:\d{1,5})?$#', $oeffentlich) !== 1) {
+            return null;
+        }
+        return $oeffentlich . rtrim((string) ($config['basis_url'] ?? ''), '/') . '/admin/onedrive/rueckruf';
     }
 
     /** Verbunden und Zielordner gewählt. */

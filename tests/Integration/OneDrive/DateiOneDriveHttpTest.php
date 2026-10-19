@@ -41,7 +41,7 @@ final class DateiOneDriveHttpTest extends OneDriveTestCase
     {
         $config = ['speicher_pfad' => $this->speicher, 'upload_max_mb' => 64, 'onedrive_originale_lokal_behalten' => false] + $extra + self::testConfig();
         if ($konfiguriert) {
-            $config += ['onedrive_client_id' => 'cid', 'onedrive_client_secret' => 'sec', 'app_schluessel' => base64_encode(str_repeat('k', 32))];
+            $config += ['oeffentliche_url' => 'https://verein.example', 'onedrive_client_id' => 'cid', 'onedrive_client_secret' => 'sec', 'app_schluessel' => base64_encode(str_repeat('k', 32))];
         }
         $app = App::erzeuge($config, new Session($this->sitzung));
         $app->container()->set(HttpClient::class, fn() => $this->http);
@@ -238,7 +238,7 @@ final class DateiOneDriveHttpTest extends OneDriveTestCase
 
     public function testFalscheKonfigurationBrichtAppNichtAb(): void
     {
-        $app = App::erzeuge(['speicher_pfad' => $this->speicher, 'onedrive_client_id' => 'a', 'onedrive_client_secret' => 'b', 'app_schluessel' => 'kein-gueltiger-schluessel'] + self::testConfig(), new Session($this->sitzung));
+        $app = App::erzeuge(['speicher_pfad' => $this->speicher, 'oeffentliche_url' => 'https://verein.example', 'onedrive_client_id' => 'a', 'onedrive_client_secret' => 'b', 'app_schluessel' => 'kein-gueltiger-schluessel'] + self::testConfig(), new Session($this->sitzung));
         self::assertNull($app->container()->get(Uebertragung::class));
         $app2 = App::erzeuge(['speicher_pfad' => $this->speicher] + self::testConfig(), new Session($this->sitzung));
         self::assertNull($app2->container()->get(Uebertragung::class));
@@ -251,7 +251,7 @@ final class DateiOneDriveHttpTest extends OneDriveTestCase
         $tmp = tempnam(sys_get_temp_dir(), 'up');
         $this->temp[] = $tmp;
         copy(dirname(__DIR__, 2) . '/fixtures/dateien/anleitung.pdf', $tmp);
-        $config = ['speicher_pfad' => $this->speicher, 'upload_max_mb' => 64, 'onedrive_client_id' => 'cid', 'onedrive_client_secret' => 'sec', 'app_schluessel' => base64_encode(str_repeat('k', 32))] + self::testConfig();
+        $config = ['speicher_pfad' => $this->speicher, 'upload_max_mb' => 64, 'oeffentliche_url' => 'https://verein.example', 'onedrive_client_id' => 'cid', 'onedrive_client_secret' => 'sec', 'app_schluessel' => base64_encode(str_repeat('k', 32))] + self::testConfig();
         $app = App::erzeuge($config, new Session($this->sitzung));
         $app->container()->set(HttpClient::class, fn() => $this->http);
         $app->container()->set(UploadService::class, fn($c) => new UploadService($this->pdo, $this->speicher, 64 * 1048576, new Bildbearbeitung(), fn($t) => is_file($t), fn($a, $b) => copy($a, $b), $c->get(Uebertragung::class)));

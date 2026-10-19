@@ -25,6 +25,9 @@ return [
     'testumgebung_admin_passwort' => '',
     // OneDrive-Ablage (optional; ohne diese Werte bleibt alles lokal). App unter https://entra.microsoft.com
     // registrieren (persönliche Konten), Rückruf-URL: <basis_url>/admin/onedrive/rueckruf
+    // Öffentliche Adresse der Installation ohne Pfad und ohne Schrägstrich am Ende, nur https (z. B. 'https://mitglieder.emc78.de').
+    // Pflicht für OneDrive: daraus entsteht die Rückruf-URL <oeffentliche_url><basis_url>/admin/onedrive/rueckruf.
+    'oeffentliche_url' => '',
     'onedrive_client_id' => '',
     // Nur hier ablegen, niemals in der Datenbank.
     'onedrive_client_secret' => '',

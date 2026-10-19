@@ -27,7 +27,12 @@ final class UebertragungTest extends OneDriveTestCase
         self::assertFalse(Uebertragung::konfiguriert([]));
         self::assertFalse(Uebertragung::konfiguriert(['onedrive_client_id' => 'a', 'onedrive_client_secret' => 'b']));
         self::assertFalse(Uebertragung::konfiguriert(['onedrive_client_id' => 'a', 'onedrive_client_secret' => '', 'app_schluessel' => 'c']));
-        self::assertTrue(Uebertragung::konfiguriert(['onedrive_client_id' => 'a', 'onedrive_client_secret' => 'b', 'app_schluessel' => 'c']));
+        $ok = ['oeffentliche_url' => 'https://verein.example', 'onedrive_client_id' => 'a', 'onedrive_client_secret' => 'b', 'app_schluessel' => 'c'];
+        self::assertTrue(Uebertragung::konfiguriert($ok));
+        self::assertFalse(Uebertragung::konfiguriert(['oeffentliche_url' => 'http://verein.example'] + $ok));
+        self::assertFalse(Uebertragung::konfiguriert(['oeffentliche_url' => ''] + $ok));
+        self::assertSame('https://verein.example/emc/admin/onedrive/rueckruf', Uebertragung::rueckrufUrl(['basis_url' => '/emc/', 'oeffentliche_url' => 'https://verein.example/'] + $ok));
+        self::assertSame('https://verein.example/admin/onedrive/rueckruf', Uebertragung::rueckrufUrl($ok));
     }
 
     public function testAktivErfordertVerbundenUndZiel(): void

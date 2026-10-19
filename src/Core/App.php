@@ -102,7 +102,7 @@ final class App
             $c->get(HttpClient::class),
             (string) ($this->config['onedrive_client_id'] ?? ''),
             (string) ($this->config['onedrive_client_secret'] ?? ''),
-            rtrim((string) ($this->config['basis_url'] ?? ''), '/') . '/admin/onedrive/rueckruf',
+            Uebertragung::rueckrufUrl($this->config) ?? '',
             max(1, (int) ($this->config['onedrive_zeitlimit_s'] ?? 20))
         ));
         $this->container->set(Graph::class, fn(Container $c) => new Graph(
