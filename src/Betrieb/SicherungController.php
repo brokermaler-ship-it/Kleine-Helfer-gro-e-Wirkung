@@ -20,6 +20,7 @@ final class SicherungController
         return new Response($this->view->render('admin/sicherung', [
             'titel' => 'Datensicherung',
             'letzte' => $this->sicherung->letzteSicherung(),
+            'nurOneDrive' => $this->sicherung->nurImOneDrive(),
         ]), 200, ['Content-Type' => 'text/html; charset=utf-8']);
     }
 

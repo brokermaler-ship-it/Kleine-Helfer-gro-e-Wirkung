@@ -10,6 +10,10 @@ final class HttpFehler extends \RuntimeException
     /** @param list<string> $erlaubt */
     public function __construct(public readonly int $status, public readonly array $erlaubt = [])
     {
-        parent::__construct($status === 405 ? 'Methode nicht erlaubt.' : 'Seite nicht gefunden.');
+        parent::__construct(match ($status) {
+            405 => 'Methode nicht erlaubt.',
+            503 => 'Vorübergehend nicht erreichbar.',
+            default => 'Seite nicht gefunden.',
+        });
     }
 }

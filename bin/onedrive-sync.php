@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Überträgt wartende Dateien nach OneDrive (für Cron, z. B. alle 10 Minuten).
+ * Überträgt wartende Dateien nach OneDrive (für Cron, empfohlen: alle 15 Minuten, z. B. */15 * * * *).
  * Aufruf: php bin/onedrive-sync.php
  */
 
@@ -20,6 +20,8 @@ if (!is_file($wurzel . '/config.php')) {
     exit(1);
 }
 $config = require $wurzel . '/config.php';
+
+Emc\Core\App::setzeZeitzone($config);
 
 try {
     $app = Emc\Core\App::erzeuge($config);

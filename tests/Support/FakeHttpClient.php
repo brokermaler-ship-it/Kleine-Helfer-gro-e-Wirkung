@@ -22,6 +22,20 @@ final class FakeHttpClient implements HttpClient
         return $this;
     }
 
+    /** Nächste Antwort wird von einer Funktion (methode, url, kopf, koerper) erzeugt. */
+    public function dann(callable $f): self
+    {
+        $this->antworten[] = $f;
+        return $this;
+    }
+
+    public function herunterladen(string $url, string $zielDatei, array $kopf = [], int $zeitlimit = 120): HttpAntwort
+    {
+        $a = $this->anfrage('GET', $url, $kopf, null, $zeitlimit);
+        file_put_contents($zielDatei, $a->koerper);
+        return new HttpAntwort($a->status, $a->kopf, '');
+    }
+
     public function anfrage(string $methode, string $url, array $kopf = [], ?string $koerper = null, int $zeitlimit = 20): HttpAntwort
     {
         $this->anfragen[] = ['methode' => $methode, 'url' => $url, 'kopf' => $kopf, 'koerper' => $koerper, 'zeitlimit' => $zeitlimit];

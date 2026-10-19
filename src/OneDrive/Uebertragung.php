@@ -40,53 +40,102 @@ final class Uebertragung
     }
 
     /**
+     * Arbeitet fällige Aufträge ab. Jeder Auftrag wird einzeln beansprucht bzw. seine Sperre vor der Bearbeitung
+     * verlängert, damit ein langsamer Lauf keinen Auftrag bearbeitet, den inzwischen ein anderer Lauf übernommen hat.
+     *
+     * @param ?int $auftragId nur diesen Auftrag bearbeiten
+     * @param ?string $art nur Aufträge dieser Art ('hochladen' oder 'loeschen')
      * @return array{erledigt:int,fehler:int}
      */
-    public function verarbeite(int $max = 5, ?\DateTimeImmutable $jetzt = null): array
+    public function verarbeite(int $max = 5, ?\DateTimeImmutable $jetzt = null, ?int $auftragId = null, ?string $art = null): array
     {
-        $jetzt ??= new \DateTimeImmutable();
+        $uhr = static fn(): \DateTimeImmutable => $jetzt ?? new \DateTimeImmutable();
         $ergebnis = ['erledigt' => 0, 'fehler' => 0];
         if (!$this->aktiv()) {
             return $ergebnis;
         }
         $ziel = $this->ziel();
-        $auftraege = $this->auftraege->beanspruche($max, $jetzt);
-        foreach ($auftraege as $i => $a) {
-            $id = (int) $a['id'];
-            try {
-                if ($a['art'] === 'loeschen') {
-                    if (is_string($a['item_id'] ?? null) && $a['item_id'] !== '') {
-                        $this->graph->loeschen($ziel['drive_id'], $a['item_id']);
-                    }
-                } else {
-                    $this->hochladen((int) $a['dokument_id'], $ziel);
-                }
-                $this->auftraege->erledigt($id);
-                $ergebnis['erledigt']++;
-            } catch (GraphFehler $e) {
-                if ($e->istAbgelaufen()) {
-                    $this->tokens->setzeStatus(TokenSpeicher::STATUS_ABGELAUFEN);
-                    // Nichts geht verloren: alle noch gesperrten Aufträge dieses Laufs bleiben in der Warteschlange.
-                    foreach (array_slice($auftraege, $i) as $rest) {
-                        $this->auftraege->freigeben((int) $rest['id'], 'Verbindung abgelaufen', 600, $jetzt);
-                    }
-                    return $ergebnis;
-                }
-                $this->auftraege->fehlgeschlagen($id, $e->getMessage(), $e->warteSekunden(), $jetzt);
-                $ergebnis['fehler']++;
-            } catch (\Throwable $t) {
-                $this->auftraege->fehlgeschlagen($id, $t::class . ': ' . $t->getMessage(), null, $jetzt);
-                $ergebnis['fehler']++;
+        $this->auftraege->raeumeAuf($uhr());
+        for ($n = 0; $n < max(1, $max); $n++) {
+            $a = $this->auftraege->beanspruche(1, $uhr(), $auftragId, $art)[0] ?? null;
+            if ($a === null) {
+                break;
+            }
+            $r = $this->bearbeite($a, $ziel, $uhr);
+            if ($r === null) {
+                return $ergebnis;
+            }
+            $ergebnis[$r ? 'erledigt' : 'fehler']++;
+            if ($auftragId !== null) {
+                break;
             }
         }
         return $ergebnis;
     }
 
-    /** Reiht ein frisch gespeichertes Dokument ein und versucht die Übertragung sofort. */
+    /**
+     * @param array<string,mixed> $a
+     * @param array{drive_id:string,item_id:string,name:string} $ziel
+     * @return ?bool true erledigt, false Fehler, null Verbindung abgelaufen (Lauf abbrechen)
+     */
+    private function bearbeite(array $a, array $ziel, \Closure $uhr): ?bool
+    {
+        $id = (int) $a['id'];
+        $token = (string) $a['sperr_token'];
+        try {
+            if ($a['art'] === 'loeschen') {
+                if (is_string($a['item_id'] ?? null) && $a['item_id'] !== '') {
+                    $this->graph->loeschen($ziel['drive_id'], $a['item_id']);
+                }
+            } else {
+                $this->hochladen((int) $a['dokument_id'], $ziel);
+            }
+            $this->auftraege->erledigt($id, $token);
+            return true;
+        } catch (GraphFehler $e) {
+            if ($e->istAbgelaufen()) {
+                $this->tokens->setzeStatus(TokenSpeicher::STATUS_ABGELAUFEN);
+                $this->auftraege->freigeben($id, 'Verbindung abgelaufen', 600, $uhr(), $token);
+                return null;
+            }
+            if (self::dauerhaft($e)) {
+                $this->auftraege->dauerhaftFehlgeschlagen($id, $e->getMessage(), $token);
+            } else {
+                $this->auftraege->fehlgeschlagen($id, $e->getMessage(), $e->warteSekunden(), $uhr(), $token);
+            }
+            return false;
+        } catch (\Throwable $t) {
+            $this->auftraege->fehlgeschlagen($id, $t::class . ': ' . $t->getMessage(), null, $uhr(), $token);
+            return false;
+        }
+    }
+
+    /** Fehler, die sich durch Wiederholen nicht beheben (Ordner gesperrt/fehlt, Datei zu groß, Speicher voll …). */
+    private static function dauerhaft(GraphFehler $e): bool
+    {
+        $s = $e->httpStatus;
+        if ($s === 507) {
+            return true;
+        }
+        return $s >= 400 && $s < 500 && !in_array($s, [401, 408, 409, 423, 429], true);
+    }
+
+    /** Zielordner gewählt: Neuuploads werden dann eingereiht, auch wenn die Verbindung gerade abgelaufen ist. */
+    public function bereit(): bool
+    {
+        return $this->ziel() !== null;
+    }
+
+    /** Reiht ein frisch gespeichertes Dokument ein und versucht genau diesen Auftrag sofort (falls verbunden). */
     public function einreihen(int $dokumentId): void
     {
-        $this->auftraege->neu('hochladen', $dokumentId, null);
-        $this->verarbeite(1);
+        if (!$this->bereit()) {
+            return;
+        }
+        $id = $this->auftraege->neu('hochladen', $dokumentId, null);
+        if ($this->aktiv()) {
+            $this->verarbeite(1, null, $id);
+        }
     }
 
     /** Legt für alle lokalen Dokumente ohne offenen Auftrag einen Hochlade-Auftrag an. */
@@ -128,14 +177,19 @@ final class Uebertragung
         $st = $this->pdo->prepare("UPDATE dokument SET ablage = 'onedrive', onedrive_item_id = ?, onedrive_pfad = ?, original_lokal = 1 WHERE id = ? AND ablage = 'lokal'");
         $st->execute([$e['item_id'], mb_substr($e['pfad'], 0, 500), $dokumentId]);
         if ($st->rowCount() === 0) {
-            // Dokument wurde inzwischen gelöscht (oder parallel übertragen): Duplikat in OneDrive wieder entfernen.
-            if ($this->dokumente->finde($dokumentId) === null) {
+            // Dokument wurde inzwischen gelöscht oder von einem anderen Lauf übertragen: unser Duplikat entfernen.
+            $jetzt = $this->dokumente->finde($dokumentId);
+            if ($jetzt === null || (string) ($jetzt['onedrive_item_id'] ?? '') !== $e['item_id']) {
                 $this->graph->loeschen($ziel['drive_id'], $e['item_id']);
             }
             return;
         }
-        if (!$this->originaleBehalten && @unlink($basis)) {
+        if (!$this->originaleBehalten) {
+            // Erst „nicht mehr lokal“ vermerken, dann löschen; scheitert das Löschen, wieder zurücksetzen.
             $this->pdo->prepare('UPDATE dokument SET original_lokal = 0 WHERE id = ?')->execute([$dokumentId]);
+            if (!@unlink($basis) && is_file($basis)) {
+                $this->pdo->prepare('UPDATE dokument SET original_lokal = 1 WHERE id = ?')->execute([$dokumentId]);
+            }
         }
     }
 

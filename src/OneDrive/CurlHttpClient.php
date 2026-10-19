@@ -55,4 +55,50 @@ final class CurlHttpClient implements HttpClient
         curl_close($ch);
         return new HttpAntwort($status, $antwortKopf, (string) $inhalt);
     }
+
+    public function herunterladen(string $url, string $zielDatei, array $kopf = [], int $zeitlimit = 120): HttpAntwort
+    {
+        $ch = curl_init($url);
+        $fh = fopen($zielDatei, 'wb');
+        if ($ch === false || $fh === false) {
+            throw new GraphFehler('HTTP-Verbindung konnte nicht vorbereitet werden.');
+        }
+        $zeilen = [];
+        foreach ($kopf as $name => $wert) {
+            $zeilen[] = $name . ': ' . $wert;
+        }
+        $antwortKopf = [];
+        curl_setopt_array($ch, [
+            CURLOPT_HTTPGET => true,
+            CURLOPT_FILE => $fh,
+            CURLOPT_FOLLOWLOCATION => false,
+            CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
+            CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTPS,
+            CURLOPT_HTTPHEADER => $zeilen,
+            CURLOPT_TIMEOUT => max(1, $zeitlimit),
+            CURLOPT_CONNECTTIMEOUT => min(10, max(1, $zeitlimit)),
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_HEADERFUNCTION => static function ($ch, string $zeile) use (&$antwortKopf): int {
+                if (str_starts_with($zeile, 'HTTP/')) {
+                    $antwortKopf = [];
+                    return strlen($zeile);
+                }
+                $teile = explode(':', $zeile, 2);
+                if (count($teile) === 2) {
+                    $antwortKopf[strtolower(trim($teile[0]))] = trim($teile[1]);
+                }
+                return strlen($zeile);
+            },
+        ]);
+        $ok = curl_exec($ch);
+        $fehler = $ok === false ? curl_error($ch) : '';
+        $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        curl_close($ch);
+        fclose($fh);
+        if ($ok === false) {
+            throw new GraphFehler('OneDrive ist nicht erreichbar (' . $fehler . ').');
+        }
+        return new HttpAntwort($status, $antwortKopf, '');
+    }
 }

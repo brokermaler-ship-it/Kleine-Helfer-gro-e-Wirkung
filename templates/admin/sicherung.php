@@ -1,5 +1,12 @@
-<?php /** @var ?\DateTimeImmutable $letzte */ ?>
+<?php /** @var ?\DateTimeImmutable $letzte */ /** @var array{anzahl:int,ziel:string} $nurOneDrive */ ?>
 <h1 class="h3 mb-3">Datensicherung</h1>
+<?php if (($nurOneDrive['anzahl'] ?? 0) > 0): ?>
+    <div class="alert alert-warning">
+        <?= (int) $nurOneDrive['anzahl'] ?> <?= (int) $nurOneDrive['anzahl'] === 1 ? 'Original liegt' : 'Originale liegen' ?> nur im OneDrive
+        (Zielordner: <?= e($nurOneDrive['ziel'] !== '' ? $nurOneDrive['ziel'] : 'unbekannt') ?>) und <?= (int) $nurOneDrive['anzahl'] === 1 ? 'ist' : 'sind' ?> in dieser Sicherung nicht enthalten.
+        Bitte den OneDrive-Ordner zusätzlich sichern.
+    </div>
+<?php endif; ?>
 <div class="card mb-4">
     <div class="card-body">
         <p class="mb-2">Letzte Sicherung:

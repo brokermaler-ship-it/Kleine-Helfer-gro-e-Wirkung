@@ -9,6 +9,8 @@ return [
     'speicher_pfad' => __DIR__ . '/storage',
     'upload_max_mb' => 64,
     'app_name' => 'EMC 78 Lokschuppen',
+    // Zeitzone für Datum und Uhrzeit (Standard Europe/Berlin).
+    'zeitzone' => 'Europe/Berlin',
     'debug' => false,
     // Sitzungs-Cookie nur über HTTPS senden; auf false nur für lokale Entwicklung ohne HTTPS.
     'cookie_secure' => true,
@@ -29,8 +31,10 @@ return [
     // 32 Zufallsbytes, base64-kodiert (z. B. php -r "echo base64_encode(random_bytes(32));"). Verschlüsselt die Tokens.
     // Nach dem Verbinden nicht mehr ändern, sonst muss OneDrive neu verbunden werden.
     'app_schluessel' => '',
-    // true: Originale bleiben nach der Übertragung zusätzlich lokal liegen.
-    'onedrive_originale_lokal_behalten' => false,
+    // true (Standard): Originale bleiben nach der Übertragung zusätzlich lokal liegen, die Datensicherung enthält sie dann.
+    // false: Originale werden nach der Übertragung lokal entfernt und liegen nur noch im OneDrive (spart Speicher;
+    // die Datensicherung der App enthält sie dann nicht mehr).
+    'onedrive_originale_lokal_behalten' => true,
     // Zeitlimit je Anfrage an OneDrive in Sekunden.
     'onedrive_zeitlimit_s' => 20,
 ];

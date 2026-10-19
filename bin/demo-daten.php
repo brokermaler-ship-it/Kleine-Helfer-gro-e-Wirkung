@@ -22,6 +22,8 @@ if (!is_file($wurzel . '/config.php')) {
 }
 $config = require $wurzel . '/config.php';
 
+Emc\Core\App::setzeZeitzone($config);
+
 try {
     $app = Emc\Core\App::erzeuge($config);
     (new Emc\Betrieb\DemoDaten($app))->erzeuge(in_array('--zuruecksetzen', $argv, true));

@@ -129,6 +129,31 @@ final class Graph
         return $a;
     }
 
+    /**
+     * Lädt den Dateiinhalt direkt in $zielDatei (kein Puffern im Arbeitsspeicher). Weiterleitung nur auf https,
+     * ohne Authorization-Header an den Zielhost; nur 2xx gilt als Erfolg.
+     */
+    public function inhaltNachDatei(string $driveId, string $itemId, string $zielDatei): HttpAntwort
+    {
+        $url = self::BASIS . '/drives/' . rawurlencode($driveId) . '/items/' . rawurlencode($itemId) . '/content';
+        $zeit = max($this->zeitlimit, 120);
+        $a = $this->http->herunterladen($url, $zielDatei, ['Authorization' => 'Bearer ' . $this->zugriffstoken(false)], $zeit);
+        if ($a->status === 401) {
+            $a = $this->http->herunterladen($url, $zielDatei, ['Authorization' => 'Bearer ' . $this->zugriffstoken(true)], $zeit);
+        }
+        if (in_array($a->status, [301, 302, 303, 307, 308], true)) {
+            $ziel = $a->kopf['location'] ?? '';
+            if (!str_starts_with($ziel, 'https://')) {
+                throw new GraphFehler('Ungültige Weiterleitung von OneDrive.', $a->status);
+            }
+            $a = $this->http->herunterladen($ziel, $zielDatei, [], $zeit);
+        }
+        if ($a->status < 200 || $a->status >= 300) {
+            throw GraphFehler::ausAntwort($a, 'Datei konnte nicht aus OneDrive geladen werden');
+        }
+        return $a;
+    }
+
     /** @param list<array<string,mixed>> $liste @param array<string,mixed> $e */
     private function ordnerAnhaengen(array &$liste, array $e, bool $geteilt): void
     {

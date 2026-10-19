@@ -105,6 +105,48 @@ final class AuftraegeTest extends DbTestCase
         self::assertSame(1, $this->a->zaehle()['fehler']);
     }
 
+    public function testEinzelAuftragUndArtFilter(): void
+    {
+        $a = $this->a->neu('hochladen', 1, null, $this->t0);
+        $b = $this->a->neu('loeschen', null, 'X', $this->t0);
+        $l = $this->a->beanspruche(5, $this->t0, null, 'loeschen');
+        self::assertSame([$b], array_map(fn($z) => (int) $z['id'], $l));
+        $l = $this->a->beanspruche(5, $this->t0, $a);
+        self::assertSame([$a], array_map(fn($z) => (int) $z['id'], $l));
+    }
+
+    public function testFremdeSperreVerhindertAbschlussUndVerlaengerung(): void
+    {
+        $id = $this->a->neu('hochladen', 1, null, $this->t0);
+        $alt = $this->a->beanspruche(1, $this->t0)[0];
+        self::assertTrue($this->a->verlaengere($id, $alt['sperr_token'], $this->t0->modify('+5 minutes')));
+        $neu = $this->a->beanspruche(1, $this->t0->modify('+20 minutes'))[0];
+        self::assertNotSame($alt['sperr_token'], $neu['sperr_token']);
+        self::assertFalse($this->a->verlaengere($id, $alt['sperr_token'], $this->t0->modify('+21 minutes')));
+        $this->a->erledigt($id, $alt['sperr_token']);
+        $this->a->fehlgeschlagen($id, 'x', null, $this->t0, $alt['sperr_token']);
+        $z = $this->zeile($id);
+        self::assertSame('wartet', $z['status']);
+        self::assertSame(0, (int) $z['versuche']);
+        $this->a->erledigt($id, $neu['sperr_token']);
+        self::assertSame('erledigt', $this->zeile($id)['status']);
+    }
+
+    public function testDauerhafterFehlerUndAufraeumen(): void
+    {
+        $id = $this->a->neu('hochladen', 1, null, $this->t0);
+        $this->a->dauerhaftFehlgeschlagen($id, 'Zugriff verweigert');
+        self::assertSame('fehler', $this->zeile($id)['status']);
+        $alt = $this->a->neu('hochladen', 2, null, $this->t0);
+        $neu = $this->a->neu('hochladen', 3, null, $this->t0);
+        $this->a->erledigt($alt);
+        $this->a->erledigt($neu);
+        $this->pdo->exec("UPDATE onedrive_auftrag SET geaendert_am = '2026-09-01 00:00:00' WHERE id = $alt");
+        $this->pdo->exec("UPDATE onedrive_auftrag SET geaendert_am = '2026-10-15 00:00:00' WHERE id = $neu");
+        self::assertSame(1, $this->a->raeumeAuf($this->t0));
+        self::assertSame(2, (int) $this->pdo->query('SELECT COUNT(*) FROM onedrive_auftrag')->fetchColumn());
+    }
+
     public function testFreigebenZaehltNichtAlsVersuch(): void
     {
         $id = $this->a->neu('hochladen', 1, null, $this->t0);

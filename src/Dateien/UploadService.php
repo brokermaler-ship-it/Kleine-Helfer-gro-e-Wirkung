@@ -118,7 +118,7 @@ final class UploadService
             return;
         }
         try {
-            if (!$this->uebertragung->aktiv()) {
+            if (!$this->uebertragung->bereit()) {
                 return;
             }
             if ($fahrzeugId !== null) {

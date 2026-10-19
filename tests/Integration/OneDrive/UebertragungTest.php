@@ -236,4 +236,110 @@ final class UebertragungTest extends OneDriveTestCase
         $u->verarbeite(5, $this->jetzt->modify('+1 hour'));
         self::assertCount(1, $this->http->anfragen);
     }
+
+    public function testAbgelaufeneSperreImStapelFuehrtNichtZuDoppeltemUpload(): void
+    {
+        $a = $this->dokument();
+        $b = $this->dokument();
+        $this->verbinde();
+        $aufA = $this->auftrag($a);
+        $aufB = $this->auftrag($b);
+        $andere = new Auftraege($this->pdo);
+        $uebernommen = [];
+        // Während Auftrag A hochgeladen wird, läuft die Sperre ab und ein anderer Lauf übernimmt Auftrag B.
+        $this->http->dann(function () use ($andere, &$uebernommen) {
+            $uebernommen = $andere->beanspruche(5, $this->jetzt->modify('+11 minutes'));
+            return new \Emc\OneDrive\HttpAntwort(201, [], json_encode(['id' => 'IA', 'name' => 'Anleitung.pdf']));
+        });
+        $r = $this->uebertragung()->verarbeite(5, $this->jetzt);
+        self::assertSame(['erledigt' => 1, 'fehler' => 0], $r);
+        self::assertSame([$aufA, $aufB], array_map(fn($z) => (int) $z['id'], $uebernommen));
+        self::assertCount(1, $this->http->anfragen, 'Auftrag B wurde vom ersten Lauf nicht mehr angefasst');
+        self::assertSame('lokal', $this->dok($b)['ablage']);
+        self::assertSame('wartet', $this->pdo->query("SELECT status FROM onedrive_auftrag WHERE id = $aufB")->fetchColumn());
+        // Abschluss mit altem Token wirkt nicht: Auftrag A gehört jetzt dem anderen Lauf.
+        self::assertSame('wartet', $this->pdo->query("SELECT status FROM onedrive_auftrag WHERE id = $aufA")->fetchColumn());
+    }
+
+    public function testZweiterUploadDesselbenDokumentsWirdWiederEntfernt(): void
+    {
+        $id = $this->dokument();
+        $this->verbinde();
+        $this->auftrag($id);
+        $this->http->dann(function () use ($id) {
+            // Ein paralleler Lauf hat das Dokument inzwischen übertragen.
+            $this->pdo->prepare("UPDATE dokument SET ablage = 'onedrive', onedrive_item_id = 'ERSTER' WHERE id = ?")->execute([$id]);
+            return new \Emc\OneDrive\HttpAntwort(201, [], json_encode(['id' => 'ZWEITER', 'name' => 'Anleitung.pdf']));
+        })->antwort(204);
+        $this->uebertragung()->verarbeite(5, $this->jetzt);
+        self::assertSame('DELETE', $this->http->anfragen[1]['methode']);
+        self::assertStringEndsWith('/items/ZWEITER', $this->http->anfragen[1]['url']);
+        self::assertSame('ERSTER', $this->dok($id)['onedrive_item_id']);
+    }
+
+    public function testNurGenauDerAngegebeneAuftragWirdVerarbeitet(): void
+    {
+        $alt = $this->dokument();
+        $neu = $this->dokument();
+        $this->verbinde();
+        $this->auftrag($alt);
+        $neuId = $this->auftrag($neu);
+        $this->http->antwort(201, ['id' => 'N', 'name' => 'Anleitung.pdf']);
+        $r = $this->uebertragung()->verarbeite(1, $this->jetzt, $neuId);
+        self::assertSame(1, $r['erledigt']);
+        self::assertSame('onedrive', $this->dok($neu)['ablage']);
+        self::assertSame('lokal', $this->dok($alt)['ablage']);
+    }
+
+    public function testArtFilterVerarbeitetNurLoeschauftraege(): void
+    {
+        $id = $this->dokument();
+        $this->verbinde();
+        $this->auftrag($id);
+        (new Auftraege($this->pdo))->neu('loeschen', null, 'IT', $this->jetzt);
+        $this->http->antwort(204);
+        $r = $this->uebertragung()->verarbeite(5, $this->jetzt, null, 'loeschen');
+        self::assertSame(1, $r['erledigt']);
+        self::assertCount(1, $this->http->anfragen);
+        self::assertSame('lokal', $this->dok($id)['ablage']);
+    }
+
+    public function testDauerhafteFehlerGehenSofortAufFehler(): void
+    {
+        foreach ([403, 404, 413, 507] as $status) {
+            $this->setUp();
+            $id = $this->dokument();
+            $this->verbinde();
+            $aid = $this->auftrag($id);
+            $this->http->antwort($status);
+            $r = $this->uebertragung()->verarbeite(5, $this->jetzt);
+            self::assertSame(1, $r['fehler'], "HTTP $status");
+            $z = $this->pdo->query("SELECT status, letzter_fehler FROM onedrive_auftrag WHERE id = $aid")->fetch(\PDO::FETCH_ASSOC);
+            self::assertSame('fehler', $z['status'], "HTTP $status");
+            self::assertStringContainsString((string) $status, (string) $z['letzter_fehler']);
+        }
+    }
+
+    public function testVorUebertragungWirdOriginalVermerktUndSpaeterGeloescht(): void
+    {
+        $id = $this->dokument();
+        $basis = $this->speicher . '/' . $this->dok($id)['pfad'];
+        $this->verbinde();
+        $this->auftrag($id);
+        $this->http->antwort(201, ['id' => 'I', 'name' => 'Anleitung.pdf']);
+        $this->uebertragung()->verarbeite(5, $this->jetzt);
+        self::assertSame(0, (int) $this->dok($id)['original_lokal']);
+        self::assertFileDoesNotExist($basis);
+    }
+
+    public function testErledigteAuftraegeWerdenNachDreissigTagenGeloescht(): void
+    {
+        $a = new Auftraege($this->pdo);
+        $alt = $a->neu('hochladen', 1, null, $this->jetzt);
+        $a->erledigt($alt);
+        $this->pdo->exec("UPDATE onedrive_auftrag SET geaendert_am = '2026-08-01 00:00:00' WHERE id = $alt");
+        $this->verbinde();
+        $this->uebertragung()->verarbeite(5, $this->jetzt);
+        self::assertSame(0, (int) $this->pdo->query('SELECT COUNT(*) FROM onedrive_auftrag')->fetchColumn());
+    }
 }

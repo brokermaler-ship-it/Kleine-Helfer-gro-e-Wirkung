@@ -282,6 +282,35 @@ final class GraphTest extends TestCase
         self::assertArrayNotHasKey('Authorization', $this->http->anfragen[1]['kopf']);
     }
 
+    public function testInhaltNachDateiSchreibtInDateiOhneAuthorizationAmZiel(): void
+    {
+        $ziel = tempnam(sys_get_temp_dir(), 'od');
+        $this->temp[] = $ziel;
+        $this->http->antwort(302, '', ['Location' => 'https://cdn.example/dl?x=1'])->antwort(200, 'BINAER');
+        $a = $this->graph()->inhaltNachDatei('D', 'I', $ziel);
+        self::assertSame(200, $a->status);
+        self::assertSame('BINAER', file_get_contents($ziel));
+        self::assertSame('Bearer AT', $this->http->anfragen[0]['kopf']['Authorization']);
+        self::assertSame('https://cdn.example/dl?x=1', $this->http->anfragen[1]['url']);
+        self::assertArrayNotHasKey('Authorization', $this->http->anfragen[1]['kopf']);
+    }
+
+    public function testInhaltNachDateiLehntNichtHttpsUndFehlerstatusAb(): void
+    {
+        $ziel = tempnam(sys_get_temp_dir(), 'od');
+        $this->temp[] = $ziel;
+        $this->http->antwort(302, '', ['Location' => 'http://evil.example/x']);
+        try {
+            $this->graph()->inhaltNachDatei('D', 'I', $ziel);
+            self::fail('Ausnahme erwartet');
+        } catch (GraphFehler) {
+            self::assertTrue(true);
+        }
+        $this->http->antwort(503, '');
+        $this->expectException(GraphFehler::class);
+        $this->graph()->inhaltNachDatei('D', 'I', $ziel);
+    }
+
     public function testInhalt404(): void
     {
         $this->http->antwort(404, '');

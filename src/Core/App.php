@@ -55,6 +55,7 @@ final class App
     /** @param array<string,mixed> $config */
     private function __construct(private array $config, ?Session $session, private string $migrationsVerzeichnis)
     {
+        self::setzeZeitzone($config);
         $GLOBALS['emc_basis_url'] = (string) ($config['basis_url'] ?? '');
         $this->container = new Container();
         $this->router = new Router();
@@ -124,7 +125,7 @@ final class App
                     $c->get(DokumentRepository::class),
                     $c->get('pdo'),
                     $this->speicherPfad(),
-                    ($this->config['onedrive_originale_lokal_behalten'] ?? false) === true
+                    ($this->config['onedrive_originale_lokal_behalten'] ?? true) !== false
                 );
             } catch (\Throwable $t) {
                 error_log('OneDrive-Konfiguration unbrauchbar: ' . $t::class);
@@ -266,6 +267,16 @@ final class App
         if (is_file($routen)) {
             (require $routen)($this->router, $this);
         }
+    }
+
+    /** Zeitzone aus `zeitzone` der config.php (Standard Europe/Berlin); unbekannte Werte fallen auf den Standard zurück. */
+    public static function setzeZeitzone(array $config): void
+    {
+        $zone = is_string($config['zeitzone'] ?? null) ? trim($config['zeitzone']) : '';
+        if ($zone === '' || !in_array($zone, \DateTimeZone::listIdentifiers(), true)) {
+            $zone = 'Europe/Berlin';
+        }
+        date_default_timezone_set($zone);
     }
 
     /** @param array<string,mixed> $config */

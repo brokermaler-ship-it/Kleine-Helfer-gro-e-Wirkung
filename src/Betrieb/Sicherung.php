@@ -63,6 +63,18 @@ final class Sicherung
         }
     }
 
+    /**
+     * Dokumente, deren Original nur noch im OneDrive liegt (in dieser Sicherung nicht enthalten).
+     *
+     * @return array{anzahl:int,ziel:string}
+     */
+    public function nurImOneDrive(): array
+    {
+        $anzahl = (int) $this->pdo->query("SELECT COUNT(*) FROM dokument WHERE ablage = 'onedrive' AND original_lokal = 0")->fetchColumn();
+        $ziel = json_decode((string) $this->einstellungen->hole('onedrive_ziel'), true);
+        return ['anzahl' => $anzahl, 'ziel' => is_array($ziel) ? (string) ($ziel['name'] ?? '') : ''];
+    }
+
     private function info(): string
     {
         $versionDatei = dirname(__DIR__, 2) . '/VERSION';
@@ -71,7 +83,14 @@ final class Sicherung
         return "EMC 78 Halle – Datensicherung\n"
             . 'Erstellt am: ' . (new \DateTimeImmutable())->format('d.m.Y H:i:s') . "\n"
             . 'App-Version: ' . $version . "\n"
-            . 'Letzte Migration: ' . ($migration === false || $migration === null ? '-' : (string) $migration) . "\n";
+            . 'Letzte Migration: ' . ($migration === false || $migration === null ? '-' : (string) $migration) . "\n"
+            . $this->onedriveZeile();
+    }
+
+    private function onedriveZeile(): string
+    {
+        $n = $this->nurImOneDrive();
+        return $n['anzahl'] === 0 ? '' : $n['anzahl'] . ' Originale liegen nur im OneDrive (Zielordner: ' . ($n['ziel'] !== '' ? $n['ziel'] : 'unbekannt') . ")\n";
     }
 
     private function schreibeDump(string $datei): void

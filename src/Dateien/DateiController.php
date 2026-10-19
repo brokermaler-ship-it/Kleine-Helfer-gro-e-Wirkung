@@ -152,7 +152,7 @@ final class DateiController
             $inline = true;
             $istVariante = true;
         }
-        $remote = !$istVariante && !is_file($basis) && ($dok['ablage'] ?? 'lokal') === 'onedrive' && (int) ($dok['original_lokal'] ?? 1) === 0;
+        $remote = !$istVariante && !is_file($basis) && ($dok['ablage'] ?? 'lokal') === 'onedrive' && (string) ($dok['onedrive_item_id'] ?? '') !== '';
         if (!$istVariante && !$remote && !is_file($basis)) {
             throw new HttpFehler(404);
         }
@@ -181,21 +181,22 @@ final class DateiController
      */
     private function ausOneDrive(array $dok, array $header): Response
     {
+        $temp = tempnam(sys_get_temp_dir(), 'emc_od');
         try {
             $ziel = $this->uebertragung?->ziel();
             $item = (string) ($dok['onedrive_item_id'] ?? '');
-            if ($this->graph === null || $ziel === null || $item === '') {
+            if ($temp === false || $this->graph === null || $ziel === null || $item === '') {
                 throw new GraphFehler('OneDrive ist nicht eingerichtet.');
             }
-            $antwort = $this->graph->inhalt($ziel['drive_id'], $item);
-            return new Response($antwort->koerper, 200, $header);
+            $this->graph->inhaltNachDatei($ziel['drive_id'], $item, $temp);
+            return Response::datei($temp, $header, true);
         } catch (\Throwable $t) {
+            if ($temp !== false) {
+                @unlink($temp);
+            }
             error_log('OneDrive-Original nicht abrufbar: ' . $t::class);
-            return new Response(
-                'Die Originaldatei liegt im OneDrive und ist gerade nicht erreichbar. Die Vorschau bleibt verfügbar; bitte später erneut versuchen.',
-                503,
-                ['Content-Type' => 'text/plain; charset=utf-8', 'Retry-After' => '60', 'X-Content-Type-Options' => 'nosniff']
-            );
+            // Wird als normale Fehlerseite (503) im Layout dargestellt.
+            throw new HttpFehler(503);
         }
     }
 
@@ -204,7 +205,7 @@ final class DateiController
     {
         try {
             if ($this->uebertragung !== null && $this->uebertragung->aktiv()) {
-                $this->uebertragung->verarbeite(3);
+                $this->uebertragung->verarbeite(3, null, null, 'loeschen');
             }
         } catch (\Throwable $t) {
             error_log('OneDrive-Aufräumen fehlgeschlagen: ' . $t::class);
