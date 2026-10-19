@@ -21,7 +21,7 @@ final class OneDriveController
 {
     private const STATE_KEY = 'onedrive_state';
     /** OneDrive-IDs: Buchstaben, Ziffern und „!“, „_“, „-“, „.“, „=“ (persönliche Konten, z. B. „ABC123!456“). */
-    private const ID_MUSTER = '/^(?!\.+$)[A-Za-z0-9!_.=-]{1,200}$/';
+    private const ID_MUSTER = '/^(?!\.+$)[A-Za-z0-9!_.=-]{1,200}$/D';
     /** Kleine Stapelgröße in Web-Anfragen: ein Upload kann bis zu 120 s dauern (max_execution_time/Proxy). */
     private const STAPEL_WEB = 3;
 
@@ -118,9 +118,11 @@ final class OneDriveController
         $this->einstellungen->setze('onedrive_letzter_fehler', '');
         $konto = '';
         $kontoId = '';
+        $ichGelesen = false;
         try {
             $ich = $this->container->get(Graph::class)->ich();
-            $kontoId = isset($ich['id']) && is_string($ich['id']) ? mb_substr($ich['id'], 0, 200) : '';
+            $ichGelesen = true;
+            $kontoId = isset($ich['id']) && is_string($ich['id']) ? mb_substr(trim($ich['id']), 0, 200) : '';
             foreach (['mail', 'userPrincipalName', 'displayName'] as $feld) {
                 if (isset($ich[$feld]) && is_string($ich[$feld]) && trim($ich[$feld]) !== '') {
                     $konto = mb_substr(trim($ich[$feld]), 0, 200);
@@ -130,13 +132,16 @@ final class OneDriveController
         } catch (\Throwable $t) {
             error_log('OneDrive-Konto nicht lesbar: ' . $t::class . ': ' . $t->getMessage());
         }
-        $this->einstellungen->setze('onedrive_konto', $konto);
         $alteId = (string) ($this->einstellungen->hole('onedrive_konto_id') ?? '');
-        $kontoGewechselt = $kontoId !== '' && $alteId !== '' && !hash_equals($alteId, $kontoId);
+        $kontoGewechselt = $this->kontoGewechselt($alteId, $kontoId, $altesKonto, $konto);
+        // Ist das neue Konto unbekannt, bleiben die bisherigen Angaben stehen, damit ein späterer Wechsel erkennbar bleibt.
+        if ($ichGelesen && ($konto !== '' || $kontoId !== '')) {
+            $this->einstellungen->setze('onedrive_konto', $konto);
+        }
         if ($kontoId !== '') {
             $this->einstellungen->setze('onedrive_konto_id', $kontoId);
         }
-        $this->protokoll->schreibe($this->auth->benutzer()?->id, 'onedrive', 1, 'geaendert', ['verbindung' => ['alt' => $vorher, 'neu' => 'verbunden'], 'konto' => ['alt' => $altesKonto !== '' ? $altesKonto : null, 'neu' => $konto]]);
+        $this->protokoll->schreibe($this->auth->benutzer()?->id, 'onedrive', 1, 'geaendert', ['verbindung' => ['alt' => $vorher, 'neu' => 'verbunden'], 'konto' => ['alt' => $altesKonto !== '' ? $altesKonto : null, 'neu' => $konto !== '' ? $konto : null]]);
         $this->session->meldung('erfolg', 'OneDrive ist verbunden' . ($konto !== '' ? ' (' . $konto . ')' : '') . '.');
 
         $u = $this->uebertragung();
@@ -147,6 +152,11 @@ final class OneDriveController
             $this->protokoll->schreibe($this->auth->benutzer()?->id, 'onedrive', 1, 'geaendert', ['zielordner' => ['alt' => $alterZiel['name'] ?? null, 'neu' => null]]);
             $this->session->meldung('warnung', 'Es wurde ein anderes Microsoft-Konto verbunden. Der bisherige Zielordner wurde zurückgesetzt – bitte einen neuen Zielordner wählen.');
             return Response::redirect(url('/admin/onedrive/ordner'));
+        }
+        if ($kontoId === '') {
+            // Ohne Konto-ID lässt sich ein Kontowechsel nicht sicher ausschließen: nichts übertragen, Admin prüft den Zielordner.
+            $this->session->meldung('warnung', 'Das verbundene Microsoft-Konto konnte nicht eindeutig erkannt werden. Bitte prüfen, ob der Zielordner noch stimmt (sonst neu wählen), und danach „Jetzt übertragen“ verwenden.');
+            return Response::redirect(url($u !== null && $u->bereit() ? '/admin/onedrive' : '/admin/onedrive/ordner'));
         }
         if ($u === null || !$u->bereit()) {
             return Response::redirect(url('/admin/onedrive/ordner'));
@@ -323,6 +333,21 @@ final class OneDriveController
         }
         error_log('OneDrive-Verwaltung: ' . $t::class . ': ' . $t->getMessage());
         return $kontext . ' (technischer Fehler). Bitte später erneut versuchen.';
+    }
+
+    /**
+     * Kontowechsel: Sind beide Konto-IDs bekannt, entscheiden sie. Fehlt eine davon, wird ersatzweise der
+     * Kontoname (E-Mail) verglichen (z. B. Installationen, die vor dem Speichern der ID verbunden wurden).
+     */
+    private function kontoGewechselt(string $alteId, string $neueId, string $alterName, string $neuerName): bool
+    {
+        if ($alteId !== '' && $neueId !== '') {
+            return !hash_equals($alteId, $neueId);
+        }
+        if ($alterName !== '' && $neuerName !== '') {
+            return mb_strtolower($alterName) !== mb_strtolower($neuerName);
+        }
+        return false;
     }
 
     /** @return 'fehlt'|'ungueltig'|'gesetzt' */
