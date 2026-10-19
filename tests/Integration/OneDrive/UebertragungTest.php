@@ -342,4 +342,23 @@ final class UebertragungTest extends OneDriveTestCase
         $this->uebertragung()->verarbeite(5, $this->jetzt);
         self::assertSame(0, (int) $this->pdo->query('SELECT COUNT(*) FROM onedrive_auftrag')->fetchColumn());
     }
+
+    public function testTokenEndpunktFehlerStoppiertLaufOhneAuftraegeZuVerlieren(): void
+    {
+        $this->tokens->speichere(['refresh_token' => 'RT', 'access_token' => 'AT', 'ablauf' => time() - 10]);
+        $this->einstellungen->setze('onedrive_ziel', json_encode(['drive_id' => 'D1', 'item_id' => 'ROOT', 'name' => 'EMC']));
+        $a = $this->auftrag($this->dokument());
+        $b = $this->auftrag($this->dokument());
+        (new Auftraege($this->pdo))->neu('loeschen', null, 'IT', $this->jetzt);
+        $this->http->antwort(400, ['error' => 'invalid_client']);
+
+        $r = $this->uebertragung()->verarbeite(5, $this->jetzt);
+
+        self::assertSame(['erledigt' => 0, 'fehler' => 0], $r);
+        self::assertCount(1, $this->http->anfragen, 'Lauf endet nach dem ersten Auftrag');
+        self::assertSame('abgelaufen', $this->tokens->status());
+        self::assertStringContainsString('invalid_client', (string) $this->einstellungen->hole('onedrive_letzter_fehler'));
+        $z = $this->pdo->query('SELECT status, versuche FROM onedrive_auftrag ORDER BY id')->fetchAll(\PDO::FETCH_ASSOC);
+        self::assertSame([['status' => 'wartet', 'versuche' => 0], ['status' => 'wartet', 'versuche' => 0], ['status' => 'wartet', 'versuche' => 0]], $z);
+    }
 }

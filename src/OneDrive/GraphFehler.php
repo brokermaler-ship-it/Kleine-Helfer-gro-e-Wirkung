@@ -13,6 +13,7 @@ final class GraphFehler extends DomainFehler
         public readonly int $httpStatus = 0,
         private readonly bool $abgelaufen = false,
         private readonly ?int $warte = null,
+        private readonly bool $tokenFehler = false,
     ) {
         parent::__construct($meldung);
     }
@@ -27,6 +28,12 @@ final class GraphFehler extends DomainFehler
     public function wiederholbar(): bool
     {
         return !$this->abgelaufen && ($this->httpStatus === 0 || $this->httpStatus === 429 || $this->httpStatus >= 500);
+    }
+
+    /** Stammt vom Token-Endpunkt (Anmeldung/Erneuerung), nicht von einer Datei- oder Ordner-Anfrage. */
+    public function istTokenFehler(): bool
+    {
+        return $this->tokenFehler;
     }
 
     public function warteSekunden(): ?int
@@ -44,5 +51,11 @@ final class GraphFehler extends DomainFehler
             $warte = max(0, $ts - time());
         }
         return new self($kontext . ' (HTTP ' . $a->status . ').', $a->status, false, $warte);
+    }
+
+    public static function ausTokenEndpunkt(HttpAntwort $a, string $kontext): self
+    {
+        $f = self::ausAntwort($a, $kontext);
+        return new self($f->getMessage(), $f->httpStatus, false, $f->warte, true);
     }
 }

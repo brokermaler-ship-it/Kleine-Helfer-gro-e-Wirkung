@@ -98,6 +98,13 @@ final class Uebertragung
                 $this->auftraege->freigeben($id, 'Verbindung abgelaufen', 600, $uhr(), $token);
                 return null;
             }
+            if ($e->istTokenFehler() && !$e->wiederholbar()) {
+                // z. B. invalid_client (abgelaufenes Client-Secret): betrifft alle Aufträge, nicht die einzelne Datei.
+                $this->einstellungen->setze('onedrive_letzter_fehler', mb_substr($e->getMessage(), 0, 300));
+                $this->tokens->setzeStatus(TokenSpeicher::STATUS_ABGELAUFEN);
+                $this->auftraege->freigeben($id, 'Anmeldung bei OneDrive abgelehnt', 600, $uhr(), $token);
+                return null;
+            }
             if (self::dauerhaft($e)) {
                 $this->auftraege->dauerhaftFehlgeschlagen($id, $e->getMessage(), $token);
             } else {

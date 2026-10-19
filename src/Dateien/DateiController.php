@@ -182,6 +182,14 @@ final class DateiController
     private function ausOneDrive(array $dok, array $header): Response
     {
         $temp = tempnam(sys_get_temp_dir(), 'emc_od');
+        if ($temp !== false) {
+            // Bricht der Browser während der Ausgabe ab, bleibt sonst die Temp-Datei liegen.
+            register_shutdown_function(static function () use ($temp): void {
+                if (is_file($temp)) {
+                    @unlink($temp);
+                }
+            });
+        }
         try {
             $ziel = $this->uebertragung?->ziel();
             $item = (string) ($dok['onedrive_item_id'] ?? '');

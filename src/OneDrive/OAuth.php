@@ -70,7 +70,7 @@ final class OAuth
             if (($d['error'] ?? '') === 'invalid_grant') {
                 throw new GraphFehler('Die Verbindung zu OneDrive ist abgelaufen – bitte neu verbinden.', $a->status, true);
             }
-            throw GraphFehler::ausAntwort($a, 'Anmeldung bei Microsoft fehlgeschlagen' . (isset($d['error']) && is_string($d['error']) ? ': ' . $d['error'] : ''));
+            throw GraphFehler::ausTokenEndpunkt($a, 'Anmeldung bei Microsoft fehlgeschlagen' . (isset($d['error']) && is_string($d['error']) ? ': ' . $d['error'] : ''));
         }
         $refresh = (string) ($d['refresh_token'] ?? $alterRefresh ?? '');
         if ($refresh === '') {
