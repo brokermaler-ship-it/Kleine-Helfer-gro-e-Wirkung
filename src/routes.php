@@ -17,6 +17,7 @@ use Emc\Digital\CvController;
 use Emc\Digital\DecoderController;
 use Emc\Digital\FunktionController;
 use Emc\Fahrzeuge\FahrzeugController;
+use Emc\OneDrive\OneDriveController;
 use Emc\Personen\BenutzerController;
 use Emc\Personen\KontoController;
 use Emc\Personen\PersonController;
@@ -110,6 +111,16 @@ return function (Router $router, App $app): void {
     $upd = fn(string $m) => fn(Request $r, array $p = []) => $c->get(UpdateController::class)->$m($r);
     $router->add('GET', '/admin/update', $app->erfordert('betrieb', $upd('zeigen')));
     $router->add('POST', '/admin/update', $app->erfordert('betrieb', $upd('ausfuehren')));
+
+    $od = fn(string $m) => fn(Request $r, array $p = []) => $c->get(OneDriveController::class)->$m($r);
+    $router->add('GET', '/admin/onedrive', $app->erfordert('betrieb', $od('zeigen')));
+    $router->add('POST', '/admin/onedrive/verbinden', $app->erfordert('betrieb', $od('verbinden')));
+    $router->add('GET', '/admin/onedrive/rueckruf', $app->erfordert('betrieb', $od('rueckruf')));
+    $router->add('GET', '/admin/onedrive/ordner', $app->erfordert('betrieb', $od('ordnerZeigen')));
+    $router->add('POST', '/admin/onedrive/ordner', $app->erfordert('betrieb', $od('ordnerSpeichern')));
+    $router->add('POST', '/admin/onedrive/uebertragen', $app->erfordert('betrieb', $od('uebertragen')));
+    $router->add('POST', '/admin/onedrive/umzug', $app->erfordert('betrieb', $od('umzug')));
+    $router->add('POST', '/admin/onedrive/trennen', $app->erfordert('betrieb', $od('trennen')));
 
     if ($app->istTestumgebung()) {
         $test = fn(string $m) => fn(Request $r, array $p = []) => $c->get(TestdatenController::class)->$m($r);

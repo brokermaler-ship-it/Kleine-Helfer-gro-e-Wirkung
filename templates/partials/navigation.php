@@ -33,6 +33,7 @@ use Emc\Auth\Berechtigung;
                 }
                 if ($darf(Berechtigung::BETRIEB)) {
                     $verwaltung['/admin/sicherung'] = 'Sicherung';
+                    $verwaltung['/admin/onedrive'] = 'OneDrive';
                     $verwaltung['/admin/update'] = 'Update';
                     if (!empty($testumgebung)) {
                         $verwaltung['/admin/testdaten'] = 'Testdaten';

@@ -35,6 +35,7 @@ use Emc\OneDrive\Graph;
 use Emc\OneDrive\HttpClient;
 use Emc\OneDrive\Auftraege;
 use Emc\OneDrive\OAuth;
+use Emc\OneDrive\OneDriveController;
 use Emc\OneDrive\TokenSpeicher;
 use Emc\OneDrive\Uebertragung;
 use Emc\Personen\BenutzerController;
@@ -248,6 +249,15 @@ final class App
             $c->get(Migrator::class),
             $c->get('session')
         ));
+        $this->container->set(OneDriveController::class, fn(Container $c) => new OneDriveController(
+            $this->view,
+            $c->get('session'),
+            $c->get(Einstellungen::class),
+            $c->get(Aenderungsprotokoll::class),
+            $c->get(Auth::class),
+            $c,
+            $this->config
+        ));
         $this->container->set(DemoDaten::class, fn() => new DemoDaten($this));
         $this->container->set(TestdatenController::class, fn(Container $c) => new TestdatenController(
             $this->view,
@@ -420,6 +430,12 @@ final class App
             }
             if ($this->container->get(Sicherung::class)->istUeberfaellig(new \DateTimeImmutable())) {
                 $hinweise[] = ['typ' => 'warning', 'text' => 'Die letzte Datensicherung ist älter als 30 Tage.', 'link' => '/admin/sicherung', 'linktext' => 'Sicherung erstellen'];
+            }
+            if (Uebertragung::konfiguriert($this->config)
+                && $this->container->get(Uebertragung::class) !== null
+                && $this->container->get(TokenSpeicher::class)->status() === TokenSpeicher::STATUS_ABGELAUFEN
+            ) {
+                $hinweise[] = ['typ' => 'warning', 'text' => 'Die OneDrive-Verbindung ist abgelaufen. Neue Dateien werden lokal gesammelt – bitte unter Verwaltung › OneDrive neu verbinden.', 'link' => '/admin/onedrive', 'linktext' => 'OneDrive öffnen'];
             }
         } catch (\Throwable) {
             // Hinweise sind nur Beiwerk; bei Datenbankproblemen nicht die ganze Seite verhindern.
