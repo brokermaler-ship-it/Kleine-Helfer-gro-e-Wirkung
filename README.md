@@ -24,12 +24,14 @@ Modell eine Anfrage ab, beantwortet die API sie automatisch mit einem Ausweichmo
 
 ```text
 content/modules/          Lernmodule als YAML (Lernziele, SOP-Text, Wissenscheck)
+content/evals/            Evaluations-Set je Modul (geprüfte Fragen mit Referenzantworten)
 backend/tutor/
   modules.py              Module laden und validieren
   prompts.py              System-Prompt (sokratisch, nur Fakten aus dem Modul)
   tools.py                Tutor-Werkzeuge und Lernprotokoll, unabhängig von LiveKit
   agent.py                LiveKit-Sprach-Agent (Deepgram → Claude → Cartesia)
   textmode.py             Derselbe Tutor im Terminal, nur mit Anthropic-Key
+  evaluation.py           Prüflauf des Evaluations-Sets im Textmodus
   server.py               Web-Server: Browser-Client, Raum-Token, Wissenscheck, Auswertung
 frontend/                 Browser-Client (ohne Build-Schritt)
 docker-compose.yml        Lokaler LiveKit-Server
@@ -64,6 +66,29 @@ python -m tutor.textmode phishing-melden
 ```
 
 Tests: `cd backend && pytest`
+
+## Evaluations-Set
+
+Zu jedem Modul gehört unter `content/evals/` ein Satz geprüfter Fragen mit
+Referenzantworten (20–30 Fälle). Der Prüflauf stellt jede Frage in einem frischen
+Gespräch an den Tutor im Textmodus und lässt die Antwort von Claude gegen die Referenz
+bewerten. Er braucht nur den Anthropic-Key:
+
+```bash
+python -m tutor.evaluation phishing-melden            # alle Fälle
+python -m tutor.evaluation phishing-melden --only e12 # einzelne Fälle
+```
+
+Es gibt drei Arten von Fällen: `fakt` (Kernaussage stimmt, nichts dazuerfunden),
+`ausserhalb` (Material sagt nichts dazu, Tutor bleibt ehrlich) und `korrektur` (falsche
+Annahme wird eindeutig korrigiert). Unter `forbidden` stehen Begriffe, die nie in der
+Antwort vorkommen dürfen, etwa eine falsche Durchwahl. Der Lauf endet mit Exit-Code 1,
+sobald ein Fall scheitert, und schreibt einen Bericht nach `data/evals/`. Das
+Prüfmodell lässt sich mit `TUTOR_EVAL_JUDGE_MODEL` wechseln.
+
+Die Fälle zum Beispielmodul sind ebenfalls Beispielinhalt. Bei einer echten SOP gibt die
+Fachabteilung die Fälle zusammen mit dem Modul frei; `module_version` im Evaluations-Set
+muss zum Modulstand passen.
 
 > Hinweis: Hinter einem HTTP-Proxy ignoriert der Agent beim Verbindungsaufbau zu LiveKit
 > die `NO_PROXY`-Liste. Für einen lokalen LiveKit-Server dann `HTTPS_PROXY` für den

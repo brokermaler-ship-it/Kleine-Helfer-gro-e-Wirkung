@@ -161,6 +161,7 @@ Für clientseitige Audiosignale (Earcons), sobald RAG-Suchen Wartezeiten erzeuge
 ├── PROJECT.md                     # diese Spezifikation
 ├── README.md                      # Einrichtung und Pilotablauf
 ├── content/modules/               # Lernmodule (YAML: Lernziele, SOP-Text, Wissenscheck)
+├── content/evals/                 # Evaluations-Set je Modul (Fragen mit Referenzantworten)
 ├── backend/
 │   ├── pyproject.toml
 │   ├── tutor/
@@ -170,7 +171,8 @@ Für clientseitige Audiosignale (Earcons), sobald RAG-Suchen Wartezeiten erzeuge
 │   │   ├── prompts.py             # Sokratischer System-Prompt
 │   │   ├── tools.py               # Tutor-Werkzeuge, Lernprotokoll, Topic-Namen
 │   │   ├── server.py              # Token, Wissenscheck, Pilot-Auswertung, Frontend
-│   │   └── textmode.py            # Tutor im Terminal
+│   │   ├── textmode.py            # Tutor im Terminal
+│   │   └── evaluation.py          # Prüflauf des Evaluations-Sets
 │   └── tests/
 ├── frontend/                      # Browser-Client (index.html, app.js, styles.css)
 ├── docker-compose.yml             # Lokaler LiveKit-Server
@@ -201,7 +203,7 @@ Prototyp  ──>  Echter Test  ──>  Freigaben  ──>  Pilot (20–30 Pers
 *   Accounts anlegen (Abschnitt 10), Keys hinterlegen, deutsche Cartesia-Stimme wählen.
 *   5–10 Testgespräche im Projektteam. Prüfen: Turn-Erkennung bei Nachdenkpausen, Natürlichkeit der Stimme, `e2e_latency`, Werkzeugaufrufe, Treue zum Material.
 *   Endpointing-Parameter (`TUTOR_ENDPOINTING_MIN_DELAY`/`MAX_DELAY`) und Prompt anhand der Gespräche feinjustieren.
-*   Evaluations-Set aufbauen: 20–30 geprüfte Fragen mit erwarteten Antworten je Modul, automatisiert im Textmodus abprüfbar.
+*   Evaluations-Set: Format und Prüflauf sind gebaut (`python -m tutor.evaluation <modul>`, 24 Fälle zum Beispielmodul). Offen: ersten Lauf mit echtem Key auswerten und Fälle für jede echte SOP mit der Fachabteilung erstellen.
 
 ### Phase 2: Freigaben und Inhalte (parallel zu Phase 1, 3–6 Wochen)
 
