@@ -140,6 +140,8 @@ final class OneDriveHttpTest extends OneDriveTestCase
         $this->einstellungen->setze('onedrive_konto', 'alt@outlook.de');
         $this->einstellungen->setze('onedrive_konto_id', 'ID-ALT');
         $dok = $this->dokument();
+        $uebertragen = $this->dokument();
+        $this->pdo->exec("UPDATE dokument SET ablage = 'onedrive', onedrive_item_id = 'X' WHERE id = $uebertragen");
         $this->pdo->prepare("INSERT INTO onedrive_auftrag (art, dokument_id, naechster_versuch) VALUES ('hochladen', ?, NOW())")->execute([$dok]);
         $this->sitzung['onedrive_state'] = str_repeat('a', 64);
         $this->http->antwort(200, ['access_token' => 'AT', 'refresh_token' => 'RT', 'expires_in' => 3600]);
@@ -150,6 +152,7 @@ final class OneDriveHttpTest extends OneDriveTestCase
         self::assertSame('ID-NEU', $this->einstellungen->hole('onedrive_konto_id'));
         self::assertCount(2, $this->http->anfragen, 'keine Übertragung nach Kontowechsel');
         self::assertSame('lokal', $this->dok($dok)['ablage']);
+        self::assertSame('D1', $this->dok($uebertragen)['onedrive_drive_id'], 'Laufwerk des alten Zielordners bleibt gemerkt');
         self::assertStringContainsString('anderes Microsoft-Konto', implode(' ', $this->meldungen()));
         $n = (int) $this->pdo->query("SELECT COUNT(*) FROM aenderungsprotokoll WHERE objekt_typ = 'onedrive' AND aenderungen LIKE '%zielordner%'")->fetchColumn();
         self::assertSame(1, $n);
@@ -604,5 +607,83 @@ final class OneDriveHttpTest extends OneDriveTestCase
         self::assertStringContainsString('/admin/onedrive', $this->get('/fahrzeuge')->body);
         $this->alsRolle('bearbeiter');
         self::assertStringNotContainsString('/admin/onedrive', $this->get('/fahrzeuge')->body);
+    }
+
+    public function testHinweisleisteBeiAuftraegenAelterAlsEineStunde(): void
+    {
+        $this->verbinde();
+        $this->pdo->exec("INSERT INTO onedrive_auftrag (art, dokument_id, naechster_versuch) VALUES ('hochladen', 1, NOW())");
+        self::assertStringNotContainsString('seit über einer Stunde', $this->get('/fahrzeuge')->body, 'frischer Auftrag: kein Hinweis');
+        $this->pdo->exec('UPDATE onedrive_auftrag SET erstellt_am = NOW() - INTERVAL 2 HOUR');
+        $body = $this->get('/fahrzeuge')->body;
+        self::assertStringContainsString('1 OneDrive-Auftrag wartet seit über einer Stunde. Ohne Cronjob bitte unter Verwaltung › OneDrive „Jetzt übertragen“ klicken.', $body);
+        $this->tokens->loesche();
+        self::assertStringContainsString('OneDrive ist getrennt – bitte unter Verwaltung › OneDrive verbinden.', $this->get('/fahrzeuge')->body);
+        $this->alsRolle('bearbeiter');
+        self::assertStringNotContainsString('seit über einer Stunde', $this->get('/fahrzeuge')->body);
+    }
+
+    public function testOrdnerauswahlWarntBeiAnderemLaufwerk(): void
+    {
+        $this->verbinde();
+        $id = $this->dokument();
+        $this->pdo->exec("UPDATE dokument SET ablage = 'onedrive', onedrive_item_id = 'X', onedrive_drive_id = 'D1' WHERE id = $id");
+        $this->http->antwort(200, ['value' => [
+            ['id' => 'F1', 'name' => 'Gleiches Laufwerk', 'folder' => [], 'parentReference' => ['driveId' => 'D1']],
+            ['id' => 'F2', 'name' => 'Freigegeben', 'folder' => [], 'parentReference' => ['driveId' => 'D2']],
+        ]]);
+        $this->http->antwort(200, ['value' => []]);
+        $body = $this->get('/admin/onedrive/ordner')->body;
+        self::assertSame(1, substr_count($body, '1 bereits übertragene Datei liegt in einem anderen OneDrive als der gewählte Ordner und bleibt im bisherigen Ordner.'));
+    }
+
+    public function testZielwechselAufAnderesLaufwerkWarntUndBehaeltLaufwerkDerAltdateien(): void
+    {
+        $this->verbinde();
+        $id = $this->dokument();
+        $this->pdo->exec("UPDATE dokument SET ablage = 'onedrive', onedrive_item_id = 'X' WHERE id = $id");
+        $this->http->antwort(200, ['value' => [['id' => 'F2', 'name' => 'Freigegeben', 'folder' => [], 'parentReference' => ['driveId' => 'D2']]]]);
+        $this->http->antwort(200, ['value' => []]);
+        $this->post('/admin/onedrive/ordner', ['drive_id' => 'D2', 'item_id' => 'F2']);
+        self::assertSame('D2', json_decode((string) $this->einstellungen->hole('onedrive_ziel'), true)['drive_id']);
+        self::assertSame('D1', $this->dok($id)['onedrive_drive_id'], 'altes Laufwerk festgeschrieben');
+        self::assertContains(\Emc\OneDrive\OneDriveController::laufwerkWarnung(1), $this->meldungen());
+    }
+
+    public function testZielwechselImGleichenLaufwerkOhneWarnung(): void
+    {
+        $this->verbinde();
+        $id = $this->dokument();
+        $this->pdo->exec("UPDATE dokument SET ablage = 'onedrive', onedrive_item_id = 'X', onedrive_drive_id = 'D1' WHERE id = $id");
+        $this->http->antwort(200, ['value' => [['id' => 'F3', 'name' => 'Anderer Ordner', 'folder' => [], 'parentReference' => ['driveId' => 'D1']]]]);
+        $this->http->antwort(200, ['value' => []]);
+        $this->post('/admin/onedrive/ordner', ['drive_id' => 'D1', 'item_id' => 'F3']);
+        self::assertNotContains(\Emc\OneDrive\OneDriveController::laufwerkWarnung(1), $this->meldungen());
+    }
+
+    public function testUmzugSetztFehlgeschlageneLoeschauftraegeZurueck(): void
+    {
+        $this->verbinde();
+        $this->pdo->exec("INSERT INTO onedrive_auftrag (art, item_id, drive_id, status, versuche, naechster_versuch) VALUES ('loeschen', 'L1', 'D0', 'fehler', 20, NOW())");
+        $this->http->antwort(204);
+        $this->post('/admin/onedrive/umzug');
+        self::assertContains('0 Dateien zum Umzug vorgemerkt. 1 fehlgeschlagener Löschauftrag wird erneut versucht.', $this->meldungen());
+        self::assertSame('erledigt', $this->pdo->query('SELECT status FROM onedrive_auftrag')->fetchColumn());
+        self::assertStringEndsWith('/drives/D0/items/L1', end($this->http->anfragen)['url']);
+    }
+
+    public function testTrennenTexteBeschreibenDasVerhalten(): void
+    {
+        $this->verbinde();
+        self::assertStringContainsString('Neue Dateien und Löschungen werden gesammelt und erst nach dem erneuten Verbinden übertragen.', $this->get('/admin/onedrive')->body);
+        $this->post('/admin/onedrive/trennen');
+        self::assertContains('OneDrive wurde getrennt. Bereits übertragene Dateien bleiben im OneDrive. Neue Dateien und Löschungen werden gesammelt und nach dem erneuten Verbinden übertragen.', $this->meldungen());
+    }
+
+    public function testSeiteVerwendetBegriffUmleitungsUri(): void
+    {
+        $body = $this->get('/admin/onedrive', [], false)->body;
+        self::assertStringContainsString('Umleitungs-URI', $body);
+        self::assertStringNotContainsString('Weiterleitungs-URI', $body);
     }
 }

@@ -17,12 +17,40 @@ final class Auftraege
     {
     }
 
-    public function neu(string $art, ?int $dokumentId, ?string $itemId, ?\DateTimeImmutable $jetzt = null): int
+    /** $driveId: Laufwerk der zu löschenden Datei (null = Laufwerk des aktuellen Zielordners). */
+    public function neu(string $art, ?int $dokumentId, ?string $itemId, ?\DateTimeImmutable $jetzt = null, ?string $driveId = null): int
     {
         $jetzt ??= new \DateTimeImmutable();
-        $this->pdo->prepare('INSERT INTO onedrive_auftrag (art, dokument_id, item_id, naechster_versuch) VALUES (?, ?, ?, ?)')
-            ->execute([$art, $dokumentId, $itemId, $jetzt->format(self::FORMAT)]);
+        $driveId = $driveId === '' ? null : $driveId;
+        if ($driveId === null) {
+            // Ohne Laufwerk die Spalte weglassen: so funktioniert das auch noch vor Migration 007.
+            $this->pdo->prepare('INSERT INTO onedrive_auftrag (art, dokument_id, item_id, naechster_versuch) VALUES (?, ?, ?, ?)')
+                ->execute([$art, $dokumentId, $itemId, $jetzt->format(self::FORMAT)]);
+        } else {
+            $this->pdo->prepare('INSERT INTO onedrive_auftrag (art, dokument_id, item_id, drive_id, naechster_versuch) VALUES (?, ?, ?, ?, ?)')
+                ->execute([$art, $dokumentId, $itemId, $driveId, $jetzt->format(self::FORMAT)]);
+        }
         return (int) $this->pdo->lastInsertId();
+    }
+
+    /** Setzt dauerhaft fehlgeschlagene Lösch-Aufträge zurück, damit sie erneut versucht werden. */
+    public function loeschFehlerZuruecksetzen(?\DateTimeImmutable $jetzt = null): int
+    {
+        $jetzt ??= new \DateTimeImmutable();
+        $st = $this->pdo->prepare(
+            "UPDATE onedrive_auftrag SET status = 'wartet', versuche = 0, naechster_versuch = ?, gesperrt_bis = NULL, sperr_token = NULL "
+            . "WHERE art = 'loeschen' AND status = 'fehler'"
+        );
+        $st->execute([$jetzt->format(self::FORMAT)]);
+        return $st->rowCount();
+    }
+
+    /** Anzahl der Aufträge, die seit mehr als $minuten Minuten auf ihre Übertragung warten (Datenbankzeit). */
+    public function wartenLaengerAls(int $minuten): int
+    {
+        $st = $this->pdo->prepare("SELECT COUNT(*) FROM onedrive_auftrag WHERE status = 'wartet' AND erstellt_am < NOW() - INTERVAL ? MINUTE");
+        $st->execute([max(1, $minuten)]);
+        return (int) $st->fetchColumn();
     }
 
     /**

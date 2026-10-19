@@ -1,6 +1,8 @@
 <?php
 /** @var list<array{drive_id:string,item_id:string,name:string,geteilt:bool}> $ordner */
 /** @var ?string $fehler */ /** @var ?array{drive_id:string,item_id:string} $eltern */
+/** @var array<string,int> $ausserhalb übertragene Dateien außerhalb des Laufwerks des jeweiligen Ordners */
+$ausserhalb ??= [];
 ?>
 <h1 class="h3 mb-3">OneDrive-Zielordner wählen</h1>
 <p class="mb-3">
@@ -15,7 +17,11 @@
     <ul class="list-group">
         <?php foreach ($ordner as $o): ?>
             <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
-                <span><?= e($o['name']) ?><?= $o['geteilt'] ? ' <span class="badge text-bg-info">geteilt</span>' : '' ?></span>
+                <span><?= e($o['name']) ?><?= $o['geteilt'] ? ' <span class="badge text-bg-info">geteilt</span>' : '' ?>
+                    <?php if (($ausserhalb[$o['drive_id']] ?? 0) > 0): ?>
+                        <br><small class="text-warning-emphasis"><?= e(\Emc\OneDrive\OneDriveController::laufwerkWarnung($ausserhalb[$o['drive_id']])) ?></small>
+                    <?php endif; ?>
+                </span>
                 <span class="d-flex gap-2">
                     <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/admin/onedrive/ordner', ['drive' => $o['drive_id'], 'item' => $o['item_id']])) ?>">Öffnen</a>
                     <form method="post" action="<?= e(url('/admin/onedrive/ordner')) ?>">

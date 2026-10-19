@@ -53,7 +53,7 @@ abstract class OneDriveTestCase extends DbTestCase
         }
     }
 
-    protected function uebertragung(bool $behalten = false): Uebertragung
+    protected function uebertragung(bool $behalten = false, ?float $zeitbudget = null, ?\Closure $uhr = null): Uebertragung
     {
         $graph = new Graph($this->http, new OAuth($this->http, 'cid', 'sec', 'https://x.de/r'), $this->tokens, 20);
         return new Uebertragung(
@@ -64,7 +64,9 @@ abstract class OneDriveTestCase extends DbTestCase
             new DokumentRepository($this->pdo, $this->speicher, new Auftraege($this->pdo)),
             $this->pdo,
             $this->speicher,
-            $behalten
+            $behalten,
+            $zeitbudget,
+            $uhr
         );
     }
 

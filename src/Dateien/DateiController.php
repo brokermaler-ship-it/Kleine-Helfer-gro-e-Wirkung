@@ -191,12 +191,13 @@ final class DateiController
             });
         }
         try {
-            $ziel = $this->uebertragung?->ziel();
+            // Laufwerk der Datei selbst (beim Hochladen gemerkt), nicht zwingend das des aktuellen Zielordners.
+            $drive = $this->uebertragung?->laufwerkFuer($dok);
             $item = (string) ($dok['onedrive_item_id'] ?? '');
-            if ($temp === false || $this->graph === null || $ziel === null || $item === '') {
+            if ($temp === false || $this->graph === null || $drive === null || $item === '') {
                 throw new GraphFehler('OneDrive ist nicht eingerichtet.');
             }
-            $this->graph->inhaltNachDatei($ziel['drive_id'], $item, $temp);
+            $this->graph->inhaltNachDatei($drive, $item, $temp);
             return Response::datei($temp, $header, true);
         } catch (\Throwable $t) {
             if ($temp !== false) {
@@ -208,16 +209,10 @@ final class DateiController
         }
     }
 
-    /** Führt offene Löschaufträge nebenbei aus; Fehler bleiben unsichtbar, der Auftrag wird später wiederholt. */
+    /** Führt offene Lösch- und weitere fällige Aufträge nebenbei aus; Fehler bleiben unsichtbar, Aufträge werden später wiederholt. */
     private function raeumeOneDriveAuf(): void
     {
-        try {
-            if ($this->uebertragung !== null && $this->uebertragung->aktiv()) {
-                $this->uebertragung->verarbeite(3, null, null, 'loeschen');
-            }
-        } catch (\Throwable $t) {
-            error_log('OneDrive-Aufräumen fehlgeschlagen: ' . $t::class);
-        }
+        $this->uebertragung?->nebenbei();
     }
 
     /**

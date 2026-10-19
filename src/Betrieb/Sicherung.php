@@ -70,7 +70,12 @@ final class Sicherung
      */
     public function nurImOneDrive(): array
     {
-        $anzahl = (int) $this->pdo->query("SELECT COUNT(*) FROM dokument WHERE ablage = 'onedrive' AND original_lokal = 0")->fetchColumn();
+        try {
+            $anzahl = (int) $this->pdo->query("SELECT COUNT(*) FROM dokument WHERE ablage = 'onedrive' AND original_lokal = 0")->fetchColumn();
+        } catch (\PDOException) {
+            // Datenbank-Update (Migration 004) noch nicht ausgeführt: dann liegt auch noch nichts nur im OneDrive.
+            return ['anzahl' => 0, 'ziel' => ''];
+        }
         $ziel = json_decode((string) $this->einstellungen->hole('onedrive_ziel'), true);
         return ['anzahl' => $anzahl, 'ziel' => is_array($ziel) ? (string) ($ziel['name'] ?? '') : ''];
     }

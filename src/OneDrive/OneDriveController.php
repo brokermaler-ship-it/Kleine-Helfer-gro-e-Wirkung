@@ -148,6 +148,8 @@ final class OneDriveController
         if ($kontoGewechselt) {
             // Anderes Microsoft-Konto: der alte Zielordner gehört dem alten Konto und darf nicht weiterverwendet werden.
             $alterZiel = $u?->ziel();
+            // Bereits übertragene Dateien behalten ihr Laufwerk (erreichbar, solange das neue Konto Zugriff darauf hat).
+            $u?->laufwerkFestschreiben();
             $this->einstellungen->setze('onedrive_ziel', '');
             $this->protokoll->schreibe($this->auth->benutzer()?->id, 'onedrive', 1, 'geaendert', ['zielordner' => ['alt' => $alterZiel['name'] ?? null, 'neu' => null]]);
             $this->session->meldung('warnung', 'Es wurde ein anderes Microsoft-Konto verbunden. Der bisherige Zielordner wurde zurückgesetzt – bitte einen neuen Zielordner wählen.');
@@ -185,9 +187,16 @@ final class OneDriveController
         } catch (\Throwable $t) {
             $fehler = $this->graphMeldung($t, 'Die Ordnerliste konnte nicht geladen werden');
         }
+        // Warnung je Ordner: übertragene Dateien, die in einem anderen OneDrive-Laufwerk liegen und dort bleiben.
+        $ausserhalb = [];
+        $u = $this->uebertragung();
+        foreach ($ordner as $o) {
+            $ausserhalb[$o['drive_id']] ??= $u?->dateienAusserhalb($o['drive_id']) ?? 0;
+        }
         return $this->html('admin/onedrive_ordner', [
             'titel' => 'OneDrive-Ordner wählen',
             'ordner' => $ordner,
+            'ausserhalb' => $ausserhalb,
             'fehler' => $fehler,
             'eltern' => $drive === null ? null : ['drive_id' => $drive, 'item_id' => $item],
         ]);
@@ -225,6 +234,8 @@ final class OneDriveController
             return $this->zurueck('fehler', 'Der gewählte Ordner wurde in OneDrive nicht gefunden. Bitte erneut auswählen.', '/admin/onedrive/ordner');
         }
         $alt = $u->ziel();
+        // Ältere Einträge ohne gemerktes Laufwerk auf das bisherige festlegen, bevor sich der Zielordner ändert.
+        $u->laufwerkFestschreiben();
         $this->einstellungen->setze('onedrive_ziel', json_encode(
             ['drive_id' => $gewaehlt['drive_id'], 'item_id' => $gewaehlt['item_id'], 'name' => $gewaehlt['name']],
             JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR
@@ -233,6 +244,10 @@ final class OneDriveController
             'zielordner' => ['alt' => $alt['name'] ?? null, 'neu' => $gewaehlt['name']],
         ]);
         $this->session->meldung('erfolg', 'Zielordner „' . $gewaehlt['name'] . '“ gespeichert.');
+        $anderes = $u->dateienAusserhalb($gewaehlt['drive_id']);
+        if ($anderes > 0) {
+            $this->session->meldung('warnung', self::laufwerkWarnung($anderes));
+        }
         try {
             $u->verarbeite(self::STAPEL_WEB);
         } catch (\Throwable $t) {
@@ -269,7 +284,9 @@ final class OneDriveController
         }
         try {
             $n = $u->umzug();
-            $this->session->meldung('erfolg', $n === 1 ? '1 Datei zum Umzug vorgemerkt.' : $n . ' Dateien zum Umzug vorgemerkt.');
+            $l = $u->loeschFehlerZuruecksetzen();
+            $this->session->meldung('erfolg', ($n === 1 ? '1 Datei zum Umzug vorgemerkt.' : $n . ' Dateien zum Umzug vorgemerkt.')
+                . ($l > 0 ? ' ' . ($l === 1 ? '1 fehlgeschlagener Löschauftrag wird' : $l . ' fehlgeschlagene Löschaufträge werden') . ' erneut versucht.' : ''));
             $u->verarbeite(self::STAPEL_WEB);
         } catch (\Throwable $t) {
             $this->session->meldung('fehler', $this->graphMeldung($t, 'Die Übertragung ist fehlgeschlagen'));
@@ -287,8 +304,16 @@ final class OneDriveController
         $this->tokens()->loesche();
         $this->einstellungen->setze('onedrive_konto', '');
         $this->protokoll->schreibe($this->auth->benutzer()?->id, 'onedrive', 1, 'geaendert', ['verbindung' => ['alt' => $vorher, 'neu' => 'getrennt'], 'konto' => ['alt' => $konto, 'neu' => null]]);
-        $this->session->meldung('erfolg', 'OneDrive wurde getrennt. Bereits übertragene Dateien bleiben im OneDrive; lokal vorhandene Dateien bleiben erhalten.');
+        $this->session->meldung('erfolg', 'OneDrive wurde getrennt. Bereits übertragene Dateien bleiben im OneDrive. Neue Dateien und Löschungen werden gesammelt und nach dem erneuten Verbinden übertragen.');
         return Response::redirect(url('/admin/onedrive'));
+    }
+
+    /** Warnung, wenn übertragene Dateien in einem anderen Laufwerk als dem neuen Zielordner liegen. */
+    public static function laufwerkWarnung(int $anzahl): string
+    {
+        return ($anzahl === 1 ? '1 bereits übertragene Datei liegt' : $anzahl . ' bereits übertragene Dateien liegen')
+            . ' in einem anderen OneDrive als der gewählte Ordner und ' . ($anzahl === 1 ? 'bleibt' : 'bleiben') . ' im bisherigen Ordner. '
+            . 'Sie sind über die Anwendung weiter abrufbar, solange das verbundene Microsoft-Konto Zugriff auf den bisherigen Ordner hat.';
     }
 
     /** Konfiguration vollständig und Schlüssel brauchbar (dann liefert der Container eine Übertragung). */

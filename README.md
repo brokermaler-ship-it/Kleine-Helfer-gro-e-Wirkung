@@ -16,6 +16,8 @@ Beim Update auf 0.2.0 muss nach dem Hochladen der neuen Dateien einmal im Verwal
 
 Version 0.3.0 bringt die freiwillige OneDrive-Ablage (siehe „OneDrive anbinden“). Beim Update auf 0.3.0 unter **Verwaltung → Update** einmal „Datenbank jetzt aktualisieren“ wählen; dabei laufen die Migrationen `004_onedrive`, `005_onedrive_auftrag_sperre` und `006_onedrive_sperr_token_index`. Ohne OneDrive-Einträge in der `config.php` ändert sich sonst nichts.
 
+Version 0.3.1 verbessert die OneDrive-Ablage: Jede übertragene Datei merkt sich, in welchem OneDrive sie liegt (sie bleibt auch nach einem Wechsel des Zielordners abrufbar und löschbar), liegen gebliebene Übertragungen werden auch ohne Cronjob nebenbei nachgeholt, und der Cronjob läuft auch, wenn der Hoster PHP dafür als `php-cgi` startet (in 0.3.0 brach `bin/onedrive-sync.php` mit einem Syntaxfehler ab). Beim Update auf 0.3.1 unter **Verwaltung → Update** einmal „Datenbank jetzt aktualisieren“ wählen; dabei läuft die Migration `007_onedrive_laufwerk`. Wer direkt von 0.2.x kommt, bekommt 004–007 in einem Schritt.
+
 ## Voraussetzungen
 
 - PHP ab Version 8.2 mit den Erweiterungen `pdo_mysql`, `mbstring`, `gd`, `fileinfo` und `zip`, für die OneDrive-Ablage zusätzlich `curl` und `openssl`
@@ -87,6 +89,11 @@ Anmeldungen gelten nur für die Instanz, an der man sich angemeldet hat: Echtbet
 
 `testumgebung` im Echtbetrieb **nie** auf `true` setzen; Testdaten-Seite und Test-Zugänge sind dort bewusst nicht vorhanden.
 
+**OneDrive in der Testinstanz:**
+
+- „Beispieldaten neu laden“ trennt OneDrive in der Testinstanz (Verbindung und Zielordner werden mit gelöscht) und löscht nur die Dateien auf dem Webspace der Testinstanz. Testdateien, die schon in den **Testordner** übertragen wurden, bleiben dort liegen; bei Bedarf im OneDrive von Hand löschen. Danach in der Testinstanz neu verbinden und wieder den Testordner wählen.
+- **Nie eine Sicherung des Echtbetriebs in die Testinstanz einspielen, solange die Testinstanz mit dem Vereinskonto verbunden ist** oder danach verbunden wird. Die Sicherung enthält den Zielordner des Echtbetriebs und die Kennungen der echten Vereinsdateien; würde die Testinstanz dann mit dem Vereinskonto verbunden, könnte das Löschen von Testfahrzeugen **echte Dateien im Vereinsordner löschen**. Ist es doch passiert: in der Testinstanz sofort unter **Verwaltung → OneDrive** auf **„Trennen“** klicken, vor dem nächsten Verbinden **einen eigenen Testordner** als Zielordner wählen und die eingespielten Fahrzeuge nicht löschen, sondern mit „Beispieldaten neu laden“ ersetzen.
+
 ## Auf dem Handy installieren
 
 Die Anwendung lässt sich wie eine App auf den Startbildschirm legen (sie öffnet dann ohne Adresszeile). Sie benötigt weiterhin eine Internetverbindung, damit die Daten aktuell sind.
@@ -144,6 +151,8 @@ Die ZIP-Datei bitte an einem sicheren Ort außerhalb des Webspace aufbewahren. I
 4. Den Ordner `dateien` aus dem entpackten ZIP per FTP **in den Ordner `storage/` hinein** hochladen, sodass z. B. `storage/dateien/2026/…` entsteht (nicht `storage/dateien/dateien/…`).
 5. Die Anwendung aufrufen und wie gewohnt anmelden.
 
+Eine Sicherung des Echtbetriebs **nie in die Testinstanz** einspielen, solange dort OneDrive mit dem Vereinskonto verbunden ist (siehe „Testumgebung“: sonst können echte Vereinsdateien gelöscht werden). Ist es doch geschehen, in der Testinstanz sofort **„Trennen“** klicken und vor dem nächsten Verbinden einen eigenen Testordner wählen.
+
 ## OneDrive anbinden
 
 Fotos und Dokumente können zusätzlich im OneDrive des Vereins abgelegt werden, lesbar sortiert nach Fahrzeug: `Fahrzeuge/<Inventarnummer> <Bezeichnung>/<Titel>.<Endung>`, Dokumente ohne Fahrzeug unter `Sonstiges/`. Die Anbindung ist **freiwillig**: Ohne sie arbeitet die Anwendung wie bisher und speichert alles nur auf dem Webspace. Vorschaubilder bleiben immer auf dem Webspace, damit Listen und Fotos schnell laden.
@@ -187,7 +196,7 @@ Damit die Anwendung im Namen des Vereinskontos Dateien ablegen darf, wird sie ei
 
    „Berechtigungen hinzufügen“ klicken. Eine Administratorzustimmung ist bei persönlichen Konten nicht nötig; die Zustimmung erfolgt beim Verbinden.
 
-**Testumgebung:** Die Testinstanz hat eine eigene Rückruf-URL (`https://test.emc78.de/admin/onedrive/rueckruf`). Entweder eine **zweite App-Registrierung** für die Testinstanz anlegen (empfohlen, mit eigenem Testordner) oder bei derselben App unter **„Authentifizierung“** beide Umleitungs-URIs eintragen. Die Testinstanz sollte nie den echten Vereinsordner als Zielordner verwenden.
+**Testumgebung:** Die Testinstanz hat eine eigene Rückruf-URL (`https://test.emc78.de/admin/onedrive/rueckruf`). Entweder eine **zweite App-Registrierung** für die Testinstanz anlegen (empfohlen, mit eigenem Testordner) oder bei derselben App unter **„Authentifizierung“** beide Umleitungs-URIs eintragen. Die Testinstanz sollte nie den echten Vereinsordner als Zielordner verwenden und nie mit einer eingespielten Sicherung des Echtbetriebs verbunden werden (siehe „Testumgebung“).
 
 ### 4. `config.php` ergänzen (Administrator)
 
@@ -231,11 +240,11 @@ Nach dem ersten Verbinden öffnet sich die Ordnerauswahl (später über **„Zie
 
 ### 7. Vorhandene Dateien umziehen (Administrator)
 
-Fotos und Dokumente, die schon vor der Anbindung hochgeladen wurden, liegen nur auf dem Webspace. Mit **„Vorhandene Dateien nach OneDrive umziehen“** werden sie alle für die Übertragung vorgemerkt. Pro Klick werden nur wenige Dateien gleich übertragen, damit die Seite nicht hängt; den Rest erledigt der Cronjob (Schritt 8) oder wiederholtes Klicken auf **„Jetzt übertragen“**. Der Zähler „wartet“ zeigt, wie viele noch offen sind. Der Knopf kann gefahrlos mehrfach gedrückt werden; nichts wird doppelt übertragen.
+Fotos und Dokumente, die schon vor der Anbindung hochgeladen wurden, liegen nur auf dem Webspace. Mit **„Vorhandene Dateien nach OneDrive umziehen“** werden sie alle für die Übertragung vorgemerkt. Pro Klick werden nur wenige Dateien gleich übertragen, damit die Seite nicht hängt; den Rest erledigt der Cronjob (Schritt 8) oder wiederholtes Klicken auf **„Jetzt übertragen“**. Der Zähler „wartet“ zeigt, wie viele noch offen sind. Der Knopf kann gefahrlos mehrfach gedrückt werden; nichts wird doppelt übertragen. Er setzt außerdem **fehlgeschlagene Löschaufträge** (Status „Fehler“) zurück, sodass sie erneut versucht werden.
 
 ### 8. Optional: automatische Übertragung per Cronjob
 
-Ohne Cronjob werden Dateien beim Hochladen und bei Klicks auf „Jetzt übertragen“ übertragen. Ein Cronjob holt außerdem alles automatisch nach, was wegen einer Störung liegen geblieben ist. Empfohlen: **alle 15 Minuten**
+Ohne Cronjob werden Dateien beim Hochladen und bei Klicks auf „Jetzt übertragen“ übertragen. Außerdem erledigt die Anwendung bei jedem erfolgreichen Hochladen und nach dem Löschen einer Datei oder eines Fahrzeugs nebenbei bis zu zwei weitere liegen gebliebene Aufträge. Wartet ein Auftrag länger als eine Stunde, zeigt die Anwendung den Administratoren oben einen Hinweis. Ein Cronjob holt alles zuverlässig und ohne Zutun nach, was wegen einer Störung liegen geblieben ist. Empfohlen: **alle 15 Minuten**
 
 ```bash
 php bin/onedrive-sync.php
@@ -244,11 +253,11 @@ php bin/onedrive-sync.php
 - **STRATO:** Im Kundenbereich (sinngemäß „Datenbanken und Webspace“ → „Cronjob-Verwaltung“ bzw. „Cronjobs“; nicht in jedem Paket enthalten) einen neuen Cronjob anlegen: als Skript `/mitglieder/bin/onedrive-sync.php` angeben, eine **PHP-Version ab 8.2** wählen und als Intervall alle 15 Minuten (oder das kleinste angebotene Intervall) einstellen. Für die Testinstanz entsprechend `/test/bin/onedrive-sync.php`.
 - **Mit SSH/crontab:** `*/15 * * * * php /pfad/zu/mitglieder/bin/onedrive-sync.php`
 
-Das Skript ist nur über die Kommandozeile bzw. den Cronjob ausführbar, nicht über den Browser. Läuft es gleichzeitig mit einem Klick auf „Jetzt übertragen“, wird trotzdem nichts doppelt übertragen.
+Das Skript liegt außerhalb von `public/` und ist nicht über den Browser erreichbar; es arbeitet nur, wenn es ohne Web-Anfrage gestartet wird (Kommandozeile, Cronjob – auch wenn der Hoster PHP dafür als `php-cgi` startet). Läuft es gleichzeitig mit einem Klick auf „Jetzt übertragen“, wird trotzdem nichts doppelt übertragen. **Kontrolle:** In der Ausgabe bzw. im Protokoll des Cronjobs muss nach dem ersten Lauf eine Zeile wie `OneDrive: 0 übertragen, 0 fehlgeschlagen; offen: 0, dauerhaft fehlerhaft: 0` oder `OneDrive ist nicht verbunden oder nicht eingerichtet; nichts zu tun.` stehen. Steht dort nichts oder eine Fehlermeldung, läuft der Cronjob nicht richtig (PHP-Version und Pfad prüfen).
 
 ### Verhalten bei Störungen
 
-- **OneDrive kurz nicht erreichbar oder überlastet:** Nichts geht verloren. Die Datei ist bereits auf dem Webspace gespeichert und wartet in der **Warteschlange**. Neue Versuche folgen nach 1, 5, 30 und 120 Minuten, danach stündlich (per Cronjob oder Klick). Nach 20 erfolglosen Versuchen oder bei einem dauerhaften Fehler (z. B. Ordner nicht mehr beschreibbar, OneDrive voll) steht der Auftrag auf **„Fehler“**; die OneDrive-Seite zeigt die letzten Fehlermeldungen. Nach Behebung der Ursache **„Vorhandene Dateien nach OneDrive umziehen“** klicken, dann werden auch diese Dateien erneut übertragen.
+- **OneDrive kurz nicht erreichbar oder überlastet:** Nichts geht verloren. Die Datei ist bereits auf dem Webspace gespeichert und wartet in der **Warteschlange**. Neue Versuche folgen nach 1, 5, 30 und 120 Minuten, danach stündlich (per Cronjob oder Klick). Nach 20 erfolglosen Versuchen oder bei einem dauerhaften Fehler (z. B. Ordner nicht mehr beschreibbar, OneDrive voll) steht der Auftrag auf **„Fehler“**; die OneDrive-Seite zeigt die letzten Fehlermeldungen. Nach Behebung der Ursache **„Vorhandene Dateien nach OneDrive umziehen“** klicken, dann werden auch diese Dateien erneut übertragen und fehlgeschlagene Löschaufträge erneut versucht.
 - **Status „abgelaufen – bitte neu verbinden“:** Microsoft hat die Anmeldung beendet (z. B. Passwort des Vereinskontos geändert, Zugriff widerrufen, lange nicht benutzt) oder der `app_schluessel` wurde geändert. Administratoren sehen dann oben einen Hinweis. Neue Dateien werden weiter angenommen und warten. Auf der OneDrive-Seite **„Mit OneDrive verbinden“** klicken und mit dem Vereinskonto anmelden; danach wird die Warteschlange fortgesetzt.
 - **Anmeldefehler wie `invalid_client`:** meist ein abgelaufener oder falsch kopierter Clientschlüssel (Schritt 3.5). Neuen Schlüssel anlegen und in der `config.php` eintragen.
 - **Original nur im OneDrive, OneDrive nicht erreichbar** (nur bei `onedrive_originale_lokal_behalten` = `false`): Fotos werden weiter angezeigt (Vorschau und Anzeigegröße liegen auf dem Webspace); nur das Herunterladen des Originals ist so lange nicht möglich, die Anwendung zeigt dann einen Hinweis.
@@ -256,8 +265,11 @@ Das Skript ist nur über die Kommandozeile bzw. den Cronjob ausführbar, nicht �
 ### Gut zu wissen
 
 - **Anderes Microsoft-Konto:** Wird bei „Neu verbinden“ ein anderes Konto angemeldet als vorher, setzt die Anwendung den Zielordner zurück (der alte gehört zum alten Konto) und öffnet die Ordnerauswahl. Lässt sich das Konto beim Verbinden nicht erkennen, wird vorsichtshalber nichts übertragen, bis der Zielordner geprüft ist. Alle Änderungen an Verbindung und Zielordner stehen im Änderungsprotokoll.
+- **Zielordner in einem anderen OneDrive wählen** (z. B. erst ein Ordner im Vereinskonto, später der freigegebene EMC-Ordner einer Privatperson, oder nach einem Kontowechsel): Bereits übertragene Dateien werden **nicht verschoben**; sie bleiben im bisherigen Ordner. Jede Datei merkt sich ihr OneDrive, deshalb kann die Anwendung sie weiter anzeigen und löschen, **solange das verbundene Konto Zugriff auf den bisherigen Ordner hat**. Die Ordnerauswahl warnt in diesem Fall („… Dateien liegen in einem anderen OneDrive …“). Wird der Zugriff auf den alten Ordner entzogen, sind Originale, die nur dort liegen (`onedrive_originale_lokal_behalten` = `false`), nicht mehr abrufbar.
+- **Viele Dateien auf einmal hochladen:** Je Seitenaufruf beginnt die Anwendung nach etwa 25 Sekunden keine neuen Übertragungen mehr (`onedrive_zeitbudget_s` in der `config.php`), damit die Seite nicht in eine Zeitüberschreitung läuft. Die übrigen Dateien sind trotzdem gespeichert, stehen in der Warteschlange und werden später übertragen („wird übertragen“).
 - **Fahrzeug umbenannt:** Bereits übertragene Dateien bleiben im Ordner mit dem alten Namen; neue Dateien kommen in einen Ordner mit dem neuen Namen. Wer es aufgeräumt haben möchte, benennt den Ordner im OneDrive von Hand um und verschiebt ggf. die Dateien. Die Anwendung findet ihre Dateien weiterhin, weil sie sie über eine interne Kennung anspricht.
-- **Trennen** auf der OneDrive-Seite oder **Entfernen der OneDrive-Einträge aus der `config.php`:** Neue Dateien werden dann nur noch auf dem Webspace gespeichert. Bereits übertragene Dateien **bleiben im OneDrive** und werden von der Anwendung nicht gelöscht. Wird in der Anwendung eine Datei gelöscht, während OneDrive verbunden ist, wird sie auch im OneDrive gelöscht.
+- **Trennen** auf der OneDrive-Seite: Die Anmeldung bei Microsoft wird gelöscht, der Zielordner bleibt gespeichert. Bereits übertragene Dateien **bleiben im OneDrive**. Neue Dateien werden weiter auf dem Webspace gespeichert und **in der Warteschlange gesammelt**; auch Löschungen werden vorgemerkt. Beides wird nach dem erneuten Verbinden nachgeholt (bei einem anderen Konto erst nach Wahl des neuen Zielordners). Bei `onedrive_originale_lokal_behalten` = `false` lassen sich Originale, die nur im OneDrive liegen, bis zum erneuten Verbinden nicht herunterladen; Vorschau und Anzeige funktionieren weiter.
+- **Entfernen der OneDrive-Einträge aus der `config.php`:** Die Anwendung arbeitet wieder rein lokal; neue Dateien werden nicht mehr vorgemerkt. Bereits übertragene Dateien bleiben im OneDrive, und wird eine solche Datei in der Anwendung gelöscht, bleibt sie im OneDrive liegen (dort von Hand löschen). Originale, die nur im OneDrive liegen, sind dann nicht mehr abrufbar.
 - **Datenschutz:** Die Anwendung erzeugt **keine öffentlichen Freigabelinks**. Mitglieder sehen und laden Dateien weiterhin nur nach Anmeldung in der Anwendung; einen direkten Zugriff auf das OneDrive brauchen sie nicht. Die Anmeldedaten von Microsoft (Tokens) liegen nur verschlüsselt in der Datenbank, der Clientschlüssel nur in der `config.php`. Nur Administratoren können verbinden, trennen, den Zielordner ändern und Übertragungen starten. Wer Zugang zum Vereinskonto bei Microsoft hat, sieht alle Dateien im Ordner – das Passwort deshalb nur dem Vorstand geben.
 
 ## Entwicklung

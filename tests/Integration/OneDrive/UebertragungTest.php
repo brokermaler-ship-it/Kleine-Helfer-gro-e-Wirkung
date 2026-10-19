@@ -366,4 +366,107 @@ final class UebertragungTest extends OneDriveTestCase
         $z = $this->pdo->query('SELECT status, versuche FROM onedrive_auftrag ORDER BY id')->fetchAll(\PDO::FETCH_ASSOC);
         self::assertSame([['status' => 'wartet', 'versuche' => 0], ['status' => 'wartet', 'versuche' => 0], ['status' => 'wartet', 'versuche' => 0]], $z);
     }
+
+    /** Uhr für das Zeitbudget: liefert nacheinander die angegebenen Sekundenwerte (der letzte bleibt stehen). */
+    private static function uhr(float ...$werte): \Closure
+    {
+        return static function () use (&$werte): float {
+            return count($werte) > 1 ? array_shift($werte) : $werte[0];
+        };
+    }
+
+    public function testZeitbudgetBeginntNachAblaufKeineNeuenAuftraege(): void
+    {
+        $this->verbinde();
+        $a = $this->dokument();
+        $b = $this->dokument();
+        $this->auftrag($a);
+        $this->auftrag($b);
+        $this->http->antwort(201, ['id' => 'I1', 'name' => 'Anleitung.pdf']);
+        // Start bei 0 s, erster Auftrag bei 1 s, zweiter erst bei 26 s (Budget 25 s aufgebraucht).
+        $u = $this->uebertragung(false, 25.0, self::uhr(0.0, 1.0, 26.0));
+
+        self::assertSame(['erledigt' => 1, 'fehler' => 0], $u->verarbeite(5, $this->jetzt));
+        self::assertSame('onedrive', $this->dok($a)['ablage']);
+        self::assertSame('lokal', $this->dok($b)['ablage']);
+        self::assertSame('wartet', $this->pdo->query("SELECT status FROM onedrive_auftrag WHERE dokument_id = $b")->fetchColumn());
+        self::assertCount(1, $this->http->anfragen);
+    }
+
+    public function testZeitbudgetGiltAuchFuerVieleUploadsEinerAnfrage(): void
+    {
+        $this->verbinde();
+        $u = $this->uebertragung(false, 25.0, self::uhr(0.0, 2.0, 2.0, 30.0));
+        $this->http->antwort(201, ['id' => 'I1', 'name' => 'Anleitung.pdf']);
+        $ids = [$this->dokument(), $this->dokument(), $this->dokument()];
+        foreach ($ids as $id) {
+            $u->einreihen($id);
+        }
+        self::assertSame('onedrive', $this->dok($ids[0])['ablage']);
+        self::assertSame('lokal', $this->dok($ids[1])['ablage']);
+        self::assertSame('lokal', $this->dok($ids[2])['ablage']);
+        self::assertSame(2, (int) $this->pdo->query("SELECT COUNT(*) FROM onedrive_auftrag WHERE status = 'wartet'")->fetchColumn(), 'Rest bleibt in der Warteschlange');
+        self::assertCount(1, $this->http->anfragen);
+    }
+
+    public function testOhneZeitbudgetUnbegrenzt(): void
+    {
+        $this->verbinde();
+        $u = $this->uebertragung(false, 25.0, self::uhr(0.0, 100.0));
+        self::assertFalse($u->zeitUebrig());
+        $u->setzeZeitbudget(null);
+        self::assertTrue($u->zeitUebrig());
+    }
+
+    public function testHochladenMerktLaufwerk(): void
+    {
+        $this->verbinde();
+        $id = $this->dokument();
+        $this->auftrag($id);
+        $this->http->antwort(201, ['id' => 'I1', 'name' => 'Anleitung.pdf']);
+        $this->uebertragung()->verarbeite(1, $this->jetzt);
+        self::assertSame('D1', $this->dok($id)['onedrive_drive_id']);
+        self::assertSame('D1', $this->uebertragung()->laufwerkFuer($this->dok($id)));
+    }
+
+    public function testLaufwerkFestschreibenUndDateienAusserhalb(): void
+    {
+        $this->verbinde();
+        $a = $this->dokument();
+        $b = $this->dokument();
+        $this->pdo->exec("UPDATE dokument SET ablage = 'onedrive', onedrive_item_id = 'X' WHERE id = $a");
+        $this->pdo->exec("UPDATE dokument SET ablage = 'onedrive', onedrive_item_id = 'Y', onedrive_drive_id = 'D0' WHERE id = $b");
+        $this->pdo->exec("INSERT INTO onedrive_auftrag (art, item_id, naechster_versuch) VALUES ('loeschen', 'Z', NOW())");
+        $u = $this->uebertragung();
+        self::assertSame(1, $u->dateienAusserhalb('D1'), 'nur die Datei im Laufwerk D0');
+        self::assertSame(2, $u->dateienAusserhalb('D2'));
+
+        $u->laufwerkFestschreiben();
+        self::assertSame('D1', $this->dok($a)['onedrive_drive_id']);
+        self::assertSame('D0', $this->dok($b)['onedrive_drive_id']);
+        self::assertSame('D1', $this->pdo->query("SELECT drive_id FROM onedrive_auftrag WHERE item_id = 'Z'")->fetchColumn());
+        // Nach einem Zielwechsel folgt die alte Datei nicht dem neuen Laufwerk.
+        $this->einstellungen->setze('onedrive_ziel', json_encode(['drive_id' => 'D2', 'item_id' => 'R', 'name' => 'Neu']));
+        self::assertSame('D1', $u->laufwerkFuer($this->dok($a)));
+    }
+
+    public function testLoeschFehlerZuruecksetzen(): void
+    {
+        $this->verbinde();
+        $this->pdo->exec("INSERT INTO onedrive_auftrag (art, item_id, status, versuche, naechster_versuch) VALUES ('loeschen', 'L1', 'fehler', 20, NOW()), ('hochladen', NULL, 'fehler', 20, NOW()), ('loeschen', 'L2', 'erledigt', 1, NOW())");
+        self::assertSame(1, $this->uebertragung()->loeschFehlerZuruecksetzen($this->jetzt));
+        $z = $this->pdo->query("SELECT item_id, status, versuche FROM onedrive_auftrag ORDER BY id")->fetchAll(\PDO::FETCH_NUM);
+        self::assertSame([['L1', 'wartet', 0], [null, 'fehler', 20], ['L2', 'erledigt', 1]], array_map(fn($r) => [$r[0], $r[1], (int) $r[2]], $z));
+    }
+
+    public function testWartenLaengerAls(): void
+    {
+        $a = new Auftraege($this->pdo);
+        $a->neu('hochladen', 1, null);
+        self::assertSame(0, $a->wartenLaengerAls(60));
+        $this->pdo->exec('UPDATE onedrive_auftrag SET erstellt_am = NOW() - INTERVAL 61 MINUTE');
+        self::assertSame(1, $a->wartenLaengerAls(60));
+        $this->pdo->exec("UPDATE onedrive_auftrag SET status = 'erledigt'");
+        self::assertSame(0, $a->wartenLaengerAls(60));
+    }
 }

@@ -189,6 +189,9 @@ final class DemoDatenTest extends DbTestCase
     {
         $this->sitzungAnmelden($this->sitzung, $this->legeBenutzerAn('a@verein.de', 'geheim-passwort-1', 'admin'));
         $this->assertSame(404, $this->app(false)->handle(new Request('GET', '/admin/testdaten'))->status);
+        $seite = $this->app()->handle(new Request('GET', '/admin/testdaten'));
+        $this->assertSame(200, $seite->status);
+        $this->assertStringContainsString('Nie eine Sicherung des Echtbetriebs in die Testinstanz einspielen', $seite->body);
 
         (new DemoDaten($this->app()))->erzeuge(true);
         $this->sitzung = ['_csrf' => str_repeat('a', 64)];

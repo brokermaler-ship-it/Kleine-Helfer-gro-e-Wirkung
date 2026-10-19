@@ -13,7 +13,7 @@ $statusKlasse = ['verbunden' => 'success', 'abgelaufen' => 'warning', 'getrennt'
 <div class="card mb-4">
     <div class="card-body">
         <h2 class="h6">Rückruf-URL</h2>
-        <p class="mb-1">Diese Adresse bei der App-Registrierung (Microsoft Entra) als Weiterleitungs-URI eintragen:</p>
+        <p class="mb-1">Diese Adresse bei der App-Registrierung (Microsoft Entra) als Umleitungs-URI eintragen:</p>
         <?php if ($rueckrufUrl !== null): ?>
             <input type="text" class="form-control font-monospace" readonly value="<?= e($rueckrufUrl) ?>" onclick="this.select()" aria-label="Rückruf-URL">
         <?php else: ?>
@@ -27,7 +27,7 @@ $statusKlasse = ['verbunden' => 'success', 'abgelaufen' => 'warning', 'getrennt'
         <div class="card-body">
             <h2 class="h6">OneDrive einrichten</h2>
             <ol>
-                <li>Unter <code>entra.microsoft.com</code> eine App registrieren (Kontotyp: persönliche Microsoft-Konten) und oben stehende Rückruf-URL als Web-Weiterleitungs-URI eintragen.</li>
+                <li>Unter <code>entra.microsoft.com</code> eine App registrieren (Kontotyp: persönliche Microsoft-Konten) und oben stehende Rückruf-URL als Umleitungs-URI (Plattform „Web“) eintragen.</li>
                 <li>Ein Client-Secret erzeugen.</li>
                 <li>In der <code>config.php</code> eintragen:
                     <ul>
@@ -62,7 +62,7 @@ $statusKlasse = ['verbunden' => 'success', 'abgelaufen' => 'warning', 'getrennt'
                     <a class="btn btn-outline-primary" href="<?= e(url('/admin/onedrive/ordner')) ?>">Zielordner wählen</a>
                 <?php endif; ?>
                 <?php if ($status !== 'getrennt'): ?>
-                    <form method="post" action="<?= e(url('/admin/onedrive/trennen')) ?>" onsubmit="return confirm('OneDrive wirklich trennen? Neue Dateien werden dann nur noch lokal gespeichert.');">
+                    <form method="post" action="<?= e(url('/admin/onedrive/trennen')) ?>" onsubmit="return confirm('OneDrive wirklich trennen? Neue Dateien und Löschungen werden gesammelt und erst nach dem erneuten Verbinden übertragen. Originale, die nur im OneDrive liegen, sind bis dahin nicht abrufbar.');">
                         <?php include dirname(__DIR__) . '/partials/csrf.php'; ?>
                         <button type="submit" class="btn btn-outline-danger">Trennen</button>
                     </form>
@@ -99,6 +99,7 @@ $statusKlasse = ['verbunden' => 'success', 'abgelaufen' => 'warning', 'getrennt'
                         <button type="submit" class="btn btn-outline-primary">Vorhandene Dateien nach OneDrive umziehen</button>
                     </form>
                 </div>
+                <p class="small text-muted mt-2 mb-0">„Vorhandene Dateien nach OneDrive umziehen“ merkt alle noch nicht übertragenen Dateien vor und versucht dabei auch fehlgeschlagene Löschaufträge erneut.</p>
             <?php endif; ?>
         </div>
     </div>

@@ -3,13 +3,19 @@
 declare(strict_types=1);
 
 /**
- * Überträgt wartende Dateien nach OneDrive (für Cron, empfohlen: alle 15 Minuten, z. B. */15 * * * *).
+ * Überträgt wartende Dateien nach OneDrive (für Cron, empfohlen: alle 15 Minuten, crontab-Zeile siehe README).
  * Aufruf: php bin/onedrive-sync.php
  */
 
-if (PHP_SAPI !== 'cli') {
+// Nur ohne Web-Anfrage ausführen. Die Datei liegt außerhalb von public/ und ist nicht über den Browser erreichbar;
+// der STRATO-Cronjob startet PHP je nach Paket als CLI oder als php-cgi, daher entscheidet nicht PHP_SAPI.
+if (isset($_SERVER['REQUEST_METHOD'])) {
     http_response_code(404);
     exit;
+}
+if (!defined('STDERR')) {
+    // php-cgi kennt STDERR nicht.
+    define('STDERR', fopen('php://stderr', 'wb'));
 }
 
 $wurzel = dirname(__DIR__);
@@ -30,6 +36,7 @@ try {
         echo "OneDrive ist nicht verbunden oder nicht eingerichtet; nichts zu tun.\n";
         exit(0);
     }
+    $uebertragung->setzeZeitbudget(null);
     $r = $uebertragung->verarbeite(20);
     $z = $app->container()->get(Emc\OneDrive\Auftraege::class)->zaehle();
     echo sprintf("OneDrive: %d übertragen, %d fehlgeschlagen; offen: %d, dauerhaft fehlerhaft: %d\n", $r['erledigt'], $r['fehler'], $z['wartet'], $z['fehler']);

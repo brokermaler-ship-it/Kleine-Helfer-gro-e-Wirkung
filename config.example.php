@@ -48,4 +48,7 @@ return [
     'onedrive_originale_lokal_behalten' => true,
     // Zeitlimit je Anfrage an OneDrive in Sekunden (Standard 20).
     'onedrive_zeitlimit_s' => 20,
+    // Zeitbudget je Seitenaufruf in Sekunden (Standard 25): danach beginnt die Anwendung keine neuen Übertragungen
+    // mehr, der Rest bleibt in der Warteschlange (Cronjob oder „Jetzt übertragen“). Der Cronjob hat kein Zeitbudget.
+    'onedrive_zeitbudget_s' => 25,
 ];

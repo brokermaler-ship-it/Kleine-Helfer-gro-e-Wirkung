@@ -340,4 +340,91 @@ final class DateiOneDriveHttpTest extends OneDriveTestCase
             date_default_timezone_set($alt);
         }
     }
+
+    private function zielAuf(string $drive): void
+    {
+        $this->einstellungen->setze('onedrive_ziel', json_encode(['drive_id' => $drive, 'item_id' => 'ROOT2', 'name' => 'Neu']));
+    }
+
+    public function testLaufwerkWirdGemerktUndNachZielwechselFuerAbrufUndLoeschenVerwendet(): void
+    {
+        $this->verbinde();
+        $this->http->antwort(201, ['id' => 'ITEM1', 'name' => 'anleitung.pdf']);
+        $this->hochladen('anleitung.pdf');
+        $d = $this->letztes();
+        self::assertSame('D1', $d['onedrive_drive_id']);
+
+        $this->zielAuf('D2');
+        $this->http->antwort(200, '%PDF-alt');
+        $r = $this->get('/dateien/' . $d['id']);
+        self::assertSame(200, $r->status);
+        self::assertStringEndsWith('/drives/D1/items/ITEM1/content', end($this->http->anfragen)['url']);
+
+        $this->http->antwort(204);
+        $this->app()->handle(new Request('POST', '/dateien/' . $d['id'] . '/loeschen', [], ['_csrf' => str_repeat('a', 64)]));
+        $letzte = end($this->http->anfragen);
+        self::assertSame('DELETE', $letzte['methode']);
+        self::assertStringEndsWith('/drives/D1/items/ITEM1', $letzte['url']);
+        self::assertSame('D1', $this->pdo->query("SELECT drive_id FROM onedrive_auftrag WHERE art = 'loeschen'")->fetchColumn());
+    }
+
+    public function testLoeschauftragOhneLaufwerkNutztAktuellesZiel(): void
+    {
+        $this->verbinde();
+        $this->pdo->exec("INSERT INTO onedrive_auftrag (art, item_id, naechster_versuch) VALUES ('loeschen', 'ALT', NOW())");
+        $this->http->antwort(204);
+        $this->app()->container()->get(Uebertragung::class)->verarbeite(5);
+        self::assertStringEndsWith('/drives/D1/items/ALT', end($this->http->anfragen)['url']);
+    }
+
+    public function testUploadErledigtNebenbeiZweiWeitereFaelligeAuftraege(): void
+    {
+        $this->verbinde();
+        $alt = [$this->dokument(), $this->dokument(), $this->dokument()];
+        foreach ($alt as $id) {
+            $this->pdo->prepare("INSERT INTO onedrive_auftrag (art, dokument_id, naechster_versuch) VALUES ('hochladen', ?, NOW() - INTERVAL 1 HOUR)")->execute([$id]);
+        }
+        $this->http->antwort(201, ['id' => 'NEU', 'name' => 'anleitung.pdf']);
+        $this->http->antwort(201, ['id' => 'A1', 'name' => 'Anleitung.pdf']);
+        $this->http->antwort(201, ['id' => 'A2', 'name' => 'Anleitung.pdf']);
+        $this->hochladen('anleitung.pdf');
+        self::assertSame('NEU', $this->letztes()['onedrive_item_id']);
+        self::assertSame('onedrive', $this->dok($alt[0])['ablage']);
+        self::assertSame('onedrive', $this->dok($alt[1])['ablage']);
+        self::assertSame('lokal', $this->dok($alt[2])['ablage'], 'höchstens zwei weitere je Upload');
+        self::assertCount(3, $this->http->anfragen);
+    }
+
+    public function testUploadMitFehlerVersuchtKeineWeiterenAuftraege(): void
+    {
+        $this->verbinde();
+        $alt = $this->dokument();
+        $this->pdo->prepare("INSERT INTO onedrive_auftrag (art, dokument_id, naechster_versuch) VALUES ('hochladen', ?, NOW() - INTERVAL 1 HOUR)")->execute([$alt]);
+        $this->http->antwort(503);
+        $this->hochladen('anleitung.pdf');
+        self::assertCount(1, $this->http->anfragen);
+        self::assertSame('lokal', $this->dok($alt)['ablage']);
+    }
+
+    public function testFahrzeugLoeschenFuehrtLoeschauftragGleichAus(): void
+    {
+        $this->verbinde();
+        $this->http->antwort(201, ['id' => 'ITEM1', 'name' => 'anleitung.pdf']);
+        $this->hochladen('anleitung.pdf');
+        $this->http->antwort(204);
+        $r = $this->app()->handle(new Request('POST', "/fahrzeuge/{$this->fz}/loeschen", [], ['_csrf' => str_repeat('a', 64)]));
+        self::assertSame(303, $r->status);
+        $letzte = end($this->http->anfragen);
+        self::assertSame('DELETE', $letzte['methode']);
+        self::assertStringEndsWith('/drives/D1/items/ITEM1', $letzte['url']);
+        self::assertSame('erledigt', $this->pdo->query("SELECT status FROM onedrive_auftrag WHERE art = 'loeschen'")->fetchColumn());
+    }
+
+    public function testFahrzeugLoeschenOhneKonfigurationOhneAnfragen(): void
+    {
+        $this->hochladen('anleitung.pdf', false);
+        $r = $this->app(false)->handle(new Request('POST', "/fahrzeuge/{$this->fz}/loeschen", [], ['_csrf' => str_repeat('a', 64)]));
+        self::assertSame(303, $r->status);
+        self::assertSame([], $this->http->anfragen);
+    }
 }

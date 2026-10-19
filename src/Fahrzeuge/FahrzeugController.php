@@ -16,6 +16,7 @@ use Emc\Core\Request;
 use Emc\Core\Response;
 use Emc\Core\Session;
 use Emc\Core\View;
+use Emc\OneDrive\Uebertragung;
 use Emc\Personen\PersonRepository;
 use Emc\Protokoll\Aenderungsprotokoll;
 use Emc\Stammdaten\SpurweiteRepository;
@@ -39,6 +40,7 @@ final class FahrzeugController
         private Adresspruefung $adresspruefung,
         private DokumentRepository $dokumente,
         private bool $onedriveKonfiguriert = false,
+        private ?Uebertragung $uebertragung = null,
     ) {
     }
 
@@ -128,6 +130,8 @@ final class FahrzeugController
         $fz = $this->lade($p);
         $this->dokumente->entferneVonObjekt('fahrzeug', (int) $fz['id']);
         $this->fahrzeuge->loeschen((int) $fz['id']);
+        // Lösch-Aufträge für die OneDrive-Dateien gleich nebenbei ausführen (ohne Cronjob sonst erst später).
+        $this->uebertragung?->nebenbei();
         $alt = $this->vergleichswerte($fz);
         $this->protokoll->schreibe(
             $this->auth->benutzer()?->id,

@@ -126,7 +126,9 @@ final class App
                     $c->get(DokumentRepository::class),
                     $c->get('pdo'),
                     $this->speicherPfad(),
-                    ($this->config['onedrive_originale_lokal_behalten'] ?? true) !== false
+                    ($this->config['onedrive_originale_lokal_behalten'] ?? true) !== false,
+                    // Je Web-Anfrage nach ~25 s keine neuen Übertragungen mehr beginnen (der Cronjob hebt das auf).
+                    max(1.0, (float) ($this->config['onedrive_zeitbudget_s'] ?? Uebertragung::ZEITBUDGET_WEB))
                 );
             } catch (\Throwable $t) {
                 error_log('OneDrive-Konfiguration unbrauchbar: ' . $t::class);
@@ -169,7 +171,8 @@ final class App
             $c->get(DecoderRepository::class),
             $c->get(Adresspruefung::class),
             $c->get(DokumentRepository::class),
-            Uebertragung::konfiguriert($this->config)
+            Uebertragung::konfiguriert($this->config),
+            $c->get(Uebertragung::class)
         ));
         $this->container->set(DecoderRepository::class, fn(Container $c) => new DecoderRepository($c->get('pdo')));
         $this->container->set(Adresspruefung::class, fn(Container $c) => new Adresspruefung($c->get('pdo')));
@@ -431,11 +434,16 @@ final class App
             if ($this->container->get(Sicherung::class)->istUeberfaellig(new \DateTimeImmutable())) {
                 $hinweise[] = ['typ' => 'warning', 'text' => 'Die letzte Datensicherung ist älter als 30 Tage.', 'link' => '/admin/sicherung', 'linktext' => 'Sicherung erstellen'];
             }
-            if (Uebertragung::konfiguriert($this->config)
-                && $this->container->get(Uebertragung::class) !== null
-                && $this->container->get(TokenSpeicher::class)->status() === TokenSpeicher::STATUS_ABGELAUFEN
-            ) {
-                $hinweise[] = ['typ' => 'warning', 'text' => 'Die OneDrive-Verbindung ist abgelaufen. Neue Dateien werden lokal gesammelt – bitte unter Verwaltung › OneDrive neu verbinden.', 'link' => '/admin/onedrive', 'linktext' => 'OneDrive öffnen'];
+            if (Uebertragung::konfiguriert($this->config) && $this->container->get(Uebertragung::class) !== null) {
+                $odStatus = $this->container->get(TokenSpeicher::class)->status();
+                if ($odStatus === TokenSpeicher::STATUS_ABGELAUFEN) {
+                    $hinweise[] = ['typ' => 'warning', 'text' => 'Die OneDrive-Verbindung ist abgelaufen. Neue Dateien werden lokal gesammelt – bitte unter Verwaltung › OneDrive neu verbinden.', 'link' => '/admin/onedrive', 'linktext' => 'OneDrive öffnen'];
+                } else {
+                    $n = $this->container->get(Auftraege::class)->wartenLaengerAls(60);
+                    if ($n > 0) {
+                        $hinweise[] = ['typ' => 'warning', 'text' => ($n === 1 ? '1 OneDrive-Auftrag wartet' : $n . ' OneDrive-Aufträge warten') . ' seit über einer Stunde. ' . ($odStatus === TokenSpeicher::STATUS_VERBUNDEN ? 'Ohne Cronjob bitte unter Verwaltung › OneDrive „Jetzt übertragen“ klicken.' : 'OneDrive ist getrennt – bitte unter Verwaltung › OneDrive verbinden.'), 'link' => '/admin/onedrive', 'linktext' => 'OneDrive öffnen'];
+                    }
+                }
             }
         } catch (\Throwable) {
             // Hinweise sind nur Beiwerk; bei Datenbankproblemen nicht die ganze Seite verhindern.
