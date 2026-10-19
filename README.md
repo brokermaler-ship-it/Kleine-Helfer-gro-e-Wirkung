@@ -8,15 +8,17 @@ Webanwendung „EMC 78 Lokschuppen“ des Eisenbahn Modellbahn Clubs 78 e.V. Hal
 |---|---|
 | **Mitglied** | alles lesen (Fahrzeuge, Decoder, Funktionen, CVs, Dateien); **eigene Fahrzeuge anlegen** (der Eigentümer ist immer das Mitglied selbst); die **selbst angelegten Fahrzeuge bearbeiten**, einschließlich Status (auch „ausgemustert“), Decoder, Funktionstasten (Formular, CSV-Import, Vorlagen), CVs sowie Fotos und Dateien dieses Fahrzeugs. Nicht erlaubt: Eigentümer ändern, Fahrzeuge löschen, Fahrzeuge anderer bearbeiten (auch nicht als Eigentümer), Personen verwalten |
 | **Bearbeiter** | zusätzlich **alle** Fahrzeuge anlegen (Eigentümer frei wählbar), bearbeiten und löschen, ebenso alle Dateien; Personen verwalten |
-| **Administrator** | zusätzlich Benutzer, Stammdaten (Spurweiten), Datensicherung und Update |
+| **Administrator** | zusätzlich Benutzer, Stammdaten (Spurweiten), Datensicherung, Update und OneDrive-Anbindung |
 
 Jedes Fahrzeug merkt sich, wer es angelegt hat. Fahrzeuge, die schon vor Version 0.2.0 vorhanden waren, gelten als von einem Bearbeiter angelegt; Mitglieder können sie nicht ändern. Alle Rechte werden auf dem Server für jedes einzelne Fahrzeug geprüft, nicht nur durch ausgeblendete Schaltflächen. Eine Datei, die mehreren Objekten zugeordnet ist, kann nur ein Bearbeiter löschen. Ausgemusterte Fahrzeuge verschwinden aus „Meine Fahrzeuge“ und sind über den Statusfilter der Fahrzeugliste zu finden. Gespeicherte Funktionsvorlagen sind für alle sichtbar.
 
 Beim Update auf 0.2.0 muss nach dem Hochladen der neuen Dateien einmal im Verwaltungsmenü unter „Update“ die Datenbank-Migration `003_fahrzeug_angelegt_von` ausgeführt werden.
 
+Version 0.3.0 bringt die freiwillige OneDrive-Ablage (siehe „OneDrive anbinden“). Beim Update auf 0.3.0 unter **Verwaltung → Update** einmal „Datenbank jetzt aktualisieren“ wählen; dabei laufen die Migrationen `004_onedrive`, `005_onedrive_auftrag_sperre` und `006_onedrive_sperr_token_index`. Ohne OneDrive-Einträge in der `config.php` ändert sich sonst nichts.
+
 ## Voraussetzungen
 
-- PHP ab Version 8.2 mit den Erweiterungen `pdo_mysql`, `mbstring`, `gd`, `fileinfo` und `zip`
+- PHP ab Version 8.2 mit den Erweiterungen `pdo_mysql`, `mbstring`, `gd`, `fileinfo` und `zip`, für die OneDrive-Ablage zusätzlich `curl` und `openssl`
 - MySQL ab Version 8 oder MariaDB ab Version 10.6
 - HTTPS (Pflicht, weil Anmeldungen darüber laufen)
 - FTP-Zugang zum Webspace und Zugang zur Datenbankverwaltung des Hosters (z. B. phpMyAdmin)
@@ -141,6 +143,122 @@ Die ZIP-Datei bitte an einem sicheren Ort außerhalb des Webspace aufbewahren. I
 3. `datenbank.sql` im Verwaltungswerkzeug des Hosters (phpMyAdmin → Importieren) in die leere Datenbank einspielen. Bestehende Tabellen mit gleichem Namen werden dabei ersetzt.
 4. Den Ordner `dateien` aus dem entpackten ZIP per FTP **in den Ordner `storage/` hinein** hochladen, sodass z. B. `storage/dateien/2026/…` entsteht (nicht `storage/dateien/dateien/…`).
 5. Die Anwendung aufrufen und wie gewohnt anmelden.
+
+## OneDrive anbinden
+
+Fotos und Dokumente können zusätzlich im OneDrive des Vereins abgelegt werden, lesbar sortiert nach Fahrzeug: `Fahrzeuge/<Inventarnummer> <Bezeichnung>/<Titel>.<Endung>`, Dokumente ohne Fahrzeug unter `Sonstiges/`. Die Anbindung ist **freiwillig**: Ohne sie arbeitet die Anwendung wie bisher und speichert alles nur auf dem Webspace. Vorschaubilder bleiben immer auf dem Webspace, damit Listen und Fotos schnell laden.
+
+Die Einrichtung dauert etwa eine Stunde und wird nur einmal gemacht. Beteiligt sind der **Vorstand** (Vereinskonto, Freigabe des Ordners) und der **Administrator des Webspace** (App-Registrierung, `config.php`). Die Menünamen bei Microsoft ändern sich gelegentlich; die Bezeichnungen sind deshalb sinngemäß zu verstehen.
+
+### 1. Vereins-Microsoft-Konto anlegen (Vorstand)
+
+1. Unter <https://signup.live.com> ein **neues, kostenloses Microsoft-Konto** für den Verein anlegen, z. B. mit einer Vereins-E-Mail-Adresse. Kein privates Konto eines Mitglieds verwenden: Das Konto gehört dem Verein und bleibt bestehen, wenn Ämter wechseln.
+2. Passwort und Wiederherstellungsdaten (Telefonnummer, Ersatz-E-Mail) sicher beim Vorstand hinterlegen, am besten zusätzlich die Zwei-Faktor-Anmeldung einschalten.
+3. Einmal unter <https://onedrive.live.com> mit dem Vereinskonto anmelden, damit das OneDrive des Kontos eingerichtet wird.
+
+### 2. Vorhandenen EMC-Ordner freigeben (Vorstand)
+
+Liegt der bisherige Vereinsordner im OneDrive einer Privatperson, bleibt er dort; er wird nur für das Vereinskonto freigegeben:
+
+1. Die Person, der der Ordner gehört, meldet sich bei OneDrive an, klickt den Ordner mit der rechten Maustaste an → **„Teilen“** bzw. **„Zugriff verwalten“**.
+2. Die E-Mail-Adresse des **Vereinskontos** eintragen und **„Kann bearbeiten“** wählen (nur Lesen reicht nicht, die Anwendung legt Ordner und Dateien an). Senden.
+3. Im **Vereinskonto** bei OneDrive anmelden → **„Geteilt“** bzw. **„Für mich freigegeben“** → beim EMC-Ordner **„Zu meinen Dateien hinzufügen“** wählen. Erst danach ist der Ordner bei der Zielordner-Auswahl der Anwendung sicher zu finden.
+
+Gibt es noch keinen Ordner, legt man im Vereinskonto einfach einen neuen an (z. B. „EMC 78 Fahrzeuge“).
+
+### 3. App bei Microsoft registrieren (Administrator)
+
+Damit die Anwendung im Namen des Vereinskontos Dateien ablegen darf, wird sie einmal bei Microsoft „registriert“. Das kostet nichts.
+
+1. Zuerst in der Anwendung als Administrator **Verwaltung → OneDrive** öffnen. Oben steht die **Rückruf-URL**, z. B. `https://mitglieder.emc78.de/admin/onedrive/rueckruf`. Erscheint dort noch keine Adresse, zuerst `oeffentliche_url` in der `config.php` eintragen (siehe Schritt 4) und die Seite neu laden.
+2. Das **Microsoft Entra Admin Center** (<https://entra.microsoft.com>) oder das **Azure-Portal** (<https://portal.azure.com>) öffnen und mit dem **Vereinskonto** anmelden. Beim ersten Mal fragt Microsoft eventuell nach Angaben zum Konto; das ist kostenlos.
+3. Sinngemäß **„Identität“ → „Anwendungen“ → „App-Registrierungen“** (im Azure-Portal: „App-Registrierungen“) → **„Neue Registrierung“**:
+   - **Name:** z. B. `EMC 78 Lokschuppen`
+   - **Unterstützte Kontotypen:** **„Nur persönliche Microsoft-Konten“**
+   - **Umleitungs-URI:** Plattform **„Web“**, als Adresse **exakt** die Rückruf-URL von der OneDrive-Seite der Anwendung (Groß-/Kleinschreibung, `https://`, kein Schrägstrich am Ende). Weicht sie nur um ein Zeichen ab, meldet Microsoft beim Verbinden einen Fehler.
+   - **„Registrieren“** klicken.
+4. Auf der Übersichtsseite der neuen App die **„Anwendungs-ID (Client)“** kopieren. Das ist später `onedrive_client_id`.
+5. **„Zertifikate & Geheimnisse“** → **„Geheime Clientschlüssel“** → **„Neuer geheimer Clientschlüssel“**: Beschreibung z. B. `Webspace`, Ablauf wählen (höchstens 24 Monate). Danach sofort den **„Wert“** kopieren (nicht die „Geheimnis-ID“): Er wird nur dieses eine Mal angezeigt. Das ist später `onedrive_client_secret`.
+   **Wichtig:** Das **Ablaufdatum notieren** und rechtzeitig vorher eine Erinnerung setzen (Kalender des Vorstands). Vor dem Ablauf auf demselben Weg einen neuen Schlüssel anlegen, in der `config.php` ersetzen und den alten löschen. Ist der Schlüssel abgelaufen, zeigt die OneDrive-Seite einen Anmeldefehler (z. B. `invalid_client`), und neue Dateien bleiben nur auf dem Webspace, bis der neue Schlüssel eingetragen ist.
+6. **„API-Berechtigungen“** → **„Berechtigung hinzufügen“** → **„Microsoft Graph“** → **„Delegierte Berechtigungen“** und diese drei auswählen:
+   - `Files.ReadWrite.All` (Dateien lesen und schreiben, auch in freigegebenen Ordnern)
+   - `offline_access` (Verbindung bleibt bestehen, ohne jedes Mal neu anzumelden)
+   - `User.Read` (Name des verbundenen Kontos anzeigen)
+
+   „Berechtigungen hinzufügen“ klicken. Eine Administratorzustimmung ist bei persönlichen Konten nicht nötig; die Zustimmung erfolgt beim Verbinden.
+
+**Testumgebung:** Die Testinstanz hat eine eigene Rückruf-URL (`https://test.emc78.de/admin/onedrive/rueckruf`). Entweder eine **zweite App-Registrierung** für die Testinstanz anlegen (empfohlen, mit eigenem Testordner) oder bei derselben App unter **„Authentifizierung“** beide Umleitungs-URIs eintragen. Die Testinstanz sollte nie den echten Vereinsordner als Zielordner verwenden.
+
+### 4. `config.php` ergänzen (Administrator)
+
+Die `config.php` per SFTP herunterladen, diese Einträge ergänzen (Vorlage: `config.example.php`) und wieder hochladen:
+
+```php
+'oeffentliche_url' => 'https://mitglieder.emc78.de',      // Testinstanz: 'https://test.emc78.de'
+'onedrive_client_id' => '<Anwendungs-ID (Client) aus Schritt 3.4>',
+'onedrive_client_secret' => '<Wert des geheimen Clientschlüssels aus Schritt 3.5>',
+'app_schluessel' => '<44 Zeichen, siehe unten>',
+'onedrive_originale_lokal_behalten' => true,
+'onedrive_zeitlimit_s' => 20,
+```
+
+- **`oeffentliche_url`:** Adresse der Installation, nur `https://`, ohne Pfad und ohne Schrägstrich am Ende. Liegt die Anwendung in einem Unterordner, kommt dieser über `basis_url` automatisch dazu.
+- **`app_schluessel`:** Damit werden die Anmeldedaten von Microsoft verschlüsselt in der Datenbank gespeichert. Es sind 32 Zufallsbytes, base64-kodiert (44 Zeichen). Entweder den **Vorschlag auf der OneDrive-Seite** übernehmen (er wird bei jedem Aufruf neu erzeugt und nirgends gespeichert) oder per SSH erzeugen:
+
+  ```bash
+  php -r "echo base64_encode(random_bytes(32));"
+  ```
+
+  **Den Schlüssel später nicht mehr ändern.** Ein neuer Schlüssel macht die gespeicherte Verbindung unlesbar; die Seite zeigt dann „abgelaufen“, und OneDrive muss neu verbunden werden. Den Schlüssel zusammen mit der `config.php` aufbewahren. Echtbetrieb und Testinstanz bekommen je einen eigenen Schlüssel.
+- **`onedrive_originale_lokal_behalten`:** `true` (Standard und empfohlen): Die Originale bleiben zusätzlich auf dem Webspace; die Datensicherung der Anwendung bleibt dadurch vollständig. `false`: Originale werden nach der Übertragung vom Webspace entfernt und liegen nur noch im OneDrive (spart Speicherplatz). Die Datensicherung enthält diese Originale dann nicht mehr; die Seite „Sicherung“ weist darauf hin, und der OneDrive-Ordner muss selbst gesichert werden.
+- **`onedrive_zeitlimit_s`:** Wartezeit je Anfrage an OneDrive in Sekunden (Standard 20). Nur bei sehr langsamer Verbindung erhöhen.
+
+`onedrive_client_secret` und `app_schluessel` stehen nur in der `config.php`. Diese Datei niemals weitergeben, per E-Mail verschicken oder in `public/` ablegen.
+
+Für die Verbindung braucht PHP die Erweiterungen `curl` und `openssl` (bei STRATO in der Regel aktiv).
+
+### 5. Verbinden (Administrator)
+
+1. **Verwaltung → OneDrive** neu laden. Steht bei allen Einträgen „gesetzt“, erscheint der Knopf **„Mit OneDrive verbinden“**.
+2. Klicken, bei Microsoft mit dem **Vereinskonto** anmelden (nicht mit einem privaten Konto) und den Zugriff erlauben.
+3. Man landet wieder in der Anwendung. Status: **verbunden**, darunter das Konto.
+
+Bitte nur in **einem** Browserfenster verbinden; parallele Versuche brechen sich gegenseitig ab („ungültig oder abgelaufen“), dann einfach erneut verbinden.
+
+### 6. Zielordner wählen (Administrator)
+
+Nach dem ersten Verbinden öffnet sich die Ordnerauswahl (später über **„Zielordner wählen“**). Den EMC-Ordner aus Schritt 2 öffnen bzw. auswählen und speichern. Darin legt die Anwendung die Unterordner `Fahrzeuge/` und `Sonstiges/` an. Ab jetzt wird jede neu hochgeladene Datei sofort übertragen. Solange eine Übertragung noch aussteht, steht in der Dateiliste des Fahrzeugs „wird übertragen“; für die Mitglieder ändert sich sonst nichts.
+
+### 7. Vorhandene Dateien umziehen (Administrator)
+
+Fotos und Dokumente, die schon vor der Anbindung hochgeladen wurden, liegen nur auf dem Webspace. Mit **„Vorhandene Dateien nach OneDrive umziehen“** werden sie alle für die Übertragung vorgemerkt. Pro Klick werden nur wenige Dateien gleich übertragen, damit die Seite nicht hängt; den Rest erledigt der Cronjob (Schritt 8) oder wiederholtes Klicken auf **„Jetzt übertragen“**. Der Zähler „wartet“ zeigt, wie viele noch offen sind. Der Knopf kann gefahrlos mehrfach gedrückt werden; nichts wird doppelt übertragen.
+
+### 8. Optional: automatische Übertragung per Cronjob
+
+Ohne Cronjob werden Dateien beim Hochladen und bei Klicks auf „Jetzt übertragen“ übertragen. Ein Cronjob holt außerdem alles automatisch nach, was wegen einer Störung liegen geblieben ist. Empfohlen: **alle 15 Minuten**
+
+```bash
+php bin/onedrive-sync.php
+```
+
+- **STRATO:** Im Kundenbereich (sinngemäß „Datenbanken und Webspace“ → „Cronjob-Verwaltung“ bzw. „Cronjobs“; nicht in jedem Paket enthalten) einen neuen Cronjob anlegen: als Skript `/mitglieder/bin/onedrive-sync.php` angeben, eine **PHP-Version ab 8.2** wählen und als Intervall alle 15 Minuten (oder das kleinste angebotene Intervall) einstellen. Für die Testinstanz entsprechend `/test/bin/onedrive-sync.php`.
+- **Mit SSH/crontab:** `*/15 * * * * php /pfad/zu/mitglieder/bin/onedrive-sync.php`
+
+Das Skript ist nur über die Kommandozeile bzw. den Cronjob ausführbar, nicht über den Browser. Läuft es gleichzeitig mit einem Klick auf „Jetzt übertragen“, wird trotzdem nichts doppelt übertragen.
+
+### Verhalten bei Störungen
+
+- **OneDrive kurz nicht erreichbar oder überlastet:** Nichts geht verloren. Die Datei ist bereits auf dem Webspace gespeichert und wartet in der **Warteschlange**. Neue Versuche folgen nach 1, 5, 30 und 120 Minuten, danach stündlich (per Cronjob oder Klick). Nach 20 erfolglosen Versuchen oder bei einem dauerhaften Fehler (z. B. Ordner nicht mehr beschreibbar, OneDrive voll) steht der Auftrag auf **„Fehler“**; die OneDrive-Seite zeigt die letzten Fehlermeldungen. Nach Behebung der Ursache **„Vorhandene Dateien nach OneDrive umziehen“** klicken, dann werden auch diese Dateien erneut übertragen.
+- **Status „abgelaufen – bitte neu verbinden“:** Microsoft hat die Anmeldung beendet (z. B. Passwort des Vereinskontos geändert, Zugriff widerrufen, lange nicht benutzt) oder der `app_schluessel` wurde geändert. Administratoren sehen dann oben einen Hinweis. Neue Dateien werden weiter angenommen und warten. Auf der OneDrive-Seite **„Mit OneDrive verbinden“** klicken und mit dem Vereinskonto anmelden; danach wird die Warteschlange fortgesetzt.
+- **Anmeldefehler wie `invalid_client`:** meist ein abgelaufener oder falsch kopierter Clientschlüssel (Schritt 3.5). Neuen Schlüssel anlegen und in der `config.php` eintragen.
+- **Original nur im OneDrive, OneDrive nicht erreichbar** (nur bei `onedrive_originale_lokal_behalten` = `false`): Fotos werden weiter angezeigt (Vorschau und Anzeigegröße liegen auf dem Webspace); nur das Herunterladen des Originals ist so lange nicht möglich, die Anwendung zeigt dann einen Hinweis.
+
+### Gut zu wissen
+
+- **Anderes Microsoft-Konto:** Wird bei „Neu verbinden“ ein anderes Konto angemeldet als vorher, setzt die Anwendung den Zielordner zurück (der alte gehört zum alten Konto) und öffnet die Ordnerauswahl. Lässt sich das Konto beim Verbinden nicht erkennen, wird vorsichtshalber nichts übertragen, bis der Zielordner geprüft ist. Alle Änderungen an Verbindung und Zielordner stehen im Änderungsprotokoll.
+- **Fahrzeug umbenannt:** Bereits übertragene Dateien bleiben im Ordner mit dem alten Namen; neue Dateien kommen in einen Ordner mit dem neuen Namen. Wer es aufgeräumt haben möchte, benennt den Ordner im OneDrive von Hand um und verschiebt ggf. die Dateien. Die Anwendung findet ihre Dateien weiterhin, weil sie sie über eine interne Kennung anspricht.
+- **Trennen** auf der OneDrive-Seite oder **Entfernen der OneDrive-Einträge aus der `config.php`:** Neue Dateien werden dann nur noch auf dem Webspace gespeichert. Bereits übertragene Dateien **bleiben im OneDrive** und werden von der Anwendung nicht gelöscht. Wird in der Anwendung eine Datei gelöscht, während OneDrive verbunden ist, wird sie auch im OneDrive gelöscht.
+- **Datenschutz:** Die Anwendung erzeugt **keine öffentlichen Freigabelinks**. Mitglieder sehen und laden Dateien weiterhin nur nach Anmeldung in der Anwendung; einen direkten Zugriff auf das OneDrive brauchen sie nicht. Die Anmeldedaten von Microsoft (Tokens) liegen nur verschlüsselt in der Datenbank, der Clientschlüssel nur in der `config.php`. Nur Administratoren können verbinden, trennen, den Zielordner ändern und Übertragungen starten. Wer Zugang zum Vereinskonto bei Microsoft hat, sieht alle Dateien im Ordner – das Passwort deshalb nur dem Vorstand geben.
 
 ## Entwicklung
 
