@@ -83,6 +83,24 @@ final class OneDriveHttpTest extends OneDriveTestCase
         }
     }
 
+    public function testAusstehendeMigrationLegtOneDriveStill(): void
+    {
+        $this->verbinde();
+        $this->pdo->exec("DELETE FROM schema_migration WHERE version = '007_onedrive_laufwerk'");
+        try {
+            $app = $this->app();
+            self::assertNull($app->container()->get(\Emc\OneDrive\Uebertragung::class));
+            $r = $this->get('/admin/onedrive');
+            self::assertSame(303, $r->status);
+            self::assertStringEndsWith('/admin/update', (string) ($r->headers['Location'] ?? ''));
+            self::assertStringContainsString('Datenbank-Update', implode(' ', $this->meldungen()));
+            self::assertSame(303, $this->post('/admin/onedrive/ordner', ['drive_id' => 'D1', 'item_id' => 'X'])->status);
+            self::assertSame([], $this->http->anfragen);
+        } finally {
+            $this->pdo->exec("INSERT INTO schema_migration (version) VALUES ('007_onedrive_laufwerk')");
+        }
+    }
+
     public function testSeiteOhneKonfigurationZeigtEinrichtungshinweise(): void
     {
         $r = $this->get('/admin/onedrive', [], false);

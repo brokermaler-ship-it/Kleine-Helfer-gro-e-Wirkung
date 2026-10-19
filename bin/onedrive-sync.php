@@ -31,6 +31,10 @@ Emc\Core\App::setzeZeitzone($config);
 
 try {
     $app = Emc\Core\App::erzeuge($config);
+    if ($app->container()->get(Emc\Betrieb\Migrator::class)->ausstehend() !== []) {
+        echo "Datenbank-Update steht aus (Verwaltung › Update); OneDrive ruht bis dahin.\n";
+        exit(0);
+    }
     $uebertragung = $app->container()->get(Emc\OneDrive\Uebertragung::class);
     if ($uebertragung === null || !$uebertragung->aktiv()) {
         echo "OneDrive ist nicht verbunden oder nicht eingerichtet; nichts zu tun.\n";

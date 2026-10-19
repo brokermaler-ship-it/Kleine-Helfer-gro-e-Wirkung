@@ -117,6 +117,11 @@ final class App
             if (!Uebertragung::konfiguriert($this->config)) {
                 return null;
             }
+            // Stehen Migrationen aus, ruht OneDrive: sonst würde z. B. ein Upload gelingen, das Speichern der neuen
+            // Spalten aber scheitern, und jeder weitere Versuch hinterließe eine Kopie im OneDrive.
+            if ($c->get(Migrator::class)->ausstehend() !== []) {
+                return null;
+            }
             try {
                 return new Uebertragung(
                     $c->get(Auftraege::class),
@@ -400,6 +405,14 @@ final class App
                 && $this->container->get(Migrator::class)->ausstehend() !== []
             ) {
                 return $this->wartungsSeite();
+            }
+            // 3b. Die OneDrive-Verwaltung erst nach dem Datenbank-Update öffnen.
+            if (str_starts_with($pfad, '/admin/onedrive')
+                && Berechtigung::darf($benutzer, Berechtigung::BETRIEB)
+                && $this->container->get(Migrator::class)->ausstehend() !== []
+            ) {
+                $this->container->get('session')->meldung('warnung', 'Bitte zuerst das Datenbank-Update ausführen; bis dahin ruht die OneDrive-Übertragung.');
+                return Response::redirect(url('/admin/update'));
             }
             // 4. Erzwungene Passwortänderung.
             if ($benutzer->mussPasswortAendern && $pfad !== '/konto/passwort' && $pfad !== '/logout') {
