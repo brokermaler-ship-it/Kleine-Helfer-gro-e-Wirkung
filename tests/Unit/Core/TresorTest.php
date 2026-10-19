@@ -33,6 +33,22 @@ final class TresorTest extends TestCase
         $t->entschluessele(base64_encode($roh));
     }
 
+    public function testVeraenderteNonceOderTagWirdErkannt(): void
+    {
+        $t = new Tresor($this->schluessel());
+        $roh = base64_decode($t->verschluessele('geheim'), true);
+        foreach ([0, 12] as $pos) {
+            $m = $roh;
+            $m[$pos] = $m[$pos] ^ "\x01";
+            try {
+                $t->entschluessele(base64_encode($m));
+                self::fail('Ausnahme erwartet');
+            } catch (DomainFehler) {
+                self::assertTrue(true);
+            }
+        }
+    }
+
     public function testFalscherSchluessel(): void
     {
         $geheim = (new Tresor($this->schluessel('a')))->verschluessele('geheim');

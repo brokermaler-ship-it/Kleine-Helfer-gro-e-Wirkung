@@ -13,7 +13,7 @@ final class Tresor
 
     private string $schluessel;
 
-    public function __construct(string $schluesselBase64)
+    public function __construct(#[\SensitiveParameter] string $schluesselBase64)
     {
         $roh = $schluesselBase64 === '' ? false : base64_decode($schluesselBase64, true);
         if ($roh === false || strlen($roh) !== 32) {
@@ -23,7 +23,7 @@ final class Tresor
     }
 
     /** Liefert base64(nonce ‖ tag ‖ ciphertext). */
-    public function verschluessele(string $klar): string
+    public function verschluessele(#[\SensitiveParameter] string $klar): string
     {
         $nonce = random_bytes(self::NONCE);
         $tag = '';

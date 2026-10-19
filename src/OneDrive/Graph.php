@@ -34,8 +34,12 @@ final class Graph
             foreach ($this->seiten('/me/drive/root/children?$top=200') as $e) {
                 $this->ordnerAnhaengen($liste, $e, false);
             }
-            foreach ($this->seiten('/me/drive/sharedWithMe') as $e) {
-                $this->ordnerAnhaengen($liste, is_array($e['remoteItem'] ?? null) ? $e['remoteItem'] : [], true);
+            // sharedWithMe ist von Microsoft als veraltet angekündigt: nur Ergänzung, Fehler werden ignoriert.
+            try {
+                foreach ($this->seiten('/me/drive/sharedWithMe') as $e) {
+                    $this->ordnerAnhaengen($liste, is_array($e['remoteItem'] ?? null) ? $e['remoteItem'] : [], true);
+                }
+            } catch (GraphFehler) {
             }
             return $liste;
         }
@@ -48,8 +52,8 @@ final class Graph
     /** @return array{item_id:string,pfad:string} */
     public function hochladen(string $driveId, string $elternId, string $relPfad, string $datei): array
     {
-        $groesse = filesize($datei);
-        if ($groesse === false || !is_readable($datei)) {
+        $groesse = is_file($datei) && is_readable($datei) ? filesize($datei) : false;
+        if ($groesse === false) {
             throw new GraphFehler('Die Datei für die Übertragung nach OneDrive ist nicht lesbar.');
         }
         $basis = '/drives/' . rawurlencode($driveId) . '/items/' . rawurlencode($elternId) . ':/' . $this->pfadKodiert($relPfad) . ':';
@@ -58,7 +62,7 @@ final class Graph
             if ($inhalt === false) {
                 throw new GraphFehler('Die Datei für die Übertragung nach OneDrive ist nicht lesbar.');
             }
-            $a = $this->sende('PUT', $basis . '/content?@microsoft.graph.conflictBehavior=rename', ['Content-Type' => 'application/octet-stream'], $inhalt);
+            $a = $this->sende('PUT', $basis . '/content?@microsoft.graph.conflictBehavior=rename', ['Content-Type' => 'application/octet-stream'], $inhalt, max($this->zeitlimit, 120));
             return $this->ergebnis($a->json(), $relPfad);
         }
         $s = $this->json('POST', $basis . '/createUploadSession', ['Content-Type' => 'application/json'], json_encode(
@@ -112,10 +116,14 @@ final class Graph
     {
         $pfad = '/drives/' . rawurlencode($driveId) . '/items/' . rawurlencode($itemId) . '/content';
         $a = $this->anfrageMitToken('GET', self::BASIS . $pfad);
-        if (in_array($a->status, [301, 302, 303, 307, 308], true) && isset($a->kopf['location'])) {
-            $a = $this->http->anfrage('GET', $a->kopf['location'], [], null, max($this->zeitlimit, 120));
+        if (in_array($a->status, [301, 302, 303, 307, 308], true)) {
+            $ziel = $a->kopf['location'] ?? '';
+            if (!str_starts_with($ziel, 'https://')) {
+                throw new GraphFehler('Ungültige Weiterleitung von OneDrive.', $a->status);
+            }
+            $a = $this->http->anfrage('GET', $ziel, [], null, max($this->zeitlimit, 120));
         }
-        if ($a->status >= 400) {
+        if ($a->status < 200 || $a->status >= 300) {
             throw GraphFehler::ausAntwort($a, 'Datei konnte nicht aus OneDrive geladen werden');
         }
         return $a;
@@ -124,9 +132,19 @@ final class Graph
     /** @param list<array<string,mixed>> $liste @param array<string,mixed> $e */
     private function ordnerAnhaengen(array &$liste, array $e, bool $geteilt): void
     {
+        // Geteilter Ordner, der über „Zu meinen Dateien hinzufügen“ in der Wurzel liegt.
+        if (is_array($e['remoteItem'] ?? null)) {
+            $e = $e['remoteItem'];
+            $geteilt = true;
+        }
         $drive = $e['parentReference']['driveId'] ?? null;
         if (!isset($e['folder']) || !isset($e['id'], $e['name']) || !is_string($drive)) {
             return;
+        }
+        foreach ($liste as $vorhanden) {
+            if ($vorhanden['drive_id'] === $drive && $vorhanden['item_id'] === (string) $e['id']) {
+                return;
+            }
         }
         $liste[] = ['drive_id' => $drive, 'item_id' => (string) $e['id'], 'name' => (string) $e['name'], 'geteilt' => $geteilt];
     }
@@ -147,6 +165,9 @@ final class Graph
                 }
             }
             $url = (string) ($d['@odata.nextLink'] ?? '');
+            if (!str_starts_with($url, self::BASIS)) {
+                $url = '';
+            }
         }
     }
 
@@ -179,9 +200,9 @@ final class Graph
     }
 
     /** @param array<string,string> $kopf */
-    private function sende(string $methode, string $pfad, array $kopf = [], ?string $koerper = null): HttpAntwort
+    private function sende(string $methode, string $pfad, array $kopf = [], ?string $koerper = null, ?int $zeit = null): HttpAntwort
     {
-        $a = $this->anfrageMitToken($methode, self::BASIS . $pfad, $kopf, $koerper);
+        $a = $this->anfrageMitToken($methode, self::BASIS . $pfad, $kopf, $koerper, $zeit);
         if ($a->status >= 400) {
             throw GraphFehler::ausAntwort($a, 'OneDrive-Anfrage fehlgeschlagen');
         }
@@ -189,11 +210,12 @@ final class Graph
     }
 
     /** @param array<string,string> $kopf */
-    private function anfrageMitToken(string $methode, string $url, array $kopf = [], ?string $koerper = null): HttpAntwort
+    private function anfrageMitToken(string $methode, string $url, array $kopf = [], ?string $koerper = null, ?int $zeit = null): HttpAntwort
     {
-        $a = $this->http->anfrage($methode, $url, $kopf + ['Authorization' => 'Bearer ' . $this->zugriffstoken(false)], $koerper, $this->zeitlimit);
+        $zeit ??= $this->zeitlimit;
+        $a = $this->http->anfrage($methode, $url, $kopf + ['Authorization' => 'Bearer ' . $this->zugriffstoken(false)], $koerper, $zeit);
         if ($a->status === 401) {
-            $a = $this->http->anfrage($methode, $url, $kopf + ['Authorization' => 'Bearer ' . $this->zugriffstoken(true)], $koerper, $this->zeitlimit);
+            $a = $this->http->anfrage($methode, $url, $kopf + ['Authorization' => 'Bearer ' . $this->zugriffstoken(true)], $koerper, $zeit);
         }
         return $a;
     }

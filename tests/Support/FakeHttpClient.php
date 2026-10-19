@@ -10,7 +10,7 @@ use Emc\OneDrive\HttpClient;
 /** Zeichnet Anfragen auf und liefert vorbereitete Antworten (keine echten Netzwerkaufrufe). */
 final class FakeHttpClient implements HttpClient
 {
-    /** @var list<array{methode:string,url:string,kopf:array<string,string>,koerper:?string}> */
+    /** @var list<array{methode:string,url:string,kopf:array<string,string>,koerper:?string,zeitlimit:int}> */
     public array $anfragen = [];
     /** @var list<HttpAntwort|callable> */
     private array $antworten = [];
@@ -24,7 +24,7 @@ final class FakeHttpClient implements HttpClient
 
     public function anfrage(string $methode, string $url, array $kopf = [], ?string $koerper = null, int $zeitlimit = 20): HttpAntwort
     {
-        $this->anfragen[] = ['methode' => $methode, 'url' => $url, 'kopf' => $kopf, 'koerper' => $koerper];
+        $this->anfragen[] = ['methode' => $methode, 'url' => $url, 'kopf' => $kopf, 'koerper' => $koerper, 'zeitlimit' => $zeitlimit];
         if ($this->antworten === []) {
             throw new \LogicException('Keine Antwort vorbereitet für ' . $methode . ' ' . $url);
         }

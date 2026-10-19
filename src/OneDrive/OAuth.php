@@ -12,7 +12,7 @@ final class OAuth
     public function __construct(
         private HttpClient $http,
         private string $clientId,
-        private string $clientSecret,
+        #[\SensitiveParameter] private string $clientSecret,
         private string $rueckrufUrl,
         private int $zeitlimit = 20,
     ) {
@@ -32,7 +32,7 @@ final class OAuth
     }
 
     /** @return array{refresh_token:string,access_token:string,ablauf:int} */
-    public function tauscheCode(string $code): array
+    public function tauscheCode(#[\SensitiveParameter] string $code): array
     {
         return $this->token([
             'grant_type' => 'authorization_code',
@@ -42,7 +42,7 @@ final class OAuth
     }
 
     /** @return array{refresh_token:string,access_token:string,ablauf:int} */
-    public function erneuere(string $refreshToken): array
+    public function erneuere(#[\SensitiveParameter] string $refreshToken): array
     {
         return $this->token(['grant_type' => 'refresh_token', 'refresh_token' => $refreshToken], $refreshToken);
     }

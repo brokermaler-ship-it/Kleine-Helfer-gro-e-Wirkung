@@ -48,5 +48,6 @@ final class TokenSpeicherTest extends DbTestCase
         $s = $this->speicher();
         (new Einstellungen($this->pdo))->setze('onedrive_token', 'Müll');
         self::assertNull($s->lade());
+        self::assertSame('abgelaufen', $s->status());
     }
 }

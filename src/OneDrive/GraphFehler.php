@@ -36,7 +36,13 @@ final class GraphFehler extends DomainFehler
 
     public static function ausAntwort(HttpAntwort $a, string $kontext): self
     {
-        $warte = isset($a->kopf['retry-after']) && ctype_digit(trim($a->kopf['retry-after'])) ? (int) trim($a->kopf['retry-after']) : null;
+        $warte = null;
+        $ra = trim($a->kopf['retry-after'] ?? '');
+        if ($ra !== '' && ctype_digit($ra)) {
+            $warte = (int) $ra;
+        } elseif ($ra !== '' && ($ts = strtotime($ra)) !== false) {
+            $warte = max(0, $ts - time());
+        }
         return new self($kontext . ' (HTTP ' . $a->status . ').', $a->status, false, $warte);
     }
 }

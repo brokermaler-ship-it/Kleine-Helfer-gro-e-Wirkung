@@ -158,6 +158,71 @@ final class GraphTest extends TestCase
         }
     }
 
+    public function testKleinerPutHatLangesZeitlimit(): void
+    {
+        $this->http->antwort(201, ['id' => 'I', 'name' => 'a.txt']);
+        $this->graph()->hochladen('D', 'P', 'a.txt', $this->datei(10));
+        self::assertGreaterThanOrEqual(120, $this->http->anfragen[0]['zeitlimit']);
+    }
+
+    public function testRetryAfterAlsDatum(): void
+    {
+        $this->http->antwort(503, '', ['Retry-After' => gmdate('D, d M Y H:i:s', time() + 90) . ' GMT']);
+        try {
+            $this->graph()->ich();
+            self::fail('Ausnahme erwartet');
+        } catch (GraphFehler $e) {
+            self::assertEqualsWithDelta(90, $e->warteSekunden(), 3);
+        }
+    }
+
+    public function testRedirectNurHttpsUndNur2xx(): void
+    {
+        $this->http->antwort(302, '', ['Location' => 'http://evil.example/x']);
+        try {
+            $this->graph()->inhalt('D', 'I');
+            self::fail('Ausnahme erwartet');
+        } catch (GraphFehler) {
+            self::assertCount(1, $this->http->anfragen);
+        }
+        $this->http->antwort(302, '', ['Location' => 'https://cdn.example/x'])->antwort(304, '');
+        $this->expectException(GraphFehler::class);
+        $this->graph()->inhalt('D', 'I');
+    }
+
+    public function testFremdeNextLinkWirdNichtGefolgt(): void
+    {
+        $this->http->antwort(200, ['value' => [], '@odata.nextLink' => 'https://evil.example/n'])
+            ->antwort(200, ['value' => []]);
+        $this->graph()->ordnerListe(null, null);
+        foreach ($this->http->anfragen as $a) {
+            self::assertStringStartsWith('https://graph.microsoft.com/v1.0/', $a['url']);
+        }
+    }
+
+    public function testHinzugefuegterGeteilterOrdnerInWurzel(): void
+    {
+        $this->http->antwort(200, ['value' => [
+            ['id' => 'L1', 'name' => 'Verknuepfung', 'remoteItem' => ['id' => 'R9', 'name' => 'EMC', 'folder' => [], 'parentReference' => ['driveId' => 'D9']]],
+        ]])->antwort(200, ['value' => [
+            ['id' => 'S', 'remoteItem' => ['id' => 'R9', 'name' => 'EMC', 'folder' => [], 'parentReference' => ['driveId' => 'D9']]],
+        ]]);
+        self::assertSame(
+            [['drive_id' => 'D9', 'item_id' => 'R9', 'name' => 'EMC', 'geteilt' => true]],
+            $this->graph()->ordnerListe(null, null)
+        );
+    }
+
+    public function testSharedWithMeFehlerWirdIgnoriert(): void
+    {
+        $this->http->antwort(200, ['value' => [
+            ['id' => 'F1', 'name' => 'Eigen', 'folder' => [], 'parentReference' => ['driveId' => 'D1']],
+        ]])->antwort(400, ['error' => ['code' => 'invalidRequest']]);
+        $liste = $this->graph()->ordnerListe(null, null);
+        self::assertCount(1, $liste);
+        self::assertSame('F1', $liste[0]['item_id']);
+    }
+
     public function testLoeschen404IstErfolg(): void
     {
         $this->http->antwort(404, ['error' => []])->antwort(204, '');

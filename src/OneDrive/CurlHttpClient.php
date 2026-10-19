@@ -22,12 +22,18 @@ final class CurlHttpClient implements HttpClient
             CURLOPT_CUSTOMREQUEST => $methode,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_FOLLOWLOCATION => false,
+            CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
+            CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTPS,
             CURLOPT_HTTPHEADER => $zeilen,
             CURLOPT_TIMEOUT => max(1, $zeitlimit),
             CURLOPT_CONNECTTIMEOUT => min(10, max(1, $zeitlimit)),
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
             CURLOPT_HEADERFUNCTION => static function ($ch, string $zeile) use (&$antwortKopf): int {
+                if (str_starts_with($zeile, 'HTTP/')) {
+                    $antwortKopf = [];
+                    return strlen($zeile);
+                }
                 $teile = explode(':', $zeile, 2);
                 if (count($teile) === 2) {
                     $antwortKopf[strtolower(trim($teile[0]))] = trim($teile[1]);

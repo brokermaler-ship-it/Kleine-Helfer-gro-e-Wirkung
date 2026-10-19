@@ -20,7 +20,7 @@ class TokenSpeicher
     }
 
     /** @param array{refresh_token:string,access_token:string,ablauf:int} $token */
-    public function speichere(array $token): void
+    public function speichere(#[\SensitiveParameter] array $token): void
     {
         $this->einstellungen->setze('onedrive_token', $this->tresor->verschluessele(json_encode($token, JSON_THROW_ON_ERROR)));
         $this->setzeStatus(self::STATUS_VERBUNDEN);
@@ -36,6 +36,8 @@ class TokenSpeicher
         try {
             $d = json_decode($this->tresor->entschluessele($roh), true);
         } catch (DomainFehler) {
+            // Schlüssel geändert oder Daten verändert: neu verbinden nötig.
+            $this->setzeStatus(self::STATUS_ABGELAUFEN);
             return null;
         }
         return is_array($d) && isset($d['refresh_token'], $d['access_token'], $d['ablauf']) ? $d : null;
