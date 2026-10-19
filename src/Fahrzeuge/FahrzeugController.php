@@ -38,6 +38,7 @@ final class FahrzeugController
         private DecoderRepository $decoder,
         private Adresspruefung $adresspruefung,
         private DokumentRepository $dokumente,
+        private bool $onedriveKonfiguriert = false,
     ) {
     }
 
@@ -65,6 +66,7 @@ final class FahrzeugController
             'verlauf' => $this->protokoll->fuerObjekt('fahrzeug', (int) $fz['id']),
             'decoderListe' => $this->decoderMitPruefung($fz),
             'dateien' => $this->dokumente->fuerObjekt('fahrzeug', (int) $fz['id']),
+            'onedriveKonfiguriert' => $this->onedriveKonfiguriert,
         ]);
     }
 

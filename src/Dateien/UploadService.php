@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Emc\Dateien;
 
+use Emc\OneDrive\Uebertragung;
+
 final class UploadService
 {
     private const KATEGORIEN = ['foto', 'anleitung', 'schaltplan', 'gleisplan', 'rechnung', 'sonstiges'];
@@ -22,6 +24,7 @@ final class UploadService
         private Bildbearbeitung $bild,
         ?\Closure $istHochgeladen = null,
         ?\Closure $verschiebe = null,
+        private ?Uebertragung $uebertragung = null,
     ) {
         $this->istHochgeladen = $istHochgeladen ?? static fn(string $tmp): bool => is_uploaded_file($tmp);
         $this->verschiebe = $verschiebe ?? static fn(string $von, string $nach): bool => move_uploaded_file($von, $nach);
@@ -47,7 +50,7 @@ final class UploadService
      * @param array<string,mixed> $phpDatei Eintrag aus $_FILES (name, tmp_name, error, size)
      * @throws UploadFehler
      */
-    public function speichere(array $phpDatei, string $titel, string $kategorie, ?int $benutzerId): int
+    public function speichere(array $phpDatei, string $titel, string $kategorie, ?int $benutzerId, ?int $fahrzeugId = null): int
     {
         $tmp = $this->pruefeUpload($phpDatei);
         $groesse = (int) filesize($tmp);
@@ -100,7 +103,33 @@ final class UploadService
             }
             throw $t;
         }
-        return (int) $this->pdo->lastInsertId();
+        $id = (int) $this->pdo->lastInsertId();
+        $this->uebertrageNachOneDrive($id, $fahrzeugId);
+        return $id;
+    }
+
+    /**
+     * Legt den Übertragungsauftrag an und versucht ihn sofort. Die Datei ist lokal bereits vollständig
+     * gespeichert; jeder Fehler hier bleibt unsichtbar (nur Log ohne Geheimnisse) und wird später wiederholt.
+     */
+    private function uebertrageNachOneDrive(int $dokumentId, ?int $fahrzeugId): void
+    {
+        if ($this->uebertragung === null) {
+            return;
+        }
+        try {
+            if (!$this->uebertragung->aktiv()) {
+                return;
+            }
+            if ($fahrzeugId !== null) {
+                // Der Zielpfad richtet sich nach dem Fahrzeug, daher vor dem Auftrag zuordnen.
+                $this->pdo->prepare('INSERT IGNORE INTO dokument_zuordnung (dokument_id, objekt_typ, objekt_id) VALUES (?, ?, ?)')
+                    ->execute([$dokumentId, 'fahrzeug', $fahrzeugId]);
+            }
+            $this->uebertragung->einreihen($dokumentId);
+        } catch (\Throwable $t) {
+            error_log('OneDrive-Übertragung nach Upload fehlgeschlagen: ' . $t::class);
+        }
     }
 
     /** @param array<string,mixed> $d */

@@ -12,7 +12,10 @@ use Emc\Core\Response;
 use Emc\Core\Session;
 use Emc\Core\View;
 use Emc\Fahrzeuge\FahrzeugRepository;
+use Emc\OneDrive\GraphFehler;
+use Emc\OneDrive\Uebertragung;
 use Emc\Protokoll\Aenderungsprotokoll;
+use Emc\OneDrive\Graph;
 
 final class DateiController
 {
@@ -26,6 +29,8 @@ final class DateiController
         private Aenderungsprotokoll $protokoll,
         private Auth $auth,
         private Session $session,
+        private ?Uebertragung $uebertragung = null,
+        private ?Graph $graph = null,
     ) {
     }
 
@@ -46,7 +51,7 @@ final class DateiController
         foreach (array_slice($dateien, 0, self::MAX_DATEIEN) as $datei) {
             $name = is_string($datei['name'] ?? null) ? basename(str_replace('\\', '/', $datei['name'])) : '';
             try {
-                $id = $this->upload->speichere($datei, $titel, $kategorie, $benutzerId);
+                $id = $this->upload->speichere($datei, $titel, $kategorie, $benutzerId, $fzId);
             } catch (UploadFehler $f) {
                 $this->session->meldung('fehler', ($name !== '' ? $name . ': ' : '') . $f->getMessage());
                 continue;
@@ -95,6 +100,7 @@ final class DateiController
         $this->verlangeLoeschrecht($dok);
         $fahrzeugIds = $this->dokumente->objekte((int) $dok['id'], 'fahrzeug');
         $this->dokumente->loeschen((int) $dok['id']);
+        $this->raeumeOneDriveAuf();
         foreach ($fahrzeugIds as $fzId) {
             $this->protokoll->schreibe($this->auth->benutzer()?->id, 'fahrzeug', $fzId, 'geaendert', ['datei' => ['alt' => $dok['titel'], 'neu' => null]]);
         }
@@ -132,17 +138,23 @@ final class DateiController
             throw new HttpFehler(404);
         }
         $basis = $this->dokumente->absoluterPfad((string) $dok['pfad']);
-        if ($basis === null || !is_file($basis)) {
+        if ($basis === null) {
             throw new HttpFehler(404);
         }
         $typ = DateiTyp::fuerEndung((string) $dok['endung']);
         $datei = $basis;
         $mime = (string) $dok['mime'];
         $inline = $typ !== null && $typ['anzeige'] === 'inline';
+        $istVariante = false;
         if ($variante !== null && $typ !== null && $typ['bild'] && is_file($basis . '.' . $variante . '.jpg')) {
             $datei = $basis . '.' . $variante . '.jpg';
             $mime = 'image/jpeg';
             $inline = true;
+            $istVariante = true;
+        }
+        $remote = !$istVariante && !is_file($basis) && ($dok['ablage'] ?? 'lokal') === 'onedrive' && (int) ($dok['original_lokal'] ?? 1) === 0;
+        if (!$istVariante && !$remote && !is_file($basis)) {
+            throw new HttpFehler(404);
         }
         $name = (string) $dok['original_name'];
         $ascii = trim((string) preg_replace('/[^A-Za-z0-9._-]+/', '_', $name), '_') ?: 'datei';
@@ -155,7 +167,48 @@ final class DateiController
         if ($mime !== 'application/pdf') {
             $header['Content-Security-Policy'] = "default-src 'none'; sandbox";
         }
+        if ($remote) {
+            return $this->ausOneDrive($dok, $header);
+        }
         return Response::datei($datei, $header);
+    }
+
+    /**
+     * Streamt das Original aus OneDrive (nur über die App, nie per Freigabelink).
+     *
+     * @param array<string,mixed> $dok
+     * @param array<string,string> $header
+     */
+    private function ausOneDrive(array $dok, array $header): Response
+    {
+        try {
+            $ziel = $this->uebertragung?->ziel();
+            $item = (string) ($dok['onedrive_item_id'] ?? '');
+            if ($this->graph === null || $ziel === null || $item === '') {
+                throw new GraphFehler('OneDrive ist nicht eingerichtet.');
+            }
+            $antwort = $this->graph->inhalt($ziel['drive_id'], $item);
+            return new Response($antwort->koerper, 200, $header);
+        } catch (\Throwable $t) {
+            error_log('OneDrive-Original nicht abrufbar: ' . $t::class);
+            return new Response(
+                'Die Originaldatei liegt im OneDrive und ist gerade nicht erreichbar. Die Vorschau bleibt verfügbar; bitte später erneut versuchen.',
+                503,
+                ['Content-Type' => 'text/plain; charset=utf-8', 'Retry-After' => '60', 'X-Content-Type-Options' => 'nosniff']
+            );
+        }
+    }
+
+    /** Führt offene Löschaufträge nebenbei aus; Fehler bleiben unsichtbar, der Auftrag wird später wiederholt. */
+    private function raeumeOneDriveAuf(): void
+    {
+        try {
+            if ($this->uebertragung !== null && $this->uebertragung->aktiv()) {
+                $this->uebertragung->verarbeite(3);
+            }
+        } catch (\Throwable $t) {
+            error_log('OneDrive-Aufräumen fehlgeschlagen: ' . $t::class);
+        }
     }
 
     /**

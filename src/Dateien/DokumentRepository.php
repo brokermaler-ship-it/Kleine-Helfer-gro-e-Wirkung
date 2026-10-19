@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Emc\Dateien;
 
+use Emc\OneDrive\Auftraege;
+
 final class DokumentRepository
 {
-    public function __construct(private \PDO $pdo, private string $speicherPfad)
+    public function __construct(private \PDO $pdo, private string $speicherPfad, private ?Auftraege $auftraege = null)
     {
     }
 
@@ -29,7 +31,7 @@ final class DokumentRepository
     public function fuerObjekt(string $objektTyp, int $objektId): array
     {
         $st = $this->pdo->prepare(
-            "SELECT d.*, (SELECT COUNT(*) FROM dokument_zuordnung za WHERE za.dokument_id = d.id) AS zuordnungen_anzahl, TRIM(CONCAT(COALESCE(p.vorname, ''), ' ', COALESCE(p.nachname, ''))) AS hochgeladen_von_name "
+            "SELECT d.*, (SELECT COUNT(*) FROM dokument_zuordnung za WHERE za.dokument_id = d.id) AS zuordnungen_anzahl, (SELECT COUNT(*) FROM onedrive_auftrag oa WHERE oa.dokument_id = d.id AND oa.art = 'hochladen' AND oa.status = 'wartet') AS onedrive_offen, TRIM(CONCAT(COALESCE(p.vorname, ''), ' ', COALESCE(p.nachname, ''))) AS hochgeladen_von_name "
             . 'FROM dokument d JOIN dokument_zuordnung z ON z.dokument_id = d.id '
             . 'LEFT JOIN benutzer b ON b.id = d.hochgeladen_von LEFT JOIN person p ON p.id = b.person_id '
             . 'WHERE z.objekt_typ = ? AND z.objekt_id = ? ORDER BY d.hochgeladen_am DESC, d.id DESC'
@@ -80,6 +82,10 @@ final class DokumentRepository
         }
         $this->pdo->beginTransaction();
         try {
+            // Lösch-Auftrag zuerst und in derselben Transaktion: ohne ihn bliebe die Datei im OneDrive verwaist.
+            if ($this->auftraege !== null && ($dok['ablage'] ?? 'lokal') === 'onedrive' && is_string($dok['onedrive_item_id'] ?? null) && $dok['onedrive_item_id'] !== '') {
+                $this->auftraege->neu('loeschen', null, $dok['onedrive_item_id']);
+            }
             $this->pdo->prepare('UPDATE fahrzeug SET titelbild_dokument_id = NULL, geaendert_am = geaendert_am WHERE titelbild_dokument_id = ?')->execute([$id]);
             $this->pdo->prepare('DELETE FROM dokument_zuordnung WHERE dokument_id = ?')->execute([$id]);
             $this->pdo->prepare('DELETE FROM dokument WHERE id = ?')->execute([$id]);

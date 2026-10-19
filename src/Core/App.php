@@ -33,8 +33,10 @@ use Emc\Fahrzeuge\FahrzeugRepository;
 use Emc\OneDrive\CurlHttpClient;
 use Emc\OneDrive\Graph;
 use Emc\OneDrive\HttpClient;
+use Emc\OneDrive\Auftraege;
 use Emc\OneDrive\OAuth;
 use Emc\OneDrive\TokenSpeicher;
+use Emc\OneDrive\Uebertragung;
 use Emc\Personen\BenutzerController;
 use Emc\Personen\BenutzerRepository;
 use Emc\Personen\KontoController;
@@ -107,6 +109,28 @@ final class App
             $c->get(TokenSpeicher::class),
             max(1, (int) ($this->config['onedrive_zeitlimit_s'] ?? 20))
         ));
+        $this->container->set(Auftraege::class, fn(Container $c) => new Auftraege($c->get('pdo')));
+        // null, solange OneDrive nicht (gültig) konfiguriert ist: dann bleibt alles lokal und Tresor/TokenSpeicher werden nie gebaut.
+        $this->container->set(Uebertragung::class, function (Container $c): ?Uebertragung {
+            if (!Uebertragung::konfiguriert($this->config)) {
+                return null;
+            }
+            try {
+                return new Uebertragung(
+                    $c->get(Auftraege::class),
+                    $c->get(Graph::class),
+                    $c->get(TokenSpeicher::class),
+                    $c->get(Einstellungen::class),
+                    $c->get(DokumentRepository::class),
+                    $c->get('pdo'),
+                    $this->speicherPfad(),
+                    ($this->config['onedrive_originale_lokal_behalten'] ?? false) === true
+                );
+            } catch (\Throwable $t) {
+                error_log('OneDrive-Konfiguration unbrauchbar: ' . $t::class);
+                return null;
+            }
+        });
         $this->container->set(Aenderungsprotokoll::class, fn(Container $c) => new Aenderungsprotokoll($c->get('pdo')));
         $this->container->set(PersonRepository::class, fn(Container $c) => new PersonRepository($c->get('pdo')));
         $this->container->set(BenutzerRepository::class, fn(Container $c) => new BenutzerRepository($c->get('pdo')));
@@ -142,7 +166,8 @@ final class App
             $c->get('session'),
             $c->get(DecoderRepository::class),
             $c->get(Adresspruefung::class),
-            $c->get(DokumentRepository::class)
+            $c->get(DokumentRepository::class),
+            Uebertragung::konfiguriert($this->config)
         ));
         $this->container->set(DecoderRepository::class, fn(Container $c) => new DecoderRepository($c->get('pdo')));
         $this->container->set(Adresspruefung::class, fn(Container $c) => new Adresspruefung($c->get('pdo')));
@@ -182,12 +207,19 @@ final class App
             $c->get(Adresspruefung::class),
             $c->get(SpurweiteRepository::class)
         ));
-        $this->container->set(DokumentRepository::class, fn(Container $c) => new DokumentRepository($c->get('pdo'), $this->speicherPfad()));
+        $this->container->set(DokumentRepository::class, fn(Container $c) => new DokumentRepository(
+            $c->get('pdo'),
+            $this->speicherPfad(),
+            Uebertragung::konfiguriert($this->config) ? $c->get(Auftraege::class) : null
+        ));
         $this->container->set(UploadService::class, fn(Container $c) => new UploadService(
             $c->get('pdo'),
             $this->speicherPfad(),
             max(1, (int) ($this->config['upload_max_mb'] ?? 64)) * 1048576,
-            new Bildbearbeitung()
+            new Bildbearbeitung(),
+            null,
+            null,
+            $c->get(Uebertragung::class)
         ));
         $this->container->set(DateiController::class, fn(Container $c) => new DateiController(
             $this->view,
@@ -196,7 +228,9 @@ final class App
             $c->get(FahrzeugRepository::class),
             $c->get(Aenderungsprotokoll::class),
             $c->get(Auth::class),
-            $c->get('session')
+            $c->get('session'),
+            $c->get(Uebertragung::class),
+            $c->get(Uebertragung::class) !== null ? $c->get(Graph::class) : null
         ));
         $this->container->set(Sicherung::class, fn(Container $c) => new Sicherung(
             $c->get('pdo'),

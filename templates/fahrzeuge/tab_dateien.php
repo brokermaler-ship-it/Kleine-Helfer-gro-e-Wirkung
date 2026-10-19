@@ -11,6 +11,19 @@ $groesse = function (int $b): string {
     }
     return number_format(max(1, $b / 1024), 0, ',', '.') . ' KB';
 };
+$onedriveKonfiguriert = (bool) ($onedriveKonfiguriert ?? false);
+$odStatus = function (array $d) use ($onedriveKonfiguriert): string {
+    if (!$onedriveKonfiguriert) {
+        return '';
+    }
+    if (($d['ablage'] ?? 'lokal') === 'onedrive') {
+        return ' <span class="badge text-bg-success fw-normal" title="Das Original liegt im OneDrive des Vereins">im OneDrive</span>';
+    }
+    if ((int) ($d['onedrive_offen'] ?? 0) > 0) {
+        return ' <span class="badge text-bg-warning fw-normal" title="Die Übertragung nach OneDrive steht noch aus">wird übertragen</span>';
+    }
+    return ' <span class="badge text-bg-secondary fw-normal" title="Diese Datei liegt nur auf dem Server der App">nur lokal</span>';
+};
 $bearbeiten = $darfFz($fahrzeug);
 $darfLoeschen = fn(array $d): bool => $darf('datei_bearbeiten') || ($bearbeiten && (int) ($d['zuordnungen_anzahl'] ?? 0) === 1);
 $loeschenForm = function (array $d) use ($csrf): string {
@@ -43,6 +56,7 @@ $loeschenForm = function (array $d) use ($csrf): string {
                         <?php if ((int) $f['id'] === (int) $fahrzeug['titelbild_dokument_id']): ?>
                             <span class="badge text-bg-dark">&#9733; Titelbild</span>
                         <?php endif; ?>
+                        <?= $odStatus($f) ?>
                         <?php if ($bearbeiten): ?>
                             <div class="d-flex gap-1 mt-1">
                                 <?php if ((int) $f['id'] !== (int) $fahrzeug['titelbild_dokument_id']): ?>
@@ -87,7 +101,7 @@ $loeschenForm = function (array $d) use ($csrf): string {
             <?php foreach ($dokumente as $d): ?>
                 <tr>
                     <td aria-hidden="true"><?= $symbole[$d['endung']] ?? '&#128196;' ?></td>
-                    <td><a href="<?= e(url('/dateien/' . $d['id'])) ?>"><?= e((string) $d['titel']) ?></a> <span class="text-muted small">.<?= e((string) $d['endung']) ?></span></td>
+                    <td><a href="<?= e(url('/dateien/' . $d['id'])) ?>"><?= e((string) $d['titel']) ?></a> <span class="text-muted small">.<?= e((string) $d['endung']) ?></span><?= $odStatus($d) ?></td>
                     <td><?= e($kategorieLabels[$d['kategorie']] ?? (string) $d['kategorie']) ?></td>
                     <td><?= e($groesse((int) $d['groesse'])) ?></td>
                     <td><?= e(date('d.m.Y', (int) strtotime((string) $d['hochgeladen_am']))) ?></td>
