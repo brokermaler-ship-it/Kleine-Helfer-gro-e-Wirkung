@@ -8,7 +8,7 @@
     <?php if ($eltern !== null): ?> · <a href="<?= e(url('/admin/onedrive/ordner')) ?>">Zur obersten Ebene</a><?php endif; ?>
 </p>
 <?php if ($fehler !== null): ?>
-    <div class="alert alert-danger">Die Ordnerliste wurde nicht geladen. <?= e($fehler) ?></div>
+    <div class="alert alert-danger"><?= e($fehler) ?></div>
 <?php elseif ($ordner === []): ?>
     <div class="alert alert-info">Hier gibt es keine Unterordner.</div>
 <?php else: ?>

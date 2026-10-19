@@ -40,9 +40,13 @@ final class Uebertragung
     public static function rueckrufUrl(array $config): ?string
     {
         $oeffentlich = rtrim(trim((string) ($config['oeffentliche_url'] ?? '')), '/');
-        if (preg_match('#^https://[A-Za-z0-9.-]+(:\d{1,5})?$#', $oeffentlich) !== 1) {
+        $label = '[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?';
+        if (preg_match('#^https://(' . $label . '(?:\.' . $label . ')*)(?::(\d{1,5}))?$#i', $oeffentlich, $m) !== 1
+            || (isset($m[2]) && ((int) $m[2] < 1 || (int) $m[2] > 65535))
+        ) {
             return null;
         }
+        $oeffentlich = 'https://' . substr($oeffentlich, 8);
         return $oeffentlich . rtrim((string) ($config['basis_url'] ?? ''), '/') . '/admin/onedrive/rueckruf';
     }
 

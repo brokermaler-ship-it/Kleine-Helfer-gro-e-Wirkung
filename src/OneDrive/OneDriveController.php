@@ -21,7 +21,9 @@ final class OneDriveController
 {
     private const STATE_KEY = 'onedrive_state';
     /** OneDrive-IDs: Buchstaben, Ziffern und „!“, „_“, „-“, „.“, „=“ (persönliche Konten, z. B. „ABC123!456“). */
-    private const ID_MUSTER = '/^[A-Za-z0-9!_.=-]{1,200}$/';
+    private const ID_MUSTER = '/^(?!\.+$)[A-Za-z0-9!_.=-]{1,200}$/';
+    /** Kleine Stapelgröße in Web-Anfragen: ein Upload kann bis zu 120 s dauern (max_execution_time/Proxy). */
+    private const STAPEL_WEB = 3;
 
     /** @param array<string,mixed> $config */
     public function __construct(
@@ -45,7 +47,7 @@ final class OneDriveController
             'urlFehlt' => Uebertragung::rueckrufUrl($this->config) === null,
             'clientIdFehlt' => trim((string) ($this->config['onedrive_client_id'] ?? '')) === '',
             'secretFehlt' => trim((string) ($this->config['onedrive_client_secret'] ?? '')) === '',
-            'schluesselFehlt' => trim((string) ($this->config['app_schluessel'] ?? '')) === '',
+            'schluesselStatus' => $this->schluesselStatus(),
             'status' => TokenSpeicher::STATUS_GETRENNT,
             'konto' => '',
             'ziel' => null,
@@ -110,11 +112,15 @@ final class OneDriveController
             return $this->zurueck('fehler', 'Die Verbindung zu OneDrive ist fehlgeschlagen. Bitte später erneut versuchen.');
         }
 
+        $vorher = $this->tokens()->status();
+        $altesKonto = (string) ($this->einstellungen->hole('onedrive_konto') ?? '');
         $this->tokens()->speichere($token);
         $this->einstellungen->setze('onedrive_letzter_fehler', '');
         $konto = '';
+        $kontoId = '';
         try {
             $ich = $this->container->get(Graph::class)->ich();
+            $kontoId = isset($ich['id']) && is_string($ich['id']) ? mb_substr($ich['id'], 0, 200) : '';
             foreach (['mail', 'userPrincipalName', 'displayName'] as $feld) {
                 if (isset($ich[$feld]) && is_string($ich[$feld]) && trim($ich[$feld]) !== '') {
                     $konto = mb_substr(trim($ich[$feld]), 0, 200);
@@ -125,15 +131,28 @@ final class OneDriveController
             error_log('OneDrive-Konto nicht lesbar: ' . $t::class . ': ' . $t->getMessage());
         }
         $this->einstellungen->setze('onedrive_konto', $konto);
-        $this->protokoll->schreibe($this->auth->benutzer()?->id, 'onedrive', 1, 'geaendert', ['verbindung' => ['alt' => 'getrennt', 'neu' => 'verbunden'], 'konto' => ['alt' => null, 'neu' => $konto]]);
+        $alteId = (string) ($this->einstellungen->hole('onedrive_konto_id') ?? '');
+        $kontoGewechselt = $kontoId !== '' && $alteId !== '' && !hash_equals($alteId, $kontoId);
+        if ($kontoId !== '') {
+            $this->einstellungen->setze('onedrive_konto_id', $kontoId);
+        }
+        $this->protokoll->schreibe($this->auth->benutzer()?->id, 'onedrive', 1, 'geaendert', ['verbindung' => ['alt' => $vorher, 'neu' => 'verbunden'], 'konto' => ['alt' => $altesKonto !== '' ? $altesKonto : null, 'neu' => $konto]]);
         $this->session->meldung('erfolg', 'OneDrive ist verbunden' . ($konto !== '' ? ' (' . $konto . ')' : '') . '.');
 
         $u = $this->uebertragung();
+        if ($kontoGewechselt) {
+            // Anderes Microsoft-Konto: der alte Zielordner gehört dem alten Konto und darf nicht weiterverwendet werden.
+            $alterZiel = $u?->ziel();
+            $this->einstellungen->setze('onedrive_ziel', '');
+            $this->protokoll->schreibe($this->auth->benutzer()?->id, 'onedrive', 1, 'geaendert', ['zielordner' => ['alt' => $alterZiel['name'] ?? null, 'neu' => null]]);
+            $this->session->meldung('warnung', 'Es wurde ein anderes Microsoft-Konto verbunden. Der bisherige Zielordner wurde zurückgesetzt – bitte einen neuen Zielordner wählen.');
+            return Response::redirect(url('/admin/onedrive/ordner'));
+        }
         if ($u === null || !$u->bereit()) {
             return Response::redirect(url('/admin/onedrive/ordner'));
         }
         try {
-            $u->verarbeite(10);
+            $u->verarbeite(self::STAPEL_WEB);
         } catch (\Throwable $t) {
             error_log('OneDrive-Nachübertragung: ' . $t::class . ': ' . $t->getMessage());
         }
@@ -154,7 +173,7 @@ final class OneDriveController
         try {
             $ordner = $this->container->get(Graph::class)->ordnerListe($drive, $item);
         } catch (\Throwable $t) {
-            $fehler = $this->graphMeldung($t, 'Die Ordnerliste');
+            $fehler = $this->graphMeldung($t, 'Die Ordnerliste konnte nicht geladen werden');
         }
         return $this->html('admin/onedrive_ordner', [
             'titel' => 'OneDrive-Ordner wählen',
@@ -183,7 +202,7 @@ final class OneDriveController
         try {
             $liste = $this->container->get(Graph::class)->ordnerListe($elternDrive, $elternItem);
         } catch (\Throwable $t) {
-            return $this->zurueck('fehler', $this->graphMeldung($t, 'Der Ordner') . ' Es wurde nichts gespeichert.', '/admin/onedrive/ordner');
+            return $this->zurueck('fehler', $this->graphMeldung($t, 'Der Ordner konnte nicht geprüft werden') . ' Es wurde nichts gespeichert.', '/admin/onedrive/ordner');
         }
         $gewaehlt = null;
         foreach ($liste as $o) {
@@ -205,7 +224,7 @@ final class OneDriveController
         ]);
         $this->session->meldung('erfolg', 'Zielordner „' . $gewaehlt['name'] . '“ gespeichert.');
         try {
-            $u->verarbeite(10);
+            $u->verarbeite(self::STAPEL_WEB);
         } catch (\Throwable $t) {
             error_log('OneDrive-Nachübertragung: ' . $t::class . ': ' . $t->getMessage());
         }
@@ -219,9 +238,9 @@ final class OneDriveController
             return $this->zurueck('fehler', 'OneDrive ist nicht verbunden oder es ist kein Zielordner gewählt.');
         }
         try {
-            $e = $u->verarbeite(10);
+            $e = $u->verarbeite(self::STAPEL_WEB);
         } catch (\Throwable $t) {
-            return $this->zurueck('fehler', $this->graphMeldung($t, 'Die Übertragung'));
+            return $this->zurueck('fehler', $this->graphMeldung($t, 'Die Übertragung ist fehlgeschlagen'));
         }
         $this->session->meldung($e['fehler'] > 0 ? 'warnung' : 'erfolg', sprintf(
             '%d %s übertragen%s.',
@@ -241,9 +260,9 @@ final class OneDriveController
         try {
             $n = $u->umzug();
             $this->session->meldung('erfolg', $n === 1 ? '1 Datei zum Umzug vorgemerkt.' : $n . ' Dateien zum Umzug vorgemerkt.');
-            $u->verarbeite(10);
+            $u->verarbeite(self::STAPEL_WEB);
         } catch (\Throwable $t) {
-            $this->session->meldung('fehler', $this->graphMeldung($t, 'Die Übertragung'));
+            $this->session->meldung('fehler', $this->graphMeldung($t, 'Die Übertragung ist fehlgeschlagen'));
         }
         return Response::redirect(url('/admin/onedrive'));
     }
@@ -254,9 +273,10 @@ final class OneDriveController
             return $this->zurueck('fehler', 'OneDrive ist nicht eingerichtet.');
         }
         $konto = (string) ($this->einstellungen->hole('onedrive_konto') ?? '');
+        $vorher = $this->tokens()->status();
         $this->tokens()->loesche();
         $this->einstellungen->setze('onedrive_konto', '');
-        $this->protokoll->schreibe($this->auth->benutzer()?->id, 'onedrive', 1, 'geaendert', ['verbindung' => ['alt' => 'verbunden', 'neu' => 'getrennt'], 'konto' => ['alt' => $konto, 'neu' => null]]);
+        $this->protokoll->schreibe($this->auth->benutzer()?->id, 'onedrive', 1, 'geaendert', ['verbindung' => ['alt' => $vorher, 'neu' => 'getrennt'], 'konto' => ['alt' => $konto, 'neu' => null]]);
         $this->session->meldung('erfolg', 'OneDrive wurde getrennt. Bereits übertragene Dateien bleiben im OneDrive; lokal vorhandene Dateien bleiben erhalten.');
         return Response::redirect(url('/admin/onedrive'));
     }
@@ -293,16 +313,27 @@ final class OneDriveController
         return [$d, $i];
     }
 
-    private function graphMeldung(\Throwable $t, string $was): string
+    private function graphMeldung(\Throwable $t, string $kontext): string
     {
         if ($t instanceof GraphFehler) {
             if ($t->istAbgelaufen()) {
                 return 'Die OneDrive-Verbindung ist abgelaufen – bitte neu verbinden.';
             }
-            return $was . ' konnte nicht geladen werden bzw. nicht ausgeführt werden: ' . $t->getMessage();
+            return $kontext . ': ' . $t->getMessage();
         }
         error_log('OneDrive-Verwaltung: ' . $t::class . ': ' . $t->getMessage());
-        return $was . ' konnte wegen eines technischen Fehlers nicht ausgeführt werden. Bitte später erneut versuchen.';
+        return $kontext . ' (technischer Fehler). Bitte später erneut versuchen.';
+    }
+
+    /** @return 'fehlt'|'ungueltig'|'gesetzt' */
+    private function schluesselStatus(): string
+    {
+        $k = trim((string) ($this->config['app_schluessel'] ?? ''));
+        if ($k === '') {
+            return 'fehlt';
+        }
+        $roh = base64_decode($k, true);
+        return $roh !== false && strlen($roh) === 32 ? 'gesetzt' : 'ungueltig';
     }
 
     /** @return list<array{dokument_id:?int,art:string,versuche:int,letzter_fehler:string}> */

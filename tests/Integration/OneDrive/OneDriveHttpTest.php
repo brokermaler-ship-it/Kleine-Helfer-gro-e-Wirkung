@@ -121,6 +121,131 @@ final class OneDriveHttpTest extends OneDriveTestCase
         }
     }
 
+    public function testGueltigerSchluesselBeiFehlenderUrlWirdNichtAlsUngueltigGemeldet(): void
+    {
+        $config = $this->konfig() + ['onedrive_client_id' => 'cid', 'onedrive_client_secret' => 'sec', 'app_schluessel' => base64_encode(str_repeat('k', 32))];
+        unset($config['oeffentliche_url']);
+        $body = App::erzeuge($config, new Session($this->sitzung))->handle(new Request('GET', '/admin/onedrive'))->body;
+        self::assertStringNotContainsString('ungültig (32 Byte', $body);
+        self::assertSame(1, preg_match('/app_schluessel<\/code>\s*<span class="badge text-bg-success">gesetzt/', $body));
+
+        $config['app_schluessel'] = 'kaputt';
+        $body = App::erzeuge($config, new Session($this->sitzung))->handle(new Request('GET', '/admin/onedrive'))->body;
+        self::assertStringContainsString('ungültig (32 Byte', $body);
+    }
+
+    public function testKontowechselSetztZielordnerZurueckUndUebertraegtNicht(): void
+    {
+        $this->verbinde();
+        $this->einstellungen->setze('onedrive_konto', 'alt@outlook.de');
+        $this->einstellungen->setze('onedrive_konto_id', 'ID-ALT');
+        $dok = $this->dokument();
+        $this->pdo->prepare("INSERT INTO onedrive_auftrag (art, dokument_id, naechster_versuch) VALUES ('hochladen', ?, NOW())")->execute([$dok]);
+        $this->sitzung['onedrive_state'] = str_repeat('a', 64);
+        $this->http->antwort(200, ['access_token' => 'AT', 'refresh_token' => 'RT', 'expires_in' => 3600]);
+        $this->http->antwort(200, ['id' => 'ID-NEU', 'mail' => 'neu@outlook.de']);
+        $r = $this->get('/admin/onedrive/rueckruf', ['code' => 'C', 'state' => str_repeat('a', 64)]);
+        self::assertStringEndsWith('/admin/onedrive/ordner', $r->headers['Location']);
+        self::assertSame('', (string) $this->einstellungen->hole('onedrive_ziel'));
+        self::assertSame('ID-NEU', $this->einstellungen->hole('onedrive_konto_id'));
+        self::assertCount(2, $this->http->anfragen, 'keine Übertragung nach Kontowechsel');
+        self::assertSame('lokal', $this->dok($dok)['ablage']);
+        self::assertStringContainsString('anderes Microsoft-Konto', implode(' ', $this->meldungen()));
+        $n = (int) $this->pdo->query("SELECT COUNT(*) FROM aenderungsprotokoll WHERE objekt_typ = 'onedrive' AND aenderungen LIKE '%zielordner%'")->fetchColumn();
+        self::assertSame(1, $n);
+    }
+
+    public function testGleichesKontoBehaeltZielordnerUndMerktErstmaligDieKontoId(): void
+    {
+        $this->verbinde();
+        $this->sitzung['onedrive_state'] = str_repeat('a', 64);
+        $this->http->antwort(200, ['access_token' => 'AT', 'refresh_token' => 'RT', 'expires_in' => 3600]);
+        $this->http->antwort(200, ['id' => 'ID-1', 'mail' => 'a@outlook.de']);
+        $this->get('/admin/onedrive/rueckruf', ['code' => 'C', 'state' => str_repeat('a', 64)]);
+        self::assertSame('ID-1', $this->einstellungen->hole('onedrive_konto_id'));
+        self::assertNotSame('', (string) $this->einstellungen->hole('onedrive_ziel'));
+
+        $this->sitzung['onedrive_state'] = str_repeat('b', 64);
+        $this->http->antwort(200, ['access_token' => 'AT', 'refresh_token' => 'RT', 'expires_in' => 3600]);
+        $this->http->antwort(200, ['id' => 'ID-1', 'mail' => 'a@outlook.de']);
+        $this->get('/admin/onedrive/rueckruf', ['code' => 'C', 'state' => str_repeat('b', 64)]);
+        self::assertNotSame('', (string) $this->einstellungen->hole('onedrive_ziel'));
+    }
+
+    public function testProtokollHatEchteAltWerte(): void
+    {
+        $this->verbinde();
+        $this->tokens->setzeStatus('abgelaufen');
+        $this->post('/admin/onedrive/trennen');
+        $z = (string) $this->pdo->query("SELECT aenderungen FROM aenderungsprotokoll WHERE objekt_typ = 'onedrive' ORDER BY id DESC LIMIT 1")->fetchColumn();
+        self::assertSame('abgelaufen', json_decode($z, true)['verbindung']['alt']);
+    }
+
+    public function testRueckrufMitGueltigemStateAberOhneCode(): void
+    {
+        $this->sitzung['onedrive_state'] = str_repeat('a', 64);
+        $r = $this->get('/admin/onedrive/rueckruf', ['state' => str_repeat('a', 64)]);
+        self::assertSame(303, $r->status);
+        self::assertSame([], $this->http->anfragen);
+        self::assertSame('', (string) $this->einstellungen->hole('onedrive_token'));
+        self::assertStringContainsString('Anmeldecode', implode(' ', $this->meldungen()));
+    }
+
+    public function testUnbekannterFehlerparameterWirdNichtUngefiltertAusgegeben(): void
+    {
+        $this->sitzung['onedrive_state'] = str_repeat('a', 64);
+        $this->get('/admin/onedrive/rueckruf', ['error' => 'server_error', 'state' => str_repeat('a', 64)]);
+        self::assertStringContainsString('server_error', implode(' ', $this->meldungen()));
+        $this->sitzung['onedrive_state'] = str_repeat('a', 64);
+        $this->sitzung['_meldungen'] = [];
+        $this->get('/admin/onedrive/rueckruf', ['error' => '<script>alert(1)</script>', 'state' => str_repeat('a', 64)]);
+        self::assertStringNotContainsString('<script>', implode(' ', $this->meldungen()));
+    }
+
+    public function testOrdnernameMitMarkupWirdMaskiert(): void
+    {
+        $this->verbinde(false);
+        $liste = ['value' => [['id' => 'F1', 'name' => '<script>alert(1)</script>', 'folder' => [], 'parentReference' => ['driveId' => 'D1']]]];
+        $this->http->antwort(200, $liste)->antwort(200, ['value' => []]);
+        $body = $this->get('/admin/onedrive/ordner')->body;
+        self::assertStringNotContainsString('<script>alert(1)', $body);
+        self::assertStringContainsString('&lt;script&gt;', $body);
+
+        $this->http->antwort(200, $liste)->antwort(200, ['value' => []]);
+        $this->post('/admin/onedrive/ordner', ['drive_id' => 'D1', 'item_id' => 'F1']);
+        $body = $this->get('/admin/onedrive')->body;
+        self::assertStringNotContainsString('<script>alert(1)', $body);
+        self::assertStringContainsString('&lt;script&gt;', $body);
+    }
+
+    public function testPunktIdsWerdenAbgelehnt(): void
+    {
+        $this->verbinde(false);
+        foreach (['..', '.'] as $id) {
+            $r = $this->get('/admin/onedrive/ordner', ['drive' => 'D1', 'item' => $id]);
+            self::assertSame(303, $r->status);
+        }
+        self::assertSame([], $this->http->anfragen);
+    }
+
+    public function testRueckrufOhneAnmeldungLeitetZumLogin(): void
+    {
+        $this->sitzung = [];
+        $r = $this->get('/admin/onedrive/rueckruf', ['code' => 'C', 'state' => 'x']);
+        self::assertSame(303, $r->status);
+        self::assertStringContainsString('/login', $r->headers['Location']);
+        self::assertSame([], $this->http->anfragen);
+    }
+
+    public function testOeffentlicheUrlPruefungIstGenau(): void
+    {
+        $ok = ['onedrive_client_id' => 'a', 'onedrive_client_secret' => 'b', 'app_schluessel' => 'c'];
+        foreach (['https://-', 'https://.', 'https://a..b', 'https://a.de:99999', 'https://a.de:0', 'https://u@a.de', 'https://a.de/pfad', 'http://a.de'] as $u) {
+            self::assertNull(\Emc\OneDrive\Uebertragung::rueckrufUrl(['oeffentliche_url' => $u] + $ok), $u);
+        }
+        self::assertSame('https://mitglieder.emc78.de:8443/admin/onedrive/rueckruf', \Emc\OneDrive\Uebertragung::rueckrufUrl(['oeffentliche_url' => 'HTTPS://mitglieder.emc78.de:8443'] + $ok));
+    }
+
     public function testSeiteKonfiguriertZeigtVerbindenKnopfUndStatus(): void
     {
         $r = $this->get('/admin/onedrive');

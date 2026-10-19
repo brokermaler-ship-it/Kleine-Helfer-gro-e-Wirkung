@@ -1,6 +1,6 @@
 <?php
 /** @var ?string $rueckrufUrl */ /** @var bool $urlFehlt */ /** @var bool $konfiguriert */ /** @var string $schluesselVorschlag */
-/** @var bool $clientIdFehlt */ /** @var bool $secretFehlt */ /** @var bool $schluesselFehlt */
+/** @var bool $clientIdFehlt */ /** @var bool $secretFehlt */ /** @var string $schluesselStatus */
 /** @var string $status */ /** @var string $konto */ /** @var ?array{drive_id:string,item_id:string,name:string} $ziel */
 /** @var array{wartet:int,fehler:int,erledigt:int} $zaehler */ /** @var string $letzterFehler */
 /** @var list<array{dokument_id:?int,art:string,versuche:int,letzter_fehler:string}> $letzteFehler */
@@ -34,7 +34,7 @@ $statusKlasse = ['verbunden' => 'success', 'abgelaufen' => 'warning', 'getrennt'
                         <li><code>oeffentliche_url</code> <?= $urlFehlt ? '<span class="badge text-bg-warning">fehlt oder nicht https</span>' : '<span class="badge text-bg-success">gesetzt</span>' ?></li>
                         <li><code>onedrive_client_id</code> <?= $clientIdFehlt ? '<span class="badge text-bg-warning">fehlt</span>' : '<span class="badge text-bg-success">gesetzt</span>' ?></li>
                         <li><code>onedrive_client_secret</code> <?= $secretFehlt ? '<span class="badge text-bg-warning">fehlt</span>' : '<span class="badge text-bg-success">gesetzt</span>' ?></li>
-                        <li><code>app_schluessel</code> <?= $schluesselFehlt ? '<span class="badge text-bg-warning">fehlt oder ungültig</span>' : '<span class="badge text-bg-warning">ungültig (32 Byte, base64)</span>' ?></li>
+                        <li><code>app_schluessel</code> <?php if ($schluesselStatus === 'gesetzt'): ?><span class="badge text-bg-success">gesetzt</span><?php elseif ($schluesselStatus === 'ungueltig'): ?><span class="badge text-bg-danger">ungültig (32 Byte, base64)</span><?php else: ?><span class="badge text-bg-warning">fehlt</span><?php endif; ?></li>
                     </ul>
                 </li>
             </ol>
