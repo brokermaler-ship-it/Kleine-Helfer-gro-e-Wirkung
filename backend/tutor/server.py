@@ -3,8 +3,9 @@
     uvicorn tutor.server:app --port 8000
 
 Ergebnisse des Wissenschecks landen pseudonym (nur mit der Pilot-Kennung) in
-``data/quiz_results.jsonl``. ``/api/pilot/summary`` wertet sie aus,
-``/api/pilot/latency`` die Latenzen aus ``data/sessions.jsonl``.
+``data/quiz_results.jsonl``, getrennt nach Tutor- und Vergleichsgruppe.
+``/api/pilot/summary`` wertet sie aus, ``/api/pilot/latency`` die Latenzen aus
+``data/sessions.jsonl`` und ``/api/pilot/feedback`` den Fragebogen aus ``data/feedback.jsonl``.
 """
 
 from __future__ import annotations
@@ -21,14 +22,17 @@ from fastapi.staticfiles import StaticFiles
 from livekit import api
 from pydantic import BaseModel, Field
 
+from . import feedback
 from .config import Settings, load_settings
-from .metrics import latency_summary, load_session_records
+from .metrics import latency_summary
 from .modules import Module, load_modules
 
 AGENT_NAME = "voice-tutor"
 PILOT_ID_PATTERN = r"^[A-Za-z0-9_-]{3,32}$"
 
 Phase = Literal["vorher", "nachher", "spaeter"]
+# "vergleich": Teilnehmende, die statt des Tutors das bisherige E-Learning bearbeiten.
+Group = Literal["tutor", "vergleich"]
 
 
 class SessionRequest(BaseModel):
@@ -39,12 +43,30 @@ class SessionRequest(BaseModel):
 class QuizSubmission(BaseModel):
     pilot_id: str = Field(pattern=PILOT_ID_PATTERN)
     phase: Phase
+    group: Group = "tutor"
     answers: dict[str, int]
+
+
+class FeedbackSubmission(BaseModel):
+    pilot_id: str = Field(pattern=PILOT_ID_PATTERN)
+    answers: dict[str, int]
+    comment: str = Field(default="", max_length=feedback.COMMENT_MAX_LENGTH)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings()
     app = FastAPI(title="Voice-AI-Tutor Prototyp")
+
+    def read_jsonl(name: str) -> list[dict]:
+        path = settings.data_dir / name
+        if not path.exists():
+            return []
+        return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+    def append_jsonl(name: str, record: dict) -> None:
+        settings.data_dir.mkdir(parents=True, exist_ok=True)
+        with (settings.data_dir / name).open("a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
     @lru_cache(maxsize=1)
     def modules() -> dict[str, Module]:
@@ -116,43 +138,67 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "module_id": module.id,
             "module_version": module.version,
             "phase": submission.phase,
+            "group": submission.group,
             "score": score,
             "total": len(results),
             "answers": {r["id"]: r["chosen"] for r in results},
         }
-        settings.data_dir.mkdir(parents=True, exist_ok=True)
-        with (settings.data_dir / "quiz_results.jsonl").open("a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        append_jsonl("quiz_results.jsonl", record)
         return {"score": score, "total": len(results), "results": results}
 
     @app.get("/api/pilot/summary")
     def pilot_summary() -> dict:
-        """Durchschnittliche Quote richtiger Antworten je Modul und Phase.
+        """Durchschnittliche Quote richtiger Antworten je Modul, Gruppe und Phase.
 
-        Pro Person und Phase zählt nur der letzte Versuch.
+        Pro Person und Phase zählt nur der letzte Versuch. Ältere Datensätze ohne Gruppe
+        gehören zur Tutor-Gruppe.
         """
-        path = settings.data_dir / "quiz_results.jsonl"
-        latest: dict[tuple[str, str, str], dict] = {}
-        if path.exists():
-            for line in path.read_text(encoding="utf-8").splitlines():
-                if line.strip():
-                    r = json.loads(line)
-                    latest[(r["module_id"], r["phase"], r["pilot_id"])] = r
-        grouped: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
-        for (module_id, phase, _), r in latest.items():
-            grouped[module_id][phase].append(r["score"] / r["total"] if r["total"] else 0.0)
+        latest: dict[tuple[str, str, str, str], dict] = {}
+        for r in read_jsonl("quiz_results.jsonl"):
+            latest[(r["module_id"], r.get("group", "tutor"), r["phase"], r["pilot_id"])] = r
+        grouped: dict[str, dict[str, dict[str, list[float]]]] = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+        for (module_id, group, phase, _), r in latest.items():
+            grouped[module_id][group][phase].append(r["score"] / r["total"] if r["total"] else 0.0)
         return {
             module_id: {
-                phase: {"teilnehmende": len(v), "quote_richtig": round(sum(v) / len(v), 3)}
-                for phase, v in phases.items()
+                group: {
+                    phase: {"teilnehmende": len(v), "quote_richtig": round(sum(v) / len(v), 3)}
+                    for phase, v in phases.items()
+                }
+                for group, phases in groups.items()
             }
-            for module_id, phases in grouped.items()
+            for module_id, groups in grouped.items()
         }
+
+    @app.get("/api/feedback/questions")
+    def feedback_questions() -> list[dict]:
+        return [{"id": q.id, "text": q.text, "options": list(q.options)} for q in feedback.QUESTIONS]
+
+    @app.post("/api/modules/{module_id}/feedback")
+    def submit_feedback(module_id: str, submission: FeedbackSubmission) -> dict:
+        module = get_module(module_id)
+        error = feedback.validate_answers(submission.answers)
+        if error:
+            raise HTTPException(422, error)
+        record = {
+            "timestamp": datetime.now().isoformat(),
+            "pilot_id": submission.pilot_id,
+            "module_id": module.id,
+            "answers": submission.answers,
+            "comment": submission.comment.strip(),
+        }
+        append_jsonl("feedback.jsonl", record)
+        return {"ok": True}
+
+    @app.get("/api/pilot/feedback")
+    def pilot_feedback() -> dict:
+        """Häufigkeiten und Mittelwerte des Fragebogens je Modul."""
+        return feedback.summarize(read_jsonl("feedback.jsonl"))
 
     @app.get("/api/pilot/latency")
     def pilot_latency() -> dict:
         """P50/P95 der Antwortlatenz je Modul und Abgleich mit den Zielen (PROJECT.md, 1.1)."""
-        return latency_summary(load_session_records(settings.data_dir / "sessions.jsonl"))
+        return latency_summary(read_jsonl("sessions.jsonl"))
 
     if settings.frontend_dir.exists():
         app.mount("/", StaticFiles(directory=settings.frontend_dir, html=True), name="frontend")

@@ -33,8 +33,11 @@ backend/tutor/
   textmode.py             Derselbe Tutor im Terminal, nur mit Anthropic-Key
   evaluation.py           Prüflauf des Evaluations-Sets im Textmodus
   server.py               Web-Server: Browser-Client, Raum-Token, Wissenscheck, Auswertung
+  metrics.py              Latenz-Auswertung (P50/P95)
+  feedback.py             Fragebogen nach der Lerneinheit
 frontend/                 Browser-Client (ohne Build-Schritt)
-docker-compose.yml        Lokaler LiveKit-Server
+Dockerfile                Ein Image für Sprach-Agent und Web-Server
+docker-compose.yml        LiveKit-Server, Agent und Web-Server für den Pilot
 ```
 
 Data-Channel-Topics vom Agenten zum Browser: `agent_state`, `agent_key_point`,
@@ -57,6 +60,16 @@ uvicorn tutor.server:app --port 8000          # Terminal 2: Web-Server
 ```
 
 Dann <http://localhost:8000> im Browser öffnen (Chrome oder Edge, Mikrofon erlauben).
+
+Alles in Containern (Keys aus `.env`, Daten im Volume `tutor-data`):
+
+```bash
+docker compose up -d --build
+```
+
+Der Agent erreicht LiveKit im Compose-Netz unter `ws://livekit:7880`. Der Browser bekommt
+`PUBLIC_LIVEKIT_URL` (Standard `ws://localhost:7880`); auf einer Pilot-VM muss dort die von
+den Rechnern der Teilnehmenden erreichbare Adresse stehen.
 
 Nur die Didaktik ausprobieren, ohne Sprache und LiveKit:
 
@@ -98,18 +111,26 @@ muss zum Modulstand passen.
 
 1. Die Pilotleitung vergibt pseudonyme Kennungen (z. B. `P-017`). Namen werden abgelehnt.
 2. Teilnehmende machen den Wissenscheck **vorher**, dann die Lerneinheit, dann den
-   Wissenscheck **nachher** mit Auflösung.
+   Wissenscheck **nachher** mit Auflösung und zum Schluss einen kurzen Fragebogen
+   (Verständlichkeit, Unterbrechungen beim Nachdenken, Arbeitsumfeld und Headset).
+   Die **Vergleichsgruppe** bekommt den Link mit `?gruppe=vergleich`, zum Beispiel
+   `http://localhost:8000/?gruppe=vergleich`. Sie macht denselben Wissenscheck, bearbeitet
+   dazwischen aber das bisherige E-Learning statt des Tutors und bekommt keinen Fragebogen.
 3. Ein bis zwei Wochen später: Startseite → „Nur Wissenscheck (Wiederholung)“.
-4. Auswertung: `GET /api/pilot/summary` liefert je Modul und Phase die Zahl der
-   Teilnehmenden und die Quote richtiger Antworten (letzter Versuch pro Person).
+4. Auswertung: `GET /api/pilot/summary` liefert je Modul, Gruppe (`tutor`, `vergleich`)
+   und Phase die Zahl der Teilnehmenden und die Quote richtiger Antworten (letzter
+   Versuch pro Person).
 5. Latenz: `GET /api/pilot/latency` liefert je Modul P50/P95 von `e2e_latency` und der
    Reaktionszeit nach Turn-Ende in Millisekunden, die Abschlussquote und ob die Ziele aus
    PROJECT.md erreicht sind. Nachdenkpausen (Turn-Erkennung wartet länger als 1,5 s)
    werden getrennt ausgewiesen und zählen nicht für die Ziele.
+6. Fragebogen: `GET /api/pilot/feedback` liefert je Modul die Häufigkeit jeder Antwort,
+   bei Skalenfragen den Mittelwert, und die freiwilligen Kommentare ohne Pilot-Kennung.
 
 Gespeichert wird in `data/` (nicht im Repository):
 
-- `quiz_results.jsonl`: Antworten und Punktzahl pro Kennung und Phase
+- `quiz_results.jsonl`: Antworten und Punktzahl pro Kennung, Gruppe und Phase
+- `feedback.jsonl`: Antworten auf den Fragebogen pro Kennung
 - `sessions.jsonl`: pro Sitzung Modulstand, bearbeitete Lernziele und Latenzen pro
   Gesprächswechsel (`e2e_latency`, `end_of_turn_delay`, `llm_node_ttft`, `tts_node_ttfb`)
 

@@ -15,10 +15,8 @@ gewollte Nachdenkpausen. Sie werden getrennt ausgewiesen und zählen nicht für 
 
 from __future__ import annotations
 
-import json
 import math
 from collections import defaultdict
-from pathlib import Path
 
 # Ab dieser Wartezeit der Turn-Erkennung gilt ein Gesprächswechsel als Nachdenkpause.
 THINKING_PAUSE_S = 1.5
@@ -104,8 +102,3 @@ def latency_summary(records: list[dict]) -> dict:
         }
     return summary
 
-
-def load_session_records(path: Path) -> list[dict]:
-    if not path.exists():
-        return []
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]

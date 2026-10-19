@@ -23,7 +23,7 @@ Der **Voice-AI-Tutor** ist ein unternehmensinternes Schulungs- und Wissenssystem
 | **Antwortlatenz** | `e2e_latency` P50 < 1.000 ms, P95 < 1.500 ms | pro Gesprächswechsel in `data/sessions.jsonl`, ausgewertet über `/api/pilot/latency` |
 | **Reaktionszeit nach erkanntem Turn-Ende** | P50 < 500 ms | `llm_node_ttft` + `tts_node_ttfb` (`/api/pilot/latency`) |
 | **Session-Abschlussquote** | > 85 % | `finished` in `data/sessions.jsonl` (`/api/pilot/latency`) |
-| **Unterbrechungen beim Nachdenken** | < 1 pro Sitzung (subjektiv, Pilotbefragung) | Fragebogen nach dem Pilot |
+| **Unterbrechungen beim Nachdenken** | < 1 pro Sitzung (subjektiv, Pilotbefragung) | Fragebogen nach der Lerneinheit (`/api/pilot/feedback`) |
 
 > **Entscheidung (Okt. 2026):** Das ursprüngliche SLO „< 800 ms ohne RAG“ ist mit einem sokratischen Tutor nicht vereinbar. LiveKit misst `e2e_latency` ab dem Ende des Sprechens, also *inklusive* der Wartezeit, mit der die Turn-Erkennung Nachdenkpausen abwartet. Diese Wartezeit ist didaktisch gewollt. Deshalb gelten jetzt zwei Werte: die Gesamtlatenz (inkl. Turn-Erkennung) und die reine Reaktionszeit nach dem erkannten Turn-Ende.
 
@@ -172,11 +172,13 @@ Für clientseitige Audiosignale (Earcons), sobald RAG-Suchen Wartezeiten erzeuge
 │   │   ├── tools.py               # Tutor-Werkzeuge, Lernprotokoll, Topic-Namen
 │   │   ├── server.py              # Token, Wissenscheck, Pilot-Auswertung, Frontend
 │   │   ├── metrics.py             # Latenz-Auswertung (P50/P95)
+│   │   ├── feedback.py            # Fragebogen nach der Lerneinheit
 │   │   ├── textmode.py            # Tutor im Terminal
 │   │   └── evaluation.py          # Prüflauf des Evaluations-Sets
 │   └── tests/
 ├── frontend/                      # Browser-Client (index.html, app.js, styles.css)
-├── docker-compose.yml             # Lokaler LiveKit-Server
+├── Dockerfile                     # Image für Agent und Web-Server
+├── docker-compose.yml             # LiveKit, Agent und Web-Server
 ├── .env.example
 └── .github/workflows/ci.yml       # Tests bei jedem Push
 ```
@@ -215,10 +217,10 @@ Prototyp  ──>  Echter Test  ──>  Freigaben  ──>  Pilot (20–30 Pers
 
 ### Phase 3: Pilot (4 Wochen)
 
-*   20–30 Teilnehmende mit pseudonymen Kennungen; Vergleichsgruppe mit dem bisherigen E-Learning.
+*   20–30 Teilnehmende mit pseudonymen Kennungen; Vergleichsgruppe mit dem bisherigen E-Learning (Link mit `?gruppe=vergleich`, getrennte Auswertung in `/api/pilot/summary`).
 *   Ablauf: Wissenscheck vorher → Lerneinheit → Wissenscheck nachher → nach 1–2 Wochen Wissenscheck später.
-*   Kurzer Fragebogen: Verständlichkeit, Unterbrechungen, Nutzung im Arbeitsumfeld (Großraumbüro, Headset).
-*   Hosting für den Pilot: eine VM im Unternehmensnetz oder LiveKit Cloud (EU-Region), Agent und Web-Server per Docker.
+*   Kurzer Fragebogen nach dem Wissenscheck „nachher“: Verständlichkeit, Unterbrechungen, Nutzung im Arbeitsumfeld (Großraumbüro, Headset); Auswertung über `/api/pilot/feedback`.
+*   Hosting für den Pilot: eine VM im Unternehmensnetz oder LiveKit Cloud (EU-Region), Agent und Web-Server per Docker (`docker compose up -d --build`).
 
 ### Gate: Entscheidung über Skalierung
 
