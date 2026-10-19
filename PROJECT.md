@@ -20,9 +20,9 @@ Der **Voice-AI-Tutor** ist ein unternehmensinternes Schulungs- und Wissenssystem
 | :--- | :--- | :--- |
 | **Lernzuwachs** | Quote richtiger Antworten nachher mindestens 25 Prozentpunkte über vorher | Wissenscheck vorher/nachher (`/api/pilot/summary`) |
 | **Behaltensleistung** | Nach 1–2 Wochen höchstens 10 Prozentpunkte unter „nachher“ und über dem bisherigen E-Learning | Wissenscheck „später“, Vergleichsgruppe mit bisherigem Format |
-| **Antwortlatenz** | `e2e_latency` P50 < 1.000 ms, P95 < 1.500 ms | pro Gesprächswechsel in `data/sessions.jsonl` |
-| **Reaktionszeit nach erkanntem Turn-Ende** | P50 < 500 ms | `llm_node_ttft` + `tts_node_ttfb` |
-| **Session-Abschlussquote** | > 85 % | `finished` in `data/sessions.jsonl` |
+| **Antwortlatenz** | `e2e_latency` P50 < 1.000 ms, P95 < 1.500 ms | pro Gesprächswechsel in `data/sessions.jsonl`, ausgewertet über `/api/pilot/latency` |
+| **Reaktionszeit nach erkanntem Turn-Ende** | P50 < 500 ms | `llm_node_ttft` + `tts_node_ttfb` (`/api/pilot/latency`) |
+| **Session-Abschlussquote** | > 85 % | `finished` in `data/sessions.jsonl` (`/api/pilot/latency`) |
 | **Unterbrechungen beim Nachdenken** | < 1 pro Sitzung (subjektiv, Pilotbefragung) | Fragebogen nach dem Pilot |
 
 > **Entscheidung (Okt. 2026):** Das ursprüngliche SLO „< 800 ms ohne RAG“ ist mit einem sokratischen Tutor nicht vereinbar. LiveKit misst `e2e_latency` ab dem Ende des Sprechens, also *inklusive* der Wartezeit, mit der die Turn-Erkennung Nachdenkpausen abwartet. Diese Wartezeit ist didaktisch gewollt. Deshalb gelten jetzt zwei Werte: die Gesamtlatenz (inkl. Turn-Erkennung) und die reine Reaktionszeit nach dem erkannten Turn-Ende.
@@ -171,6 +171,7 @@ Für clientseitige Audiosignale (Earcons), sobald RAG-Suchen Wartezeiten erzeuge
 │   │   ├── prompts.py             # Sokratischer System-Prompt
 │   │   ├── tools.py               # Tutor-Werkzeuge, Lernprotokoll, Topic-Namen
 │   │   ├── server.py              # Token, Wissenscheck, Pilot-Auswertung, Frontend
+│   │   ├── metrics.py             # Latenz-Auswertung (P50/P95)
 │   │   ├── textmode.py            # Tutor im Terminal
 │   │   └── evaluation.py          # Prüflauf des Evaluations-Sets
 │   └── tests/

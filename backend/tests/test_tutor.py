@@ -143,3 +143,43 @@ def test_session_token_dispatches_agent_with_module(client):
     assert json.loads(dispatch.metadata) == {"module_id": "phishing-melden", "pilot_id": "P-001"}
 
     assert client.post("/api/session", json={"module_id": "gibtsnicht", "pilot_id": "P-001"}).status_code == 404
+
+
+def test_percentile_interpolates_like_numpy():
+    from tutor.metrics import percentile
+
+    assert percentile([], 50) is None
+    assert percentile([1.0], 95) == 1.0
+    assert percentile([4.0, 1.0, 3.0, 2.0], 50) == 2.5
+    assert percentile([float(i) for i in range(1, 21)], 95) == pytest.approx(19.05)
+
+
+def test_pilot_latency_separates_thinking_pauses(client, tmp_path):
+    def session(finished, *pairs):
+        turns = []
+        for eot, e2e, ttft, ttfb in pairs:
+            turns.append({"role": "user", "end_of_turn_delay": eot, "transcription_delay": 0.1})
+            turns.append({"role": "assistant", "e2e_latency": e2e, "llm_node_ttft": ttft, "tts_node_ttfb": ttfb})
+        return {"module_id": "phishing-melden", "finished": finished, "turns": turns}
+
+    records = [
+        # Begrüßung ohne vorherige Nachricht der Person, ohne e2e_latency
+        {"module_id": "phishing-melden", "finished": True, "turns": [
+            {"role": "assistant", "llm_node_ttft": 0.2, "tts_node_ttfb": 0.1},
+            *session(True, (0.5, 0.8, 0.2, 0.1), (0.6, 0.9, 0.25, 0.1))["turns"],
+        ]},
+        session(False, (0.7, 1.2, 0.3, 0.15), (3.0, 3.6, 0.3, 0.1)),  # zweiter Wechsel: Nachdenkpause
+    ]
+    (tmp_path / "sessions.jsonl").write_text("\n".join(json.dumps(r) for r in records) + "\n")
+
+    summary = client.get("/api/pilot/latency").json()["phishing-melden"]
+    assert summary["sitzungen"] == 2 and summary["abschlussquote"] == 0.5
+    assert summary["e2e_latency_ms"] == {"n": 3, "p50": 900, "p95": 1170}
+    assert summary["reaktionszeit_ms"]["n"] == 4  # Begrüßung zählt mit, Nachdenkpause nicht
+    assert summary["reaktionszeit_ms"]["p50"] == 325
+    assert summary["nachdenkpausen"] == {"anzahl": 1, "e2e_latency_ms": {"n": 1, "p50": 3600, "p95": 3600}}
+    assert summary["ziele_erreicht"] == {"e2e_p50": True, "e2e_p95": True, "reaktionszeit_p50": True}
+
+
+def test_pilot_latency_without_sessions(client):
+    assert client.get("/api/pilot/latency").json() == {}

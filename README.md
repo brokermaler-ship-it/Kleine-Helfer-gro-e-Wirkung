@@ -102,6 +102,10 @@ muss zum Modulstand passen.
 3. Ein bis zwei Wochen später: Startseite → „Nur Wissenscheck (Wiederholung)“.
 4. Auswertung: `GET /api/pilot/summary` liefert je Modul und Phase die Zahl der
    Teilnehmenden und die Quote richtiger Antworten (letzter Versuch pro Person).
+5. Latenz: `GET /api/pilot/latency` liefert je Modul P50/P95 von `e2e_latency` und der
+   Reaktionszeit nach Turn-Ende in Millisekunden, die Abschlussquote und ob die Ziele aus
+   PROJECT.md erreicht sind. Nachdenkpausen (Turn-Erkennung wartet länger als 1,5 s)
+   werden getrennt ausgewiesen und zählen nicht für die Ziele.
 
 Gespeichert wird in `data/` (nicht im Repository):
 
@@ -136,7 +140,7 @@ sollte vor allem diese Punkte ansehen:
 
 - Wartet der Tutor nach seinen Fragen lange genug? Sonst `TUTOR_ENDPOINTING_*` anpassen.
 - Klingt die gewählte Cartesia-Stimme auf Deutsch natürlich?
-- Liegt `e2e_latency` in `sessions.jsonl` im Median unter 1.000 ms (inklusive Turn-Erkennung, siehe PROJECT.md Abschnitt 7)?
+- Liegt `e2e_latency` im Median unter 1.000 ms (inklusive Turn-Erkennung, siehe PROJECT.md Abschnitt 7)? `GET /api/pilot/latency` zeigt es direkt.
 - Hält sich der Tutor an das Material und ruft er die Werkzeuge sinnvoll auf?
 
 Bewusst noch nicht enthalten: SSO, Rollenrechte, mehrere Module mit RAG,

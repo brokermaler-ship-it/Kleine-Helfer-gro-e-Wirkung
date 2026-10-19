@@ -3,7 +3,8 @@
     uvicorn tutor.server:app --port 8000
 
 Ergebnisse des Wissenschecks landen pseudonym (nur mit der Pilot-Kennung) in
-``data/quiz_results.jsonl``. ``/api/pilot/summary`` wertet sie aus.
+``data/quiz_results.jsonl``. ``/api/pilot/summary`` wertet sie aus,
+``/api/pilot/latency`` die Latenzen aus ``data/sessions.jsonl``.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from livekit import api
 from pydantic import BaseModel, Field
 
 from .config import Settings, load_settings
+from .metrics import latency_summary, load_session_records
 from .modules import Module, load_modules
 
 AGENT_NAME = "voice-tutor"
@@ -146,6 +148,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             }
             for module_id, phases in grouped.items()
         }
+
+    @app.get("/api/pilot/latency")
+    def pilot_latency() -> dict:
+        """P50/P95 der Antwortlatenz je Modul und Abgleich mit den Zielen (PROJECT.md, 1.1)."""
+        return latency_summary(load_session_records(settings.data_dir / "sessions.jsonl"))
 
     if settings.frontend_dir.exists():
         app.mount("/", StaticFiles(directory=settings.frontend_dir, html=True), name="frontend")
