@@ -12,7 +12,7 @@ nach der Lerneinheit (optional noch einmal ein bis zwei Wochen später).
 | Thema | Spec | Prototyp | Grund |
 | :--- | :--- | :--- | :--- |
 | Wissensabruf | RAG mit Qdrant | Ganzes Modul im Prompt (mit Prompt-Caching) | Keine Suchlatenz, das Modell sieht immer die vollständige SOP |
-| Turn-Erkennung | VAD, 0,35 s Stille | Lokaler Turn-Detector + dynamische Wartezeit 0,8–5 s | Nachdenkpausen nach Tutor-Fragen sollen nicht unterbrochen werden |
+| Turn-Erkennung | VAD, 0,35 s Stille | Lokaler Turn-Detector + dynamische Wartezeit 0,5–5 s | Nachdenkpausen nach Tutor-Fragen sollen nicht unterbrochen werden |
 | LLM | GPT-4o-mini / Claude 3.5 Sonnet | Claude Sonnet 5.5, Effort `low` | Aktuelles Modell, niedrige Effort-Stufe für kurze Antwortzeiten |
 | Erfolgsmessung | Abschlussquote | Wissenscheck vorher/nachher/später + Latenz pro Antwort | Misst Lernerfolg statt nur Nutzung |
 | Merkhilfe | – | Merksätze, Quelle und Lernziel-Fortschritt auf dem Bildschirm | Gehörtes allein behält man schlecht |
@@ -111,7 +111,7 @@ sollte vor allem diese Punkte ansehen:
 
 - Wartet der Tutor nach seinen Fragen lange genug? Sonst `TUTOR_ENDPOINTING_*` anpassen.
 - Klingt die gewählte Cartesia-Stimme auf Deutsch natürlich?
-- Liegt `e2e_latency` in `sessions.jsonl` unter 800 ms?
+- Liegt `e2e_latency` in `sessions.jsonl` im Median unter 1.000 ms (inklusive Turn-Erkennung, siehe PROJECT.md Abschnitt 7)?
 - Hält sich der Tutor an das Material und ruft er die Werkzeuge sinnvoll auf?
 
 Bewusst noch nicht enthalten: SSO, Rollenrechte, mehrere Module mit RAG,
