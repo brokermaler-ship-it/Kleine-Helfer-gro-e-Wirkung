@@ -30,6 +30,11 @@ use Emc\Digital\FunktionRepository;
 use Emc\Digital\FunktionsvorlageRepository;
 use Emc\Fahrzeuge\FahrzeugController;
 use Emc\Fahrzeuge\FahrzeugRepository;
+use Emc\OneDrive\CurlHttpClient;
+use Emc\OneDrive\Graph;
+use Emc\OneDrive\HttpClient;
+use Emc\OneDrive\OAuth;
+use Emc\OneDrive\TokenSpeicher;
 use Emc\Personen\BenutzerController;
 use Emc\Personen\BenutzerRepository;
 use Emc\Personen\KontoController;
@@ -86,6 +91,22 @@ final class App
             $c->get('session')
         ));
         $this->container->set(Einstellungen::class, fn(Container $c) => new Einstellungen($c->get('pdo')));
+        $this->container->set(Tresor::class, fn() => new Tresor((string) ($this->config['app_schluessel'] ?? '')));
+        $this->container->set(HttpClient::class, fn() => new CurlHttpClient());
+        $this->container->set(TokenSpeicher::class, fn(Container $c) => new TokenSpeicher($c->get(Einstellungen::class), $c->get(Tresor::class)));
+        $this->container->set(OAuth::class, fn(Container $c) => new OAuth(
+            $c->get(HttpClient::class),
+            (string) ($this->config['onedrive_client_id'] ?? ''),
+            (string) ($this->config['onedrive_client_secret'] ?? ''),
+            rtrim((string) ($this->config['basis_url'] ?? ''), '/') . '/admin/onedrive/rueckruf',
+            max(1, (int) ($this->config['onedrive_zeitlimit_s'] ?? 20))
+        ));
+        $this->container->set(Graph::class, fn(Container $c) => new Graph(
+            $c->get(HttpClient::class),
+            $c->get(OAuth::class),
+            $c->get(TokenSpeicher::class),
+            max(1, (int) ($this->config['onedrive_zeitlimit_s'] ?? 20))
+        ));
         $this->container->set(Aenderungsprotokoll::class, fn(Container $c) => new Aenderungsprotokoll($c->get('pdo')));
         $this->container->set(PersonRepository::class, fn(Container $c) => new PersonRepository($c->get('pdo')));
         $this->container->set(BenutzerRepository::class, fn(Container $c) => new BenutzerRepository($c->get('pdo')));
