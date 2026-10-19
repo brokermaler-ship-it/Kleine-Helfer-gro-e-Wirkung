@@ -46,7 +46,7 @@ def load_settings() -> Settings:
         stt_model=os.environ.get("TUTOR_STT_MODEL", "nova-3"),
         tts_model=os.environ.get("TUTOR_TTS_MODEL", "sonic-3"),
         tts_voice=os.environ.get("CARTESIA_VOICE_ID") or None,
-        endpointing_min_delay=_float("TUTOR_ENDPOINTING_MIN_DELAY", 0.8),
+        endpointing_min_delay=_float("TUTOR_ENDPOINTING_MIN_DELAY", 0.5),
         endpointing_max_delay=_float("TUTOR_ENDPOINTING_MAX_DELAY", 5.0),
         livekit_url=os.environ.get("LIVEKIT_URL", "ws://localhost:7880"),
         livekit_api_key=os.environ.get("LIVEKIT_API_KEY", "devkey"),
