@@ -1,0 +1,121 @@
+# BEISPIELINHALT für den Prototyp – keine echte Unternehmensrichtlinie.
+# Vor einem Pilot durch eine echte, von der Fachabteilung freigegebene SOP ersetzen.
+
+id: phishing-melden
+title: Verdächtige E-Mails erkennen und melden
+version: "2026-10-beispiel"
+owner: IT-Sicherheit (Beispiel)
+owner_contact: IT-Service-Desk, Durchwahl 4444
+estimated_minutes: 10
+
+learning_objectives:
+  - id: erkennen
+    text: Drei typische Merkmale einer Phishing-E-Mail benennen können.
+  - id: melden
+    text: Den korrekten Meldeweg für verdächtige E-Mails kennen.
+  - id: notfall
+    text: Wissen, was sofort zu tun ist, wenn man bereits geklickt oder Daten eingegeben hat.
+
+sections:
+  - id: s1
+    title: Typische Merkmale
+    text: |
+      Phishing-E-Mails erzeugen fast immer Zeitdruck ("Ihr Konto wird in 24 Stunden gesperrt")
+      oder spielen mit Autorität ("Die Geschäftsführung bittet um eine dringende Überweisung").
+      Der angezeigte Absendername wirkt oft vertraut, die tatsächliche Absenderadresse weicht aber
+      ab, zum Beispiel durch vertauschte Buchstaben in der Domain.
+      Links führen auf Seiten, deren Adresse nicht zur angeblichen Firma passt. Das erkennt man,
+      indem man mit der Maus über den Link fährt, ohne zu klicken.
+      Unerwartete Anhänge, besonders Office-Dateien mit Makros oder ZIP-Archive, sind ein
+      weiteres Warnsignal.
+
+  - id: s2
+    title: Richtig melden
+    text: |
+      Verdächtige E-Mails werden ausschließlich über die Schaltfläche "Phishing melden" in
+      Outlook gemeldet. Die Schaltfläche leitet die E-Mail samt technischer Kopfzeilen an das
+      Sicherheitsteam weiter und entfernt sie aus dem Posteingang.
+      Die E-Mail nicht vorher löschen und nicht an Kolleginnen oder Kollegen weiterleiten,
+      auch nicht, um sie zu warnen. Weiterleiten verbreitet den schädlichen Inhalt.
+      Wer unsicher ist, meldet lieber einmal zu viel: Fehlalarme sind ausdrücklich erwünscht
+      und haben keine Konsequenzen.
+
+  - id: s3
+    title: Wenn bereits geklickt wurde
+    text: |
+      Wer auf einen Link geklickt, einen Anhang geöffnet oder Zugangsdaten eingegeben hat,
+      ruft sofort den IT-Service-Desk unter der Durchwahl 4444 an. Ziel ist eine Meldung
+      innerhalb von 15 Minuten.
+      Den Rechner nicht ausschalten, aber das Netzwerkkabel ziehen beziehungsweise das WLAN
+      trennen. Ausschalten würde Spuren vernichten, die das Sicherheitsteam für die Analyse
+      braucht.
+      Wurden Zugangsdaten eingegeben, wird das Passwort gemeinsam mit dem Service-Desk
+      geändert. Niemand wird für einen gemeldeten Klick bestraft. Verschweigen ist das
+      eigentliche Risiko.
+
+quiz:
+  - id: q1
+    objective: erkennen
+    question: Welches Merkmal ist ein typisches Warnsignal für Phishing?
+    options:
+      - Die E-Mail enthält das Firmenlogo.
+      - Die E-Mail erzeugt Zeitdruck, zum Beispiel mit einer angedrohten Kontosperrung.
+      - Die E-Mail ist auf Deutsch geschrieben.
+      - Die E-Mail kommt an einem Montag.
+    correct: 1
+    explanation: Zeitdruck und angedrohte Konsequenzen sollen dich zum schnellen Klicken bringen.
+
+  - id: q2
+    objective: erkennen
+    question: Wie prüfst du, wohin ein Link in einer E-Mail wirklich führt?
+    options:
+      - Ich klicke darauf und schaue, welche Seite sich öffnet.
+      - Ich fahre mit der Maus über den Link, ohne zu klicken, und prüfe die angezeigte Adresse.
+      - Ich leite die E-Mail an eine Kollegin weiter und frage sie.
+      - Gar nicht, Links in E-Mails sind grundsätzlich sicher.
+    correct: 1
+    explanation: Beim Darüberfahren zeigt Outlook das echte Linkziel an, ohne die Seite zu öffnen.
+
+  - id: q3
+    objective: melden
+    question: Wie meldest du eine verdächtige E-Mail korrekt?
+    options:
+      - Ich lösche sie sofort.
+      - Ich leite sie an mein Team weiter, damit alle gewarnt sind.
+      - Ich nutze die Schaltfläche "Phishing melden" in Outlook.
+      - Ich antworte dem Absender und frage nach.
+    correct: 2
+    explanation: Nur die Schaltfläche übermittelt die technischen Kopfzeilen an das Sicherheitsteam.
+
+  - id: q4
+    objective: melden
+    question: Du bist dir nicht sicher, ob eine E-Mail Phishing ist. Was tust du?
+    options:
+      - Ich melde sie trotzdem, Fehlalarme sind erwünscht.
+      - Ich warte ab, ob noch mehr solche E-Mails kommen.
+      - Ich öffne den Anhang in einer ruhigen Minute, um es zu prüfen.
+      - Ich ignoriere sie.
+    correct: 0
+    explanation: Lieber einmal zu viel melden. Fehlalarme haben keine Konsequenzen.
+
+  - id: q5
+    objective: notfall
+    question: Du hast deine Zugangsdaten auf einer gefälschten Seite eingegeben. Was ist der erste Schritt?
+    options:
+      - Den Rechner sofort ausschalten.
+      - Sofort den IT-Service-Desk anrufen und das Netzwerk trennen.
+      - Erst einmal abwarten, ob etwas passiert.
+      - Selbst das Passwort ändern und niemandem davon erzählen.
+    correct: 1
+    explanation: Schnell melden (Ziel unter 15 Minuten) und Netzwerk trennen. Ausschalten vernichtet Spuren.
+
+  - id: q6
+    objective: notfall
+    question: Warum solltest du den Rechner nach einem Klick NICHT ausschalten?
+    options:
+      - Weil er sonst kaputtgehen könnte.
+      - Weil das Sicherheitsteam die Spuren im Arbeitsspeicher für die Analyse braucht.
+      - Weil das Ausschalten zu lange dauert.
+      - Das ist egal, Ausschalten ist genauso gut.
+    correct: 1
+    explanation: Beim Ausschalten gehen Spuren verloren, die für die Analyse wichtig sind.
