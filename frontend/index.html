@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Voice-Tutor Prototyp</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/livekit-client@2.22.3/dist/livekit-client.umd.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand">Voice-Tutor</span>
+    <span class="badge">Prototyp</span>
+  </header>
+
+  <main>
+    <!-- 1. Start -->
+    <section id="view-start" class="view">
+      <h1>Lerneinheit starten</h1>
+      <p class="lead">Du lernst im Gespräch mit einem KI-Tutor. Vorher und nachher gibt es einen kurzen Wissenscheck, damit wir sehen, ob das Format funktioniert.</p>
+      <form id="start-form" class="card stack">
+        <label>Pilot-Kennung
+          <input id="pilot-id" name="pilot" required pattern="[A-Za-z0-9_\-]{3,32}" placeholder="z. B. P-017" autocomplete="off">
+          <small>Bitte nicht deinen Namen eingeben. Die Kennung bekommst du von der Pilotleitung.</small>
+        </label>
+        <label>Modul
+          <select id="module-select" required></select>
+        </label>
+        <div id="module-info" class="muted"></div>
+        <div class="row">
+          <button type="submit" class="primary">Weiter zum Wissenscheck</button>
+          <button type="button" id="retention-only" class="secondary">Nur Wissenscheck (Wiederholung)</button>
+        </div>
+      </form>
+      <p class="note">Das Gespräch wird nicht aufgezeichnet. Audio wird nur während der Sitzung verarbeitet. Gespeichert werden die Ergebnisse des Wissenschecks und Latenzmesswerte, beides nur mit deiner Pilot-Kennung.</p>
+    </section>
+
+    <!-- 2./4. Wissenscheck -->
+    <section id="view-quiz" class="view" hidden>
+      <h1 id="quiz-title">Wissenscheck</h1>
+      <p id="quiz-lead" class="lead"></p>
+      <form id="quiz-form" class="stack"></form>
+      <div id="quiz-result" class="card" hidden></div>
+    </section>
+
+    <!-- 3. Gespräch -->
+    <section id="view-session" class="view" hidden>
+      <div class="session-head">
+        <div id="status" class="status" data-state="connecting">
+          <span class="dot"></span><span id="status-text">Verbinde …</span>
+        </div>
+        <div class="row">
+          <button id="mute" class="secondary" type="button">Mikrofon aus</button>
+          <button id="end" class="danger" type="button">Beenden</button>
+        </div>
+      </div>
+      <div class="session-grid">
+        <div class="card transcript-card">
+          <h2>Gespräch</h2>
+          <div id="transcript" class="transcript" aria-live="polite"></div>
+        </div>
+        <aside class="stack">
+          <div class="card">
+            <h2>Lernziele</h2>
+            <ul id="objectives" class="objectives"></ul>
+          </div>
+          <div class="card">
+            <h2>Merksätze</h2>
+            <ul id="key-points" class="key-points"><li class="muted empty">Noch keine</li></ul>
+          </div>
+          <div class="card">
+            <h2>Quelle</h2>
+            <div id="source" class="source muted">Noch keine</div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- Lernprotokoll -->
+    <dialog id="protocol-dialog">
+      <article id="protocol-content" class="protocol"></article>
+      <div class="row">
+        <button id="protocol-download" class="secondary" type="button">Als Markdown speichern</button>
+        <button id="protocol-continue" class="primary" type="button">Weiter zum Wissenscheck</button>
+      </div>
+    </dialog>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

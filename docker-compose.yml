@@ -1,0 +1,9 @@
+# Lokaler LiveKit-Server im Entwicklungsmodus (API-Key "devkey", Secret "secret").
+services:
+  livekit:
+    image: livekit/livekit-server:v1.13.7
+    command: --dev --bind 0.0.0.0
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
