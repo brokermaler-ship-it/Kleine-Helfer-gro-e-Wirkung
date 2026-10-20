@@ -16,17 +16,19 @@ final class Berechtigung
     public const BENUTZER_VERWALTEN = 'benutzer_verwalten';
     public const STAMMDATEN_VERWALTEN = 'stammdaten_verwalten';
     public const BETRIEB = 'betrieb';
+    public const PERSON_DSGVO_LOESCHEN = 'person_dsgvo_loeschen';
 
-    /** Mindestrang je Aktion: 1 Mitglied, 2 Bearbeiter, 3 Admin. */
+    /** Mindestrang je Aktion: 1 Mitglied, 2 Fahrzeugwart, 3 Bearbeiter, 4 Admin. */
     private const MINDESTRANG = [
         self::LESEN => 1,
         self::FAHRZEUG_ANLEGEN => 1,
         self::FAHRZEUG_BEARBEITEN => 2,
-        self::PERSON_BEARBEITEN => 2,
-        self::DATEI_BEARBEITEN => 2,
-        self::BENUTZER_VERWALTEN => 3,
-        self::STAMMDATEN_VERWALTEN => 3,
-        self::BETRIEB => 3,
+        self::PERSON_BEARBEITEN => 3,
+        self::DATEI_BEARBEITEN => 3,
+        self::BENUTZER_VERWALTEN => 4,
+        self::STAMMDATEN_VERWALTEN => 4,
+        self::BETRIEB => 4,
+        self::PERSON_DSGVO_LOESCHEN => 4,
     ];
 
     public static function darf(?Benutzer $b, string $aktion): bool
@@ -36,14 +38,15 @@ final class Berechtigung
         }
         $rang = match ($b->rolle) {
             Rolle::Mitglied => 1,
-            Rolle::Bearbeiter => 2,
-            Rolle::Admin => 3,
+            Rolle::Fahrzeugwart => 2,
+            Rolle::Bearbeiter => 3,
+            Rolle::Admin => 4,
         };
         return $rang >= self::MINDESTRANG[$aktion];
     }
 
     /**
-     * Zentrale Objektprüfung: Bearbeiter und Admin dürfen jedes Fahrzeug bearbeiten,
+     * Zentrale Objektprüfung: Fahrzeugwart und höher dürfen jedes Fahrzeug bearbeiten (auch private),
      * Mitglieder nur die von ihnen selbst angelegten (NULL = Altbestand, gilt als von einem Bearbeiter angelegt).
      * Das Löschen bleibt davon unberührt (nur FAHRZEUG_BEARBEITEN).
      *

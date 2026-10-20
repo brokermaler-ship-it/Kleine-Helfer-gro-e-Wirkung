@@ -30,6 +30,7 @@
                 <strong>Testumgebung</strong> – hier gibt es nur Beispieldaten. Test-Zugänge (Passwort: <code>Test-EMC78!</code>):
                 <ul class="mb-0 mt-1">
                     <li><code>bearbeiter@test.emc78.de</code> – Bearbeiter</li>
+                    <li><code>fahrzeugwart@test.emc78.de</code> – Fahrzeugwart</li>
                     <li><code>mitglied@test.emc78.de</code> – Mitglied</li>
                     <li>Admin-Zugang: beim Vorstand erfragen</li>
                 </ul>

@@ -125,14 +125,16 @@ final class DemoDatenTest extends DbTestCase
         $this->assertSame(AnmeldeErgebnis::Falsch, $auth()->anmelden('admin@test.emc78.de', 'Test-EMC78!', '127.0.0.1'));
         $this->assertSame(AnmeldeErgebnis::Erfolg, $auth()->anmelden('admin@test.emc78.de', self::ADMIN_PASSWORT, '127.0.0.1'));
         $this->assertSame(AnmeldeErgebnis::Erfolg, $auth()->anmelden('bearbeiter@test.emc78.de', 'Test-EMC78!', '127.0.0.1'));
+        $this->assertSame(AnmeldeErgebnis::Erfolg, $auth()->anmelden('fahrzeugwart@test.emc78.de', 'Test-EMC78!', '127.0.0.1'));
     }
 
-    public function test_login_zeigt_nur_mitglied_und_bearbeiter_zugang(): void
+    public function test_login_zeigt_testzugaenge_ohne_admin(): void
     {
         $this->legeBenutzerAn('x@verein.de');
         $body = $this->app()->handle(new Request('GET', '/login'))->body;
         $this->assertStringContainsString('mitglied@test.emc78.de', $body);
         $this->assertStringContainsString('bearbeiter@test.emc78.de', $body);
+        $this->assertStringContainsString('fahrzeugwart@test.emc78.de', $body);
         $this->assertStringContainsString('Test-EMC78!', $body);
         $this->assertStringContainsString('Admin-Zugang: beim Vorstand erfragen', $body);
         $this->assertStringNotContainsString('admin@test.emc78.de', $body);
@@ -145,8 +147,8 @@ final class DemoDatenTest extends DbTestCase
         (new DemoDaten($app))->erzeuge(true);
 
         $this->assertSame(12, $this->zaehle('fahrzeug'));
-        $this->assertSame(6, $this->zaehle('person'));
-        $this->assertSame(3, $this->zaehle('benutzer'));
+        $this->assertSame(7, $this->zaehle('person'));
+        $this->assertSame(4, $this->zaehle('benutzer'));
         $this->assertSame(1, (int) $this->pdo->query("SELECT COUNT(*) FROM fahrzeug WHERE status = 'ausgemustert'")->fetchColumn());
         $this->assertGreaterThan(0, $this->zaehle('funktion'));
         $this->assertGreaterThan(0, $this->zaehle('funktionsvorlage'));
@@ -166,6 +168,8 @@ final class DemoDatenTest extends DbTestCase
         $this->assertSame(AnmeldeErgebnis::Erfolg, $app->container()->get(Auth::class)->anmelden('mitglied@test.emc78.de', 'Test-EMC78!', '127.0.0.1'));
         $this->assertSame('admin', (string) $this->pdo->query("SELECT rolle FROM benutzer WHERE email = 'admin@test.emc78.de'")->fetchColumn());
         $this->assertSame('bearbeiter', (string) $this->pdo->query("SELECT rolle FROM benutzer WHERE email = 'bearbeiter@test.emc78.de'")->fetchColumn());
+        $this->assertSame('fahrzeugwart', (string) $this->pdo->query("SELECT rolle FROM benutzer WHERE email = 'fahrzeugwart@test.emc78.de'")->fetchColumn());
+        $this->assertSame('Dieter Wagner', (string) $this->pdo->query("SELECT CONCAT(p.vorname, ' ', p.nachname) FROM benutzer b JOIN person p ON p.id = b.person_id WHERE b.email = 'fahrzeugwart@test.emc78.de'")->fetchColumn());
         $this->assertSame(0, (int) $this->pdo->query('SELECT COUNT(*) FROM benutzer WHERE muss_passwort_aendern = 1')->fetchColumn());
 
         $carla = (int) $this->pdo->query("SELECT id FROM benutzer WHERE email = 'mitglied@test.emc78.de'")->fetchColumn();
@@ -180,7 +184,7 @@ final class DemoDatenTest extends DbTestCase
         (new DemoDaten($app))->erzeuge(true);
         (new DemoDaten($app))->erzeuge(true);
         $this->assertSame(12, $this->zaehle('fahrzeug'));
-        $this->assertSame(6, $this->zaehle('person'));
+        $this->assertSame(7, $this->zaehle('person'));
         $this->assertSame('EMC-0001', (string) $this->pdo->query('SELECT MIN(inventarnummer) FROM fahrzeug')->fetchColumn());
         $this->assertCount($this->zaehle('dokument'), $this->originalDateien(), 'keine verwaisten Dateien nach dem Zurücksetzen');
     }

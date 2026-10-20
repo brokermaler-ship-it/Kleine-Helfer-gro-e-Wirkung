@@ -177,7 +177,7 @@ final class FahrzeugController
         return $fz;
     }
 
-    /** Nur Bearbeiter und Admin wählen den Eigentümer frei; für Mitglieder ist er serverseitig festgelegt. */
+    /** Nur Fahrzeugwart und höher wählen den Eigentümer frei; für Mitglieder ist er serverseitig festgelegt. */
     private function darfEigentuemerWaehlen(): bool
     {
         return Berechtigung::darf($this->auth->benutzer(), Berechtigung::FAHRZEUG_BEARBEITEN);

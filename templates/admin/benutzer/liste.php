@@ -1,5 +1,4 @@
-<?php /** @var list<array<string,mixed>> $benutzerListe */ /** @var ?int $eigeneId */
-$rollen = ['mitglied' => 'Mitglied', 'bearbeiter' => 'Bearbeiter', 'admin' => 'Administrator']; ?>
+<?php /** @var list<array<string,mixed>> $benutzerListe */ /** @var ?int $eigeneId */ ?>
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="h3 mb-0">Benutzer</h1>
     <a class="btn btn-primary" href="<?= e(url('/admin/benutzer/neu')) ?>">Zugang anlegen</a>
@@ -12,7 +11,7 @@ $rollen = ['mitglied' => 'Mitglied', 'bearbeiter' => 'Bearbeiter', 'admin' => 'A
             <tr>
                 <td><?= e($b['nachname'] . ', ' . $b['vorname']) ?></td>
                 <td><?= e($b['email']) ?></td>
-                <td><?= e($rollen[$b['rolle']] ?? $b['rolle']) ?></td>
+                <td><?= e(\Emc\Auth\Rolle::tryFrom((string) $b['rolle'])?->label() ?? (string) $b['rolle']) ?></td>
                 <td>
                     <?= (int) $b['aktiv'] === 1 ? 'aktiv' : 'deaktiviert' ?>
                     <?php if ((int) $b['muss_passwort_aendern'] === 1): ?><span class="badge text-bg-warning">Passwort offen</span><?php endif; ?>

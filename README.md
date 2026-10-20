@@ -4,11 +4,14 @@ Webanwendung „EMC 78 Lokschuppen“ des Eisenbahn Modellbahn Clubs 78 e.V. Hal
 
 ## Rollen und Rechte
 
+Die Rollen bauen aufeinander auf; jede höhere Rolle darf alles, was die darunter darf.
+
 | Rolle | Darf |
 |---|---|
 | **Mitglied** | alles lesen (Fahrzeuge, Decoder, Funktionen, CVs, Dateien); **eigene Fahrzeuge anlegen** (der Eigentümer ist immer das Mitglied selbst); die **selbst angelegten Fahrzeuge bearbeiten**, einschließlich Status (auch „ausgemustert“), Decoder, Funktionstasten (Formular, CSV-Import, Vorlagen), CVs sowie Fotos und Dateien dieses Fahrzeugs. Nicht erlaubt: Eigentümer ändern, Fahrzeuge löschen, Fahrzeuge anderer bearbeiten (auch nicht als Eigentümer), Personen verwalten |
-| **Bearbeiter** | zusätzlich **alle** Fahrzeuge anlegen (Eigentümer frei wählbar), bearbeiten und löschen, ebenso alle Dateien; Personen verwalten |
-| **Administrator** | zusätzlich Benutzer, Stammdaten (Spurweiten), Datensicherung, Update und OneDrive-Anbindung |
+| **Fahrzeugwart** | zusätzlich **alles rund um alle Fahrzeuge, auch die privaten**: anlegen (Eigentümer frei wählbar), bearbeiten, **löschen**, Decoder, Funktionstasten, CVs sowie Fotos und Dokumente an Fahrzeugen. Nicht erlaubt: Personen, Benutzer, Stammdaten und Betrieb (Sicherung, Update, OneDrive); eine Datei, die mehreren Objekten zugeordnet ist, löscht nur ein Bearbeiter |
+| **Bearbeiter** | zusätzlich Personen verwalten und **alle** Dateien (auch geteilte) löschen |
+| **Administrator** | zusätzlich Benutzer und Rollen, Stammdaten (Spurweiten), Datensicherung, Update und OneDrive-Anbindung |
 
 Jedes Fahrzeug merkt sich, wer es angelegt hat. Fahrzeuge, die schon vor Version 0.2.0 vorhanden waren, gelten als von einem Bearbeiter angelegt; Mitglieder können sie nicht ändern. Alle Rechte werden auf dem Server für jedes einzelne Fahrzeug geprüft, nicht nur durch ausgeblendete Schaltflächen. Eine Datei, die mehreren Objekten zugeordnet ist, kann nur ein Bearbeiter löschen. Ausgemusterte Fahrzeuge verschwinden aus „Meine Fahrzeuge“ und sind über den Statusfilter der Fahrzeugliste zu finden. Gespeicherte Funktionsvorlagen sind für alle sichtbar.
 
@@ -81,9 +84,9 @@ Neuerungen und Beispieldaten lassen sich gefahrlos auf einer eigenen Testinstanz
    - im Browser als Administrator unter **Verwaltung → Testdaten** mit „Beispieldaten neu laden“ oder
    - per SSH (falls das STRATO-Paket SSH bietet) im Verzeichnis `/test/`: `php bin/demo-daten.php --zuruecksetzen`
 
-   Beides **löscht alle vorhandenen Daten der Testinstanz** und legt neu an: 6 erfundene Personen, 12 Fahrzeuge in H0 und N (Verein und Mitglieder, ein ausgemustertes), Decoder mit Funktionstasten und CVs, Beispielfotos und absichtlich **eine doppelte DCC-Adresse in H0**, an der man die Warnung der Adressprüfung sieht. Nach dem Laden im Browser wird man abgemeldet.
+   Beides **löscht alle vorhandenen Daten der Testinstanz** und legt neu an: 7 erfundene Personen, 12 Fahrzeuge in H0 und N (Verein und Mitglieder, ein ausgemustertes), Decoder mit Funktionstasten und CVs, Beispielfotos und absichtlich **eine doppelte DCC-Adresse in H0**, an der man die Warnung der Adressprüfung sieht. Nach dem Laden im Browser wird man abgemeldet.
 7. Als Mitglied (Carla) kannst du die E 94 279 und den Eilzugwagen Bymb 421 bearbeiten – die hat Carla selbst angelegt; andere Fahrzeuge siehst du nur.
-8. Anmelden mit `bearbeiter@test.emc78.de` oder `mitglied@test.emc78.de` (Passwort `Test-EMC78!`) oder als Administrator mit `admin@test.emc78.de` und dem Passwort aus `testumgebung_admin_passwort`. Den Admin-Zugang erfahren Tester beim Vorstand; er steht bewusst nicht auf der Anmeldeseite.
+8. Anmelden mit `bearbeiter@test.emc78.de`, `fahrzeugwart@test.emc78.de` (Dieter Wagner) oder `mitglied@test.emc78.de` (Passwort `Test-EMC78!`) oder als Administrator mit `admin@test.emc78.de` und dem Passwort aus `testumgebung_admin_passwort`. Den Admin-Zugang erfahren Tester beim Vorstand; er steht bewusst nicht auf der Anmeldeseite.
 
 Anmeldungen gelten nur für die Instanz, an der man sich angemeldet hat: Echtbetrieb und Testinstanz speichern ihre Sitzungen getrennt (jeweils in `storage/sitzungen/`) und erkennen fremde Sitzungen, auch wenn beide im selben STRATO-Paket liegen.
 

@@ -37,7 +37,7 @@ final class BerechtigungTest extends TestCase
     public function test_fahrzeug_anlegen_ab_mitglied(): void
     {
         $this->assertFalse(Berechtigung::darf(null, Berechtigung::FAHRZEUG_ANLEGEN));
-        foreach ([Rolle::Mitglied, Rolle::Bearbeiter, Rolle::Admin] as $r) {
+        foreach (Rolle::cases() as $r) {
             $this->assertTrue(Berechtigung::darf($this->benutzer($r), Berechtigung::FAHRZEUG_ANLEGEN));
         }
     }
@@ -62,6 +62,46 @@ final class BerechtigungTest extends TestCase
         }
     }
 
+    public function test_fahrzeugwart_darf_fahrzeuge_aber_nicht_personen(): void
+    {
+        $w = $this->benutzer(Rolle::Fahrzeugwart); // id 1
+        $this->assertTrue(Berechtigung::darf($w, Berechtigung::LESEN));
+        $this->assertTrue(Berechtigung::darf($w, Berechtigung::FAHRZEUG_ANLEGEN));
+        $this->assertTrue(Berechtigung::darf($w, Berechtigung::FAHRZEUG_BEARBEITEN));
+        $this->assertFalse(Berechtigung::darf($w, Berechtigung::PERSON_BEARBEITEN));
+        $this->assertFalse(Berechtigung::darf($w, Berechtigung::DATEI_BEARBEITEN));
+        $this->assertFalse(Berechtigung::darf($w, Berechtigung::BENUTZER_VERWALTEN));
+        $this->assertFalse(Berechtigung::darf($w, Berechtigung::STAMMDATEN_VERWALTEN));
+        $this->assertFalse(Berechtigung::darf($w, Berechtigung::BETRIEB));
+        $this->assertFalse(Berechtigung::darf($w, Berechtigung::PERSON_DSGVO_LOESCHEN));
+        foreach ([['angelegt_von_benutzer_id' => 2], ['angelegt_von_benutzer_id' => null], []] as $fz) {
+            $this->assertTrue(Berechtigung::darfFahrzeugBearbeiten($w, $fz));
+        }
+    }
+
+    public function test_rangfolge(): void
+    {
+        $alle = [
+            Berechtigung::LESEN, Berechtigung::FAHRZEUG_ANLEGEN, Berechtigung::FAHRZEUG_BEARBEITEN,
+            Berechtigung::PERSON_BEARBEITEN, Berechtigung::DATEI_BEARBEITEN, Berechtigung::BENUTZER_VERWALTEN,
+            Berechtigung::STAMMDATEN_VERWALTEN, Berechtigung::BETRIEB, Berechtigung::PERSON_DSGVO_LOESCHEN,
+        ];
+        $w = $this->benutzer(Rolle::Fahrzeugwart);
+        $b = $this->benutzer(Rolle::Bearbeiter);
+        foreach ($alle as $x) {
+            if (Berechtigung::darf($w, $x)) {
+                $this->assertTrue(Berechtigung::darf($b, $x), "Bearbeiter muss $x dürfen wie der Fahrzeugwart");
+            }
+        }
+        $this->assertTrue(Berechtigung::darf($b, Berechtigung::PERSON_BEARBEITEN));
+        $this->assertTrue(Berechtigung::darf($b, Berechtigung::DATEI_BEARBEITEN));
+        foreach ([Rolle::Mitglied, Rolle::Fahrzeugwart, Rolle::Bearbeiter] as $r) {
+            $this->assertFalse(Berechtigung::darf($this->benutzer($r), Berechtigung::PERSON_DSGVO_LOESCHEN));
+        }
+        $this->assertTrue(Berechtigung::darf($this->benutzer(Rolle::Admin), Berechtigung::PERSON_DSGVO_LOESCHEN));
+        $this->assertSame([Rolle::Mitglied, Rolle::Fahrzeugwart, Rolle::Bearbeiter, Rolle::Admin], Rolle::cases());
+    }
+
     public function test_unbekannte_aktion_ist_verboten(): void
     {
         $this->assertFalse(Berechtigung::darf($this->benutzer(Rolle::Admin), 'gibt_es_nicht'));
@@ -70,6 +110,8 @@ final class BerechtigungTest extends TestCase
     public function test_rollen_labels(): void
     {
         $this->assertSame('Mitglied', Rolle::Mitglied->label());
+        $this->assertSame('Fahrzeugwart', Rolle::Fahrzeugwart->label());
+        $this->assertSame('fahrzeugwart', Rolle::Fahrzeugwart->value);
         $this->assertSame('Bearbeiter', Rolle::Bearbeiter->label());
         $this->assertSame('Administrator', Rolle::Admin->label());
     }

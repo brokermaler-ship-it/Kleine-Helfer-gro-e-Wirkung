@@ -142,6 +142,7 @@ final class DemoDaten
             'anja' => ['Anja', 'Beispielmann', 'admin@test.emc78.de', 'Test-Administratorin'],
             'bernd' => ['Bernd', 'Probemeier', 'bearbeiter@test.emc78.de', 'Test-Bearbeiter'],
             'carla' => ['Carla', 'Mustermann', 'mitglied@test.emc78.de', 'Test-Mitglied'],
+            'wart' => ['Dieter', 'Wagner', 'fahrzeugwart@test.emc78.de', 'Test-Fahrzeugwart'],
             'dieter' => ['Dieter', 'Testfeld', null, 'Ohne Zugang'],
             'eva' => ['Eva', 'Musterfrau', null, 'Ohne Zugang'],
             'frank' => ['Frank', 'Demonstrant', null, 'Ohne Zugang'],
@@ -154,7 +155,7 @@ final class DemoDaten
     }
 
     /**
-     * Mitglied und Bearbeiter erhalten das öffentliche Testpasswort, der Administrator das aus der config.php.
+     * Mitglied, Fahrzeugwart und Bearbeiter erhalten das öffentliche Testpasswort, der Administrator das aus der config.php.
      *
      * @param array<string,int> $personen
      */
@@ -164,6 +165,7 @@ final class DemoDaten
         foreach ([
             ['anja', 'admin@test.emc78.de', Rolle::Admin, $adminPasswort],
             ['bernd', 'bearbeiter@test.emc78.de', Rolle::Bearbeiter, self::PASSWORT],
+            ['wart', 'fahrzeugwart@test.emc78.de', Rolle::Fahrzeugwart, self::PASSWORT],
             ['carla', 'mitglied@test.emc78.de', Rolle::Mitglied, self::PASSWORT],
         ] as [$p, $mail, $rolle, $passwort]) {
             $id = $repo->anlegen($personen[$p], $mail, $rolle, $passwort);
