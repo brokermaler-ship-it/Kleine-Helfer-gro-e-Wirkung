@@ -30,7 +30,7 @@ final class DsgvoLoeschungTest extends DbTestCase
         mkdir($this->speicher . '/2026/10', 0750, true);
         $this->dokumente = new DokumentRepository($this->pdo, $this->speicher, new Auftraege($this->pdo));
         $this->protokoll = new Aenderungsprotokoll($this->pdo);
-        $this->dienst = new DsgvoLoeschung($this->pdo, $this->dokumente, $this->protokoll, new FahrzeugRepository($this->pdo), null);
+        $this->dienst = new DsgvoLoeschung($this->pdo, $this->dokumente, $this->protokoll, new FahrzeugRepository($this->pdo), new Auftraege($this->pdo), null);
         $this->admin = $this->legeBenutzerAn('admin@verein.de', rolle: 'admin');
     }
 
@@ -334,7 +334,10 @@ final class DsgvoLoeschungTest extends DbTestCase
             $this->assertStringContainsString('eigene', $e->getMessage());
         }
 
-        // Letzter aktiver Admin: der ausführende Zugang ist hier selbst kein aktiver Admin mehr.
+        // Der ausführende Zugang muss (in der Transaktion geprüft) ein aktiver Admin sein – sonst wäre die Zielperson
+        // hier zugleich der letzte aktive Admin.
+        $bearbeiter = $this->konto($this->person('Erik', 'Helfer', null, null), 'erik@verein.de', 'bearbeiter');
+        $this->assertSame(DsgvoLoeschung::KEIN_ADMIN, $this->dienst->vorschau($this->person('Fritz', 'Ziel', null, null), $bearbeiter)['verweigert']);
         $this->pdo->prepare('UPDATE benutzer SET aktiv = 0 WHERE id = ?')->execute([$this->admin]);
         $chefin = $this->person('Dora', 'Vorstand', 'dora@privat.de', null);
         $this->konto($chefin, 'dora@verein.de', 'admin');
@@ -377,5 +380,90 @@ final class DsgvoLoeschungTest extends DbTestCase
         $sitzung = [];
         $app = App::erzeuge(self::testConfig(), new Session($sitzung));
         $this->assertInstanceOf(DsgvoLoeschung::class, $app->container()->get(DsgvoLoeschung::class));
+    }
+
+    public function test_onedrive_loeschauftrag_auch_ohne_onedrive_konfiguration(): void
+    {
+        // Ohne OneDrive-Konfiguration bekommt DokumentRepository keine Aufträge (siehe App).
+        $ohneAuftraege = new DokumentRepository($this->pdo, $this->speicher);
+        $dienst = new DsgvoLoeschung($this->pdo, $ohneAuftraege, $this->protokoll, new FahrzeugRepository($this->pdo), new Auftraege($this->pdo), null);
+        $s = $this->szenario();
+
+        $dienst->loesche($s['person'], [], $this->admin);
+
+        $this->assertSame(1, $this->zaehle("SELECT COUNT(*) FROM onedrive_auftrag WHERE art = 'loeschen'"));
+        $this->assertSame(1, $this->zaehle("SELECT COUNT(*) FROM onedrive_auftrag WHERE art = 'loeschen' AND status = 'wartet' AND item_id = 'item-wolke' AND drive_id = 'drive-1'"));
+        $this->assertTrue($this->dateienWeg('wolke.jpg'));
+    }
+
+    public function test_fruehere_kennungen_werden_entfernt(): void
+    {
+        $person = $this->person('Carla', 'Beispiel', 'carla@privat.de', null);
+        $andere = $this->person('Bernd', 'Anders', null, null);
+        $verein = $this->fahrzeug('EMC-0010', null);
+        $p = $this->protokoll;
+        $p->schreibe($this->admin, 'person', $person, 'angelegt', [
+            'vorname' => ['alt' => null, 'neu' => 'Carla'], 'nachname' => ['alt' => null, 'neu' => 'Alt'],
+            'email' => ['alt' => null, 'neu' => 'carla.alt@privat.de'], 'telefon' => ['alt' => null, 'neu' => '0170 111222'],
+        ]);
+        $p->schreibe($this->admin, 'person', $person, 'geaendert', [
+            'nachname' => ['alt' => 'Alt', 'neu' => 'Beispiel'], 'email' => ['alt' => 'carla.alt@privat.de', 'neu' => 'carla@privat.de'],
+            'telefon' => ['alt' => '0170 111222', 'neu' => null],
+        ]);
+        // Früherer, inzwischen gelöschter Zugang Nr. 77 der Person.
+        $p->schreibe($this->admin, 'benutzer', 77, 'angelegt', [
+            'email' => ['alt' => null, 'neu' => 'alt@verein.de'], 'rolle' => ['alt' => null, 'neu' => 'mitglied'],
+            'aktiv' => ['alt' => null, 'neu' => 1], 'person_id' => ['alt' => null, 'neu' => $person],
+        ]);
+        $p->schreibe(77, 'fahrzeug', $verein, 'geaendert', ['notiz' => ['alt' => null, 'neu' => 'Carla Alt, Tel. 0170 111222, carla.alt@privat.de, alt@verein.de']]);
+        $p->schreibe($this->admin, 'benutzer', 77, 'geloescht', ['email' => ['alt' => 'alt@verein.de', 'neu' => null], 'rolle' => ['alt' => 'mitglied', 'neu' => null]]);
+        // Zugang einer anderen Person bleibt.
+        $p->schreibe($this->admin, 'benutzer', 78, 'angelegt', ['email' => ['alt' => null, 'neu' => 'bernd@verein.de'], 'person_id' => ['alt' => null, 'neu' => $andere]]);
+        foreach (['alt@verein.de', 'bernd@verein.de'] as $mail) {
+            $this->pdo->prepare("INSERT INTO login_versuch (email, ip) VALUES (?, '127.0.0.1')")->execute([$mail]);
+        }
+
+        $this->assertSame(5, $this->dienst->vorschau($person, $this->admin)['protokolleintraege']);
+        $this->dienst->loesche($person, [], $this->admin);
+
+        foreach (['Carla Alt', 'carla.alt@privat.de', '0170 111222', 'alt@verein.de'] as $begriff) {
+            $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM aenderungsprotokoll WHERE aenderungen LIKE ?', ['%' . $begriff . '%']), $begriff);
+        }
+        $this->assertSame(0, $this->zaehle("SELECT COUNT(*) FROM aenderungsprotokoll WHERE objekt_typ = 'benutzer' AND objekt_id = 77"));
+        $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM aenderungsprotokoll WHERE benutzer_id = 77'));
+        $this->assertSame(1, $this->zaehle("SELECT COUNT(*) FROM aenderungsprotokoll WHERE objekt_typ = 'benutzer' AND objekt_id = 78"));
+        $this->assertSame(0, $this->zaehle("SELECT COUNT(*) FROM login_versuch WHERE email = 'alt@verein.de'"));
+        $this->assertSame(1, $this->zaehle("SELECT COUNT(*) FROM login_versuch WHERE email = 'bernd@verein.de'"));
+    }
+
+    public function test_hochlade_auftraege_geloeschter_dokumente_werden_entfernt(): void
+    {
+        $s = $this->szenario();
+        $verein = $this->fahrzeug('EMC-0010', null);
+        $vereinsDok = $this->dokument('verein.jpg', [$verein]);
+        $eigenes = (int) $this->pdo->query("SELECT id FROM dokument WHERE pfad = '2026/10/lokal.jpg'")->fetchColumn();
+        $auftraege = new Auftraege($this->pdo);
+        $auftraege->neu('hochladen', $eigenes, null);
+        $fehler = $auftraege->neu('hochladen', $eigenes, null);
+        $this->pdo->prepare("UPDATE onedrive_auftrag SET status = 'fehler', letzter_fehler = 'lokal.jpg' WHERE id = ?")->execute([$fehler]);
+        $auftraege->neu('hochladen', $vereinsDok, null);
+
+        $this->dienst->loesche($s['person'], [], $this->admin);
+
+        $this->assertSame(0, $this->zaehle("SELECT COUNT(*) FROM onedrive_auftrag WHERE art = 'hochladen' AND dokument_id = ?", [$eigenes]));
+        $this->assertSame(1, $this->zaehle("SELECT COUNT(*) FROM onedrive_auftrag WHERE art = 'hochladen' AND dokument_id = ?", [$vereinsDok]));
+    }
+
+    public function test_dokument_an_zwei_eigenen_fahrzeugen_wird_geloescht(): void
+    {
+        $s = $this->szenario();
+        $beide = $this->dokument('beide.jpg', [$s['fz1'], $s['fz2']], 'onedrive', 'item-beide');
+
+        $this->dienst->loesche($s['person'], [], $this->admin);
+
+        $this->assertNull($this->dokumente->finde($beide));
+        $this->assertTrue($this->dateienWeg('beide.jpg'));
+        $this->assertSame(1, $this->zaehle("SELECT COUNT(*) FROM onedrive_auftrag WHERE art = 'loeschen' AND item_id = 'item-beide'"));
+        $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM dokument_zuordnung'));
     }
 }

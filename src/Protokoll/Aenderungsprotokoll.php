@@ -57,14 +57,15 @@ final class Aenderungsprotokoll
     /**
      * DSGVO: entfernt die Einträge der eigenen Objekte der Person, ersetzt in allen übrigen Einträgen jede Fundstelle
      * eines Begriffs (ohne Groß-/Kleinschreibung, längere Begriffe zuerst) in den Werten von `aenderungen` durch
-     * „ehemaliges Mitglied“ und leert `benutzer_id` für das Konto. Schlüssel und Nicht-Text-Werte bleiben unverändert.
+     * „ehemaliges Mitglied“ und leert `benutzer_id` für das Konto bzw. die Konten. Schlüssel und Nicht-Text-Werte bleiben unverändert.
      * Keine eigene Transaktion.
      *
      * @param list<string> $begriffe z. B. „Vorname Nachname“, „Nachname, Vorname“, E-Mail, Telefon; leere, zu kurze und ungültige werden ignoriert
+     * @param int|list<int>|null $benutzerId Konto (oder mehrere, z. B. frühere Konten), dessen `benutzer_id` geleert wird
      * @param list<array{0:string,1:int}> $eigeneObjekte z. B. [['person', 17], ['benutzer', 5]]
      * @return int Anzahl gelöschter und geänderter Einträge (jeder Eintrag einmal)
      */
-    public function anonymisiere(array $begriffe, ?int $benutzerId, array $eigeneObjekte): int
+    public function anonymisiere(array $begriffe, int|array|null $benutzerId, array $eigeneObjekte): int
     {
         $plan = $this->plane($begriffe, $benutzerId, $eigeneObjekte);
         $loeschen = $this->pdo->prepare('DELETE FROM aenderungsprotokoll WHERE id = ?');
@@ -75,8 +76,9 @@ final class Aenderungsprotokoll
         foreach ($plan['texte'] as $id => $text) {
             $aendern->execute([$text, $id]);
         }
-        if ($benutzerId !== null) {
-            $this->pdo->prepare('UPDATE aenderungsprotokoll SET benutzer_id = NULL WHERE benutzer_id = ?')->execute([$benutzerId]);
+        $leeren = $this->pdo->prepare('UPDATE aenderungsprotokoll SET benutzer_id = NULL WHERE benutzer_id = ?');
+        foreach (self::kontenListe($benutzerId) as $id) {
+            $leeren->execute([$id]);
         }
         return $plan['anzahl'];
     }
@@ -85,19 +87,21 @@ final class Aenderungsprotokoll
      * Wie anonymisiere(), ändert aber nichts: Anzahl der Einträge, die gelöscht oder geändert würden (für die Vorschau).
      *
      * @param list<string> $begriffe
+     * @param int|list<int>|null $benutzerId
      * @param list<array{0:string,1:int}> $eigeneObjekte
      */
-    public function zaehleBetroffene(array $begriffe, ?int $benutzerId, array $eigeneObjekte): int
+    public function zaehleBetroffene(array $begriffe, int|array|null $benutzerId, array $eigeneObjekte): int
     {
         return $this->plane($begriffe, $benutzerId, $eigeneObjekte)['anzahl'];
     }
 
     /**
      * @param list<string> $begriffe
+     * @param int|list<int>|null $benutzerId
      * @param list<array{0:string,1:int}> $eigeneObjekte
      * @return array{loeschen:list<int>,texte:array<int,string>,anzahl:int}
      */
-    private function plane(array $begriffe, ?int $benutzerId, array $eigeneObjekte): array
+    private function plane(array $begriffe, int|array|null $benutzerId, array $eigeneObjekte): array
     {
         /** @var array<int,true> $loeschen */
         $loeschen = [];
@@ -139,9 +143,9 @@ final class Aenderungsprotokoll
             }
         }
 
-        if ($benutzerId !== null) {
-            $st = $this->pdo->prepare('SELECT id FROM aenderungsprotokoll WHERE benutzer_id = ?');
-            $st->execute([$benutzerId]);
+        $st = $this->pdo->prepare('SELECT id FROM aenderungsprotokoll WHERE benutzer_id = ?');
+        foreach (self::kontenListe($benutzerId) as $konto) {
+            $st->execute([$konto]);
             foreach ($st->fetchAll(\PDO::FETCH_COLUMN) as $id) {
                 if (!isset($loeschen[(int) $id])) {
                     $geaendert[(int) $id] = true;
@@ -150,6 +154,15 @@ final class Aenderungsprotokoll
         }
 
         return ['loeschen' => array_keys($loeschen), 'texte' => $texte, 'anzahl' => count($loeschen) + count($geaendert)];
+    }
+
+    /**
+     * @param int|list<int>|null $benutzerId
+     * @return list<int>
+     */
+    private static function kontenListe(int|array|null $benutzerId): array
+    {
+        return array_values(array_unique(array_map('intval', $benutzerId === null ? [] : (array) $benutzerId)));
     }
 
     /** Kürzere Begriffe würden zu viele fremde Stellen treffen (z. B. Datumsteile). */

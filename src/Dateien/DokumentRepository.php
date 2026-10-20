@@ -126,18 +126,24 @@ final class DokumentRepository
         return (string) $dok['pfad'];
     }
 
-    /** Entfernt Original, Anzeige- und Vorschauvariante vom Webspace; verdächtige Pfade werden ignoriert. */
-    public function entferneDateien(string $relativerPfad): void
+    /**
+     * Entfernt Original, Anzeige- und Vorschauvariante vom Webspace; verdächtige Pfade werden ignoriert.
+     *
+     * @return bool false, wenn eine vorhandene Datei nicht entfernt werden konnte
+     */
+    public function entferneDateien(string $relativerPfad): bool
     {
         $basis = $this->absoluterPfad($relativerPfad);
         if ($basis === null) {
-            return;
+            return true;
         }
+        $ok = true;
         foreach ([$basis, $basis . '.anzeige.jpg', $basis . '.vorschau.jpg'] as $datei) {
-            if (is_file($datei)) {
-                @unlink($datei);
+            if (is_file($datei) && !@unlink($datei)) {
+                $ok = false;
             }
         }
+        return $ok;
     }
 
     /** @return list<int> Dokumente, die nur diesem Objekt zugeordnet sind (geteilte nicht), aufsteigend */
