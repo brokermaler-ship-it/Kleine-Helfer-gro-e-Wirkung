@@ -281,4 +281,17 @@ final class DateiHttpTest extends DbTestCase
         $this->assertFileExists($pfadG . '.vorschau.jpg');
         $this->assertSame([$zweites], $repo->objekte($geteilt, 'fahrzeug'));
     }
+
+    public function test_ohne_benutzer_zeigt_ehemaliges_mitglied(): void
+    {
+        $this->anmelden('bearbeiter');
+        $this->dokument('anleitung.pdf', 'anleitung');
+        $this->pdo->exec('UPDATE dokument SET hochgeladen_von = NULL');
+        (new \Emc\Protokoll\Aenderungsprotokoll($this->pdo))->schreibe(null, 'fahrzeug', $this->fz, 'geaendert', ['bezeichnung' => ['alt' => 'Lok', 'neu' => 'V 200']]);
+
+        $r = $this->get("/fahrzeuge/{$this->fz}");
+
+        $this->assertSame(2, substr_count($r->body, 'ehemaliges Mitglied'));
+        $this->assertStringNotContainsString('unbekannt', $r->body);
+    }
 }

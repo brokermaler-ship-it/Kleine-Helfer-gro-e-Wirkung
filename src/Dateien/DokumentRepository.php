@@ -88,33 +88,68 @@ final class DokumentRepository
     /** Entfernt Datensatz, Zuordnungen, Datei und Varianten; löst Titelbild-Verweise. */
     public function loeschen(int $id): void
     {
-        $dok = $this->finde($id);
-        if ($dok === null) {
-            return;
+        if ($this->finde($id) === null) {
+            return; // wie bisher: ohne Datensatz keine Transaktion
         }
         $this->pdo->beginTransaction();
         try {
-            // Lösch-Auftrag zuerst und in derselben Transaktion: ohne ihn bliebe die Datei im OneDrive verwaist.
-            if ($this->auftraege !== null && ($dok['ablage'] ?? 'lokal') === 'onedrive' && is_string($dok['onedrive_item_id'] ?? null) && $dok['onedrive_item_id'] !== '') {
-                $drive = is_string($dok['onedrive_drive_id'] ?? null) ? $dok['onedrive_drive_id'] : null;
-                $this->auftraege->neu('loeschen', null, $dok['onedrive_item_id'], null, $drive);
-            }
-            $this->pdo->prepare('UPDATE fahrzeug SET titelbild_dokument_id = NULL, geaendert_am = geaendert_am WHERE titelbild_dokument_id = ?')->execute([$id]);
-            $this->pdo->prepare('DELETE FROM dokument_zuordnung WHERE dokument_id = ?')->execute([$id]);
-            $this->pdo->prepare('DELETE FROM dokument WHERE id = ?')->execute([$id]);
+            $pfad = $this->loescheDatensatz($id);
             $this->pdo->commit();
         } catch (\Throwable $t) {
             $this->pdo->rollBack();
             throw $t;
         }
-        $basis = $this->absoluterPfad((string) $dok['pfad']);
-        if ($basis !== null) {
-            foreach ([$basis, $basis . '.anzeige.jpg', $basis . '.vorschau.jpg'] as $datei) {
-                if (is_file($datei)) {
-                    @unlink($datei);
-                }
+        if ($pfad !== null) {
+            $this->entferneDateien($pfad);
+        }
+    }
+
+    /**
+     * Entfernt Datensatz, Zuordnungen und Titelbild-Verweise und legt bei OneDrive-Ablage den Lösch-Auftrag an –
+     * ohne eigene Transaktion und ohne Dateien anzufassen (der Aufrufer entfernt sie nach seinem Commit mit
+     * entferneDateien()). Liefert den relativen Pfad oder null, wenn es das Dokument nicht gibt.
+     */
+    public function loescheDatensatz(int $id): ?string
+    {
+        $dok = $this->finde($id);
+        if ($dok === null) {
+            return null;
+        }
+        // Lösch-Auftrag zuerst und in derselben Transaktion: ohne ihn bliebe die Datei im OneDrive verwaist.
+        if ($this->auftraege !== null && ($dok['ablage'] ?? 'lokal') === 'onedrive' && is_string($dok['onedrive_item_id'] ?? null) && $dok['onedrive_item_id'] !== '') {
+            $drive = is_string($dok['onedrive_drive_id'] ?? null) ? $dok['onedrive_drive_id'] : null;
+            $this->auftraege->neu('loeschen', null, $dok['onedrive_item_id'], null, $drive);
+        }
+        $this->pdo->prepare('UPDATE fahrzeug SET titelbild_dokument_id = NULL, geaendert_am = geaendert_am WHERE titelbild_dokument_id = ?')->execute([$id]);
+        $this->pdo->prepare('DELETE FROM dokument_zuordnung WHERE dokument_id = ?')->execute([$id]);
+        $this->pdo->prepare('DELETE FROM dokument WHERE id = ?')->execute([$id]);
+        return (string) $dok['pfad'];
+    }
+
+    /** Entfernt Original, Anzeige- und Vorschauvariante vom Webspace; verdächtige Pfade werden ignoriert. */
+    public function entferneDateien(string $relativerPfad): void
+    {
+        $basis = $this->absoluterPfad($relativerPfad);
+        if ($basis === null) {
+            return;
+        }
+        foreach ([$basis, $basis . '.anzeige.jpg', $basis . '.vorschau.jpg'] as $datei) {
+            if (is_file($datei)) {
+                @unlink($datei);
             }
         }
+    }
+
+    /** @return list<int> Dokumente, die nur diesem Objekt zugeordnet sind (geteilte nicht), aufsteigend */
+    public function idsFuerObjekt(string $objektTyp, int $objektId): array
+    {
+        $st = $this->pdo->prepare(
+            'SELECT z.dokument_id FROM dokument_zuordnung z WHERE z.objekt_typ = ? AND z.objekt_id = ? '
+            . 'AND NOT EXISTS (SELECT 1 FROM dokument_zuordnung w WHERE w.dokument_id = z.dokument_id AND NOT (w.objekt_typ = z.objekt_typ AND w.objekt_id = z.objekt_id)) '
+            . 'ORDER BY z.dokument_id'
+        );
+        $st->execute([$objektTyp, $objektId]);
+        return array_map('intval', $st->fetchAll(\PDO::FETCH_COLUMN));
     }
 
     /**

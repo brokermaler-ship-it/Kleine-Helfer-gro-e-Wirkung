@@ -105,7 +105,7 @@ $loeschenForm = function (array $d) use ($csrf): string {
                     <td><?= e($kategorieLabels[$d['kategorie']] ?? (string) $d['kategorie']) ?></td>
                     <td><?= e($groesse((int) $d['groesse'])) ?></td>
                     <td><?= e(date('d.m.Y', (int) strtotime((string) $d['hochgeladen_am']))) ?></td>
-                    <td><?= e($d['hochgeladen_von_name'] !== '' ? (string) $d['hochgeladen_von_name'] : '–') ?></td>
+                    <td><?= e($d['hochgeladen_von_name'] !== '' ? (string) $d['hochgeladen_von_name'] : 'ehemaliges Mitglied') ?></td>
                     <?php if ($bearbeiten): ?><td class="text-end"><?= $darfLoeschen($d) ? $loeschenForm($d) : '' ?></td><?php endif; ?>
                 </tr>
             <?php endforeach; ?>

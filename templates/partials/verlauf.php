@@ -19,7 +19,7 @@ $zeige = function (mixed $w): string {
                 <li class="list-group-item">
                     <div class="small text-muted">
                         <?= e(date('d.m.Y H:i', (int) strtotime($eintrag['zeitpunkt']))) ?>
-                        · <?= e($eintrag['anzeigename'] ?? 'unbekannt') ?>
+                        · <?= e($eintrag['anzeigename'] ?? 'ehemaliges Mitglied') ?>
                         · <?= e($aktionen[$eintrag['aktion']] ?? $eintrag['aktion']) ?>
                     </div>
                     <?php foreach ($eintrag['aenderungen'] as $feld => $wert): ?>
