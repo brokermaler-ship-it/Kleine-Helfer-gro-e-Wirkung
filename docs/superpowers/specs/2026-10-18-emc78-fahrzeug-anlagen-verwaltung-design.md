@@ -35,6 +35,8 @@ Eine vereinsinterne Web-Anwendung für den EMC 78 Halle e.V. (Modellbahn), die
 
 ## 3. Benutzer und Rechte
 
+> Ab Stufe 2 gilt die erweiterte Rollentabelle mit **Fahrzeugwart** in `2026-10-20-stufe-2-wartung-reparatur-design.md`, Abschnitt 3.
+
 | Rolle | Darf |
 |---|---|
 | **Mitglied** | Alles lesen · **eigene Fahrzeuge anlegen** (Eigentümer = das Mitglied) und **selbst angelegte Fahrzeuge bearbeiten** (inkl. Decoder, Funktionstasten, CVs, Fotos/Dokumente, Status; Löschen nur Bearbeiter) · Defekte melden (Fahrzeug, Anlage, Modul, Bauteil) · Wartungen an **eigenen** Fahrzeugen eintragen |
@@ -138,6 +140,8 @@ Prüfungen bei Anmeldung (Warnungen, kein Verbot):
 **Drucken:** Inhaltszettel je Box mit QR-Code; Packliste der Veranstaltung als PDF.
 
 ### 4.6 QR-Codes
+
+> Ab Stufe 2: Fahrzeuge bekommen statt QR-Codes einen kurzen Text-Code (`F12`) bzw. werden über die Digitaladresse gefunden; QR-Etiketten gibt es für Anlagen (später Module und Boxen). Details in der Stufe-2-Ergänzung, Abschnitt 6.5–6.6.
 
 Für Fahrzeuge, Module, Boxen (und optional Bauteile) erzeugt die App druckbare QR-Codes (Einzeln und als Etikettenbogen). Der Code enthält einen Link zur App; gescannt wird mit der normalen Handy-Kamera. Ziel je nach Objekt: Detailseite mit Schaltfläche „Defekt melden“ bzw. Checkliste der Box. Ohne Anmeldung führt der Link zuerst zum Login.
 
@@ -280,7 +284,7 @@ Jede Stufe ist für sich nutzbar und bekommt einen eigenen Umsetzungsplan.
 |---|---|
 | **1 – Grundgerüst & Fahrzeugkatalog** | Login, Rollen, Personen, Spurweiten, Fahrzeuge mit Decoder, Funktionen, CVs, Fotos und Dokumenten (Grundfunktion), Adressprüfung, CSV-Import Funktionen, Funktionsvorlagen, Datensicherung, Migrationen |
 | **1b – OneDrive-Dateiablage** | Speicher-Schnittstelle, Microsoft-Anbindung, Übertragung und Nachübertragung, lesbare Ordnerstruktur, Umzug vorhandener Dateien (4.11) |
-| **2 – Wartung & Reparatur** | **Zuerst:** vollständige Löschung einer Person nach DSGVO (inkl. Bereinigung personenbezogener Daten im Änderungsprotokoll); danach Wartungsarten, -pläne, -protokoll, Fälligkeitsübersicht, Reparaturen, Defekt melden, QR-Codes für Fahrzeuge, PDF-Import Funktionen |
+| **2 – Wartung & Reparatur** | Rolle Fahrzeugwart und DSGVO-Löschung (2a); einfache Anlagenliste und Wartung (2b); Reparaturen, Defekt melden, Codes und Etiketten (2c); PDF-Import Funktionen (2d). Details: `2026-10-20-stufe-2-wartung-reparatur-design.md` |
 | **3 – Anlagen** | Anlagen-Dossier, Module, Bauteile, Zubehöradressen, Anordnungen, Wartung/Reparatur an Anlagen, QR-Codes für Module |
 | **4 – Veranstaltungen** | Kalender, Anlagen mit Anordnung, Fahrzeuganmeldung mit Prüfungen, Betriebsstunden |
 | **5 – Boxen & Packlisten** | Boxen, Standardinhalt, Packliste je Veranstaltung, mobiles Abhaken, Rückgabe, Druck, QR-Codes für Boxen |
