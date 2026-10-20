@@ -59,6 +59,48 @@ final class FahrzeugController
         ]);
     }
 
+    /** Ausgemusterte Fahrzeuge mit denselben Filtern wie die Fahrzeugliste (der Status ist fest). */
+    public function abstellgleis(Request $r): Response
+    {
+        $f = FahrzeugFilter::ausRequest($r);
+        $filter = new FahrzeugFilter($f->text, $f->spurweiteId, $f->eigentuemer, $f->personId, 'ausgemustert', $f->gattung);
+        return $this->html('fahrzeuge/abstellgleis', [
+            'titel' => 'Abstellgleis',
+            'fahrzeuge' => $this->fahrzeuge->suche($filter),
+            'filter' => $f,
+            'spurweiten' => $this->spurweiten->alle(),
+            'personen' => $this->personen->alle(false),
+        ]);
+    }
+
+    public function abstellen(Request $r, array $p): Response
+    {
+        return $this->stelleAb($p, true, 'Das Fahrzeug steht jetzt auf dem Abstellgleis.');
+    }
+
+    public function zurueckholen(Request $r, array $p): Response
+    {
+        return $this->stelleAb($p, false, 'Das Fahrzeug ist wieder in Betrieb.');
+    }
+
+    private function stelleAb(array $p, bool $abgestellt, string $meldung): Response
+    {
+        $fz = $this->ladeBearbeitbar($p);
+        if (($fz['status'] === 'ausgemustert') !== $abgestellt) {
+            $this->fahrzeuge->setzeAbgestellt((int) $fz['id'], $abgestellt);
+            $neu = $this->fahrzeuge->finde((int) $fz['id']);
+            if ($neu === null) {
+                throw new HttpFehler(404); // zwischenzeitlich gelöscht
+            }
+            $diff = Aenderungsprotokoll::diff($this->vergleichswerte($fz), $this->vergleichswerte($neu));
+            if ($diff !== []) {
+                $this->protokoll->schreibe($this->auth->benutzer()?->id, 'fahrzeug', (int) $fz['id'], 'geaendert', $diff);
+            }
+            $this->session->meldung('erfolg', $meldung);
+        }
+        return Response::redirect(url('/fahrzeuge/' . $fz['id']));
+    }
+
     public function anzeigen(Request $r, array $p): Response
     {
         $fz = $this->lade($p);

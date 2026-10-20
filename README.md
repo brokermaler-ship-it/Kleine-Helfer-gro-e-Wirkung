@@ -13,7 +13,7 @@ Die Rollen bauen aufeinander auf; jede höhere Rolle darf alles, was die darunte
 | **Bearbeiter** | zusätzlich Personen verwalten und **alle** Dateien (auch geteilte) löschen |
 | **Administrator** | zusätzlich Benutzer und Rollen, Stammdaten (Spurweiten), Datensicherung, Update und OneDrive-Anbindung |
 
-Jedes Fahrzeug merkt sich, wer es angelegt hat. Fahrzeuge, die schon vor Version 0.2.0 vorhanden waren, gelten als von einem Bearbeiter angelegt; Mitglieder können sie nicht ändern. Alle Rechte werden auf dem Server für jedes einzelne Fahrzeug geprüft, nicht nur durch ausgeblendete Schaltflächen. Eine Datei, die mehreren Objekten zugeordnet ist, kann nur ein Bearbeiter löschen. Ausgemusterte Fahrzeuge verschwinden aus „Meine Fahrzeuge“ und sind über den Statusfilter der Fahrzeugliste zu finden. Gespeicherte Funktionsvorlagen sind für alle sichtbar.
+Jedes Fahrzeug merkt sich, wer es angelegt hat. Fahrzeuge, die schon vor Version 0.2.0 vorhanden waren, gelten als von einem Bearbeiter angelegt; Mitglieder können sie nicht ändern. Alle Rechte werden auf dem Server für jedes einzelne Fahrzeug geprüft, nicht nur durch ausgeblendete Schaltflächen. Eine Datei, die mehreren Objekten zugeordnet ist, kann nur ein Bearbeiter löschen. Ausgemusterte Fahrzeuge stehen auf dem **Abstellgleis** (siehe dort); sie verschwinden aus „Meine Fahrzeuge“ und der Fahrzeugliste. Gespeicherte Funktionsvorlagen sind für alle sichtbar.
 
 Beim Update auf 0.2.0 muss nach dem Hochladen der neuen Dateien einmal im Verwaltungsmenü unter „Update“ die Datenbank-Migration `003_fahrzeug_angelegt_von` ausgeführt werden.
 
@@ -21,7 +21,7 @@ Version 0.3.0 bringt die freiwillige OneDrive-Ablage (siehe „OneDrive anbinden
 
 Version 0.3.1 verbessert die OneDrive-Ablage: Jede übertragene Datei merkt sich, in welchem OneDrive sie liegt (sie bleibt auch nach einem Wechsel des Zielordners abrufbar und löschbar), liegen gebliebene Übertragungen werden auch ohne Cronjob nebenbei nachgeholt, und der Cronjob läuft auch, wenn der Hoster PHP dafür als `php-cgi` startet (in 0.3.0 brach `bin/onedrive-sync.php` mit einem Syntaxfehler ab). Beim Update auf 0.3.1 unter **Verwaltung → Update** einmal „Datenbank jetzt aktualisieren“ wählen; dabei läuft die Migration `007_onedrive_laufwerk`. Wer direkt von 0.2.x kommt, bekommt 004–007 in einem Schritt.
 
-Version 0.4.0 bringt die Rolle **Fahrzeugwart** und die **Löschung einer Person nach DSGVO** (siehe „Person nach DSGVO löschen“). Beim Update auf 0.4.0 unter **Verwaltung → Update** einmal „Datenbank jetzt aktualisieren“ wählen; dabei läuft die Migration `008_rolle_fahrzeugwart`. Bestehende Zugänge behalten ihre Rolle.
+Version 0.4.0 bringt die Rolle **Fahrzeugwart**, die **Löschung einer Person nach DSGVO** (siehe „Person nach DSGVO löschen“) und das **Abstellgleis** für ausgemusterte Fahrzeuge (siehe „Abstellgleis“). Beim Update auf 0.4.0 unter **Verwaltung → Update** einmal „Datenbank jetzt aktualisieren“ wählen; dabei laufen die Migrationen `008_rolle_fahrzeugwart` und `009_abstellgleis`. Bestehende Zugänge behalten ihre Rolle; bereits ausgemusterte Fahrzeuge bekommen als Abstelldatum den Tag ihrer letzten Änderung. Wer von 0.3.x oder älter kommt, bekommt alle fehlenden Migrationen (bis 009) in einem Schritt.
 
 ## Voraussetzungen
 
@@ -72,6 +72,12 @@ Kann keine Subdomain eingerichtet werden, läuft die Anwendung auch in einem Unt
 4. `https://emc78.de/mitglieder/install` aufrufen.
 
 Die Installation auf dem Handy (siehe unten) funktioniert auch im Unterordner.
+
+## Abstellgleis
+
+Ausgemusterte Fahrzeuge stehen auf dem **Abstellgleis** (Menü **Fahrzeuge → Abstellgleis**, dort mit Anzahl). Sie bleiben mit Decodern, Funktionen, CVs, Fotos und Dokumenten erhalten, erscheinen aber nicht mehr in der Fahrzeugliste und in „Meine Fahrzeuge“ und zählen bei der Adressprüfung nicht mit: Ihre Decoder-Adressen sind frei für andere Fahrzeuge. Die Seite zeigt je Fahrzeug, seit wann es abgestellt ist, und lässt sich wie die Fahrzeugliste nach Spurweite, Gattung und Eigentum filtern. Die Textsuche der Fahrzeugliste findet ausgemusterte Fahrzeuge trotzdem (z. B. über die Inventarnummer); sie sind dort als „Abstellgleis“ gekennzeichnet.
+
+Auf der Seite eines Fahrzeugs stellt **„Aufs Abstellgleis“** es ab (Status „ausgemustert“, Datum heute), **„Zurück in Betrieb“** holt es wieder zurück (Status „einsatzbereit“). Beides darf, wer das Fahrzeug auch bearbeiten darf: ein Mitglied an selbst angelegten Fahrzeugen, Fahrzeugwart und höher an allen. Wird der Status im Bearbeiten-Formular auf „ausgemustert“ gesetzt oder davon weg geändert, wird das Datum genauso gesetzt bzw. entfernt. Beide Aktionen stehen im Verlauf des Fahrzeugs.
 
 ## Testumgebung test.emc78.de
 

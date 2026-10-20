@@ -2,22 +2,34 @@
 /** @var array<string,mixed> $fahrzeug */
 include __DIR__ . '/_labels.php';
 $fz = $fahrzeug;
+$abgestellt = $fz['status'] === 'ausgemustert';
 ?>
 <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
     <div>
         <h1 class="h3 mb-1"><?= e($fz['bezeichnung']) ?></h1>
         <div>
             <span class="text-muted me-2"><?= e($fz['inventarnummer']) ?></span>
-            <span class="badge text-bg-<?= e($statusKlassen[$fz['status']] ?? 'secondary') ?>"><?= e($statusLabels[$fz['status']] ?? $fz['status']) ?></span>
+            <?= $statusBadge($fz) ?>
             <?= $eigentumBadge($fz) ?>
         </div>
     </div>
     <?php if ($darfFz($fz)): ?>
-        <div class="d-flex gap-2">
+        <div class="d-flex flex-wrap gap-2">
             <a class="btn btn-primary" href="<?= e(url('/fahrzeuge/' . $fz['id'] . '/bearbeiten')) ?>">Bearbeiten</a>
+            <?php if ($abgestellt): ?>
+            <form method="post" action="<?= e(url('/fahrzeuge/' . $fz['id'] . '/zurueckholen')) ?>">
+                <?php include dirname(__DIR__) . '/partials/csrf.php'; ?>
+                <button type="submit" class="btn btn-outline-success">Zurück in Betrieb</button>
+            </form>
+            <?php else: ?>
+            <form method="post" action="<?= e(url('/fahrzeuge/' . $fz['id'] . '/abstellen')) ?>">
+                <?php include dirname(__DIR__) . '/partials/csrf.php'; ?>
+                <button type="submit" class="btn btn-outline-secondary">Aufs Abstellgleis</button>
+            </form>
+            <?php endif; ?>
             <?php if ($darf('fahrzeug_bearbeiten')): ?>
             <form method="post" action="<?= e(url('/fahrzeuge/' . $fz['id'] . '/loeschen')) ?>"
-                  onsubmit="return confirm('Fahrzeug endgültig löschen? Besser: Status ‚ausgemustert‘.');">
+                  onsubmit="return confirm('Fahrzeug endgültig löschen? Besser: aufs Abstellgleis stellen.');">
                 <?php include dirname(__DIR__) . '/partials/csrf.php'; ?>
                 <button type="submit" class="btn btn-outline-danger">Löschen</button>
             </form>
@@ -25,6 +37,13 @@ $fz = $fahrzeug;
         </div>
     <?php endif; ?>
 </div>
+
+<?php if ($abgestellt): ?>
+    <div class="alert alert-secondary" role="status">
+        Auf dem Abstellgleis<?= ($fz['ausgemustert_am'] ?? null) === null ? '' : ' seit ' . e(date('d.m.Y', (int) strtotime((string) $fz['ausgemustert_am']))) ?>.
+        <a href="<?= e(url('/abstellgleis')) ?>">Zum Abstellgleis</a>
+    </div>
+<?php endif; ?>
 
 <ul class="nav nav-tabs" id="fahrzeug-tabs" role="tablist">
     <?php foreach (['uebersicht' => 'Übersicht', 'digital' => 'Digital', 'dateien' => 'Dateien', 'verlauf' => 'Verlauf'] as $schluessel => $beschriftung): ?>

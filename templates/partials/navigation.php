@@ -3,6 +3,8 @@
 /** @var callable $darf */
 $darf = $darf ?? fn(string $aktion): bool => false;
 $benutzer = $benutzer ?? null;
+/** @var ?callable $abstellgleisAnzahl liefert die Anzahl ausgemusterter Fahrzeuge (nur angemeldet abgefragt) */
+$abstellgleisAnzahl = $abstellgleisAnzahl ?? null;
 use Emc\Auth\Berechtigung;
 ?>
 <nav class="navbar navbar-expand-lg emc-navbar navbar-dark">
@@ -18,7 +20,13 @@ use Emc\Auth\Berechtigung;
         </button>
         <div class="collapse navbar-collapse" id="hauptmenue">
             <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                <li class="nav-item"><a class="nav-link" href="<?= e(url('/fahrzeuge')) ?>">Fahrzeuge</a></li>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Fahrzeuge</a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="<?= e(url('/fahrzeuge')) ?>">Fahrzeugliste</a></li>
+                        <li><a class="dropdown-item d-flex justify-content-between align-items-center gap-3" href="<?= e(url('/abstellgleis')) ?>">Abstellgleis<?php if ($abstellgleisAnzahl !== null): ?> <span class="badge rounded-pill text-bg-secondary"><?= (int) $abstellgleisAnzahl() ?></span><?php endif; ?></a></li>
+                    </ul>
+                </li>
                 <li class="nav-item"><a class="nav-link" href="<?= e(url('/adressen')) ?>">Adressen</a></li>
                 <?php if ($darf(Berechtigung::PERSON_BEARBEITEN)): ?>
                     <li class="nav-item"><a class="nav-link" href="<?= e(url('/personen')) ?>">Personen</a></li>

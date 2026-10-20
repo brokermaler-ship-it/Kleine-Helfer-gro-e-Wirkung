@@ -50,6 +50,9 @@ return function (Router $router, App $app): void {
     $router->add('GET', '/fahrzeuge/{id}/bearbeiten', $app->erfordert('lesen', $fz('bearbeiten')));
     $router->add('POST', '/fahrzeuge/{id}', $app->erfordert('lesen', $fz('aendern')));
     $router->add('POST', '/fahrzeuge/{id}/loeschen', $app->erfordert('fahrzeug_bearbeiten', $fz('loeschen')));
+    $router->add('POST', '/fahrzeuge/{id}/abstellen', $app->erfordert('lesen', $fz('abstellen')));
+    $router->add('POST', '/fahrzeuge/{id}/zurueckholen', $app->erfordert('lesen', $fz('zurueckholen')));
+    $router->add('GET', '/abstellgleis', $app->erfordert('lesen', $fz('abstellgleis')));
 
     $dec = fn(string $m) => fn(Request $r, array $p = []) => $c->get(DecoderController::class)->$m($r, $p);
     $router->add('POST', '/fahrzeuge/{id}/decoder', $app->erfordert('lesen', $dec('anlegen')));

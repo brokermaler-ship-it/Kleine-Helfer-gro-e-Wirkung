@@ -371,6 +371,8 @@ final class App
         $this->view->teile('csrf', $c->get(Csrf::class));
         $this->view->teile('darf', fn(string $aktion): bool => Berechtigung::darf($auth()->benutzer(), $aktion));
         $this->view->teile('darfFz', fn(array $fahrzeug): bool => Berechtigung::darfFahrzeugBearbeiten($auth()->benutzer(), $fahrzeug));
+        // Nur aufgerufen, wenn das Menü für angemeldete Benutzer gezeichnet wird (ein COUNT pro Seite).
+        $this->view->teile('abstellgleisAnzahl', fn(): int => $c->get(FahrzeugRepository::class)->anzahlAbgestellt());
         $this->view->teileSpaet('benutzer', fn() => $auth()->benutzer());
         $this->view->teileSpaet('betriebshinweise', fn() => $this->betriebshinweise());
         $this->view->teileSpaet('meldungen', fn() => $c->get('session')->meldungenAbholen());
