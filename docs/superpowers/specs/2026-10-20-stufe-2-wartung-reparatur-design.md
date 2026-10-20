@@ -38,6 +38,8 @@ Die Rollen bauen aufeinander auf; jede höhere Rolle darf alles, was die darunte
 | **Bearbeiter** | Personen · Dateien allgemein · Anlagen (ab 2b) · später Veranstaltungen und Boxen |
 | **Administrator** | Benutzer und Rollen · übrige Stammlisten (Spurweiten …) · Datensicherung, Update, OneDrive · **DSGVO-Löschung** |
 
+**„Eigene Fahrzeuge“ eines Mitglieds** sind die, deren Eigentümer seine Person ist, oder die es selbst angelegt hat.
+
 Technik: Rang 1 Mitglied, 2 Fahrzeugwart, 3 Bearbeiter, 4 Admin; `benutzer.rolle` erhält den Wert `fahrzeugwart`. Die Rechte an Fotos und Dokumenten **eines Fahrzeugs** richten sich nach dem Recht, dieses Fahrzeug zu bearbeiten. Bestehende Konten behalten ihre Rolle.
 
 ## 4. Teil 2a – DSGVO-Löschung
