@@ -103,4 +103,29 @@ final class AenderungsprotokollTest extends DbTestCase
         // 2 gelöscht, 2 geändert ($behalten, $beides – letzterer nur einmal gezählt)
         $this->assertSame(4, $anzahl);
     }
+
+    public function test_anonymisiere_nur_ganze_woerter(): void
+    {
+        $p = new Aenderungsprotokoll($this->pdo);
+        $laenger = $this->eintrag($p, null, 'person', 1, ['nachname' => ['alt' => 'Carla Mustermann', 'neu' => 'XCarla Muster']]);
+        $tel = $this->eintrag($p, null, 'person', 2, ['telefon' => ['alt' => 'Tel. 0345 123 (mobil)', 'neu' => '0345 1234']]);
+        $mail = $this->eintrag($p, null, 'benutzer', 3, ['email' => ['alt' => '<carla@test.de>', 'neu' => 'xcarla@test.de']]);
+
+        $p->anonymisiere(self::BEGRIFFE, null, []);
+
+        $this->assertSame(['nachname' => ['alt' => 'Carla Mustermann', 'neu' => 'XCarla Muster']], $this->aenderungen($laenger));
+        $this->assertSame(['telefon' => ['alt' => 'Tel. ehemaliges Mitglied (mobil)', 'neu' => '0345 1234']], $this->aenderungen($tel));
+        $this->assertSame(['email' => ['alt' => '<ehemaliges Mitglied>', 'neu' => 'xcarla@test.de']], $this->aenderungen($mail));
+    }
+
+    public function test_anonymisiere_ignoriert_kurze_und_ungueltige_begriffe(): void
+    {
+        $p = new Aenderungsprotokoll($this->pdo);
+        $id = $this->eintrag($p, null, 'person', 1, ['notiz' => ['alt' => 'am 12.03. mit Bo', 'neu' => 'Carla Muster']]);
+
+        $anzahl = $p->anonymisiere(['12', ' Bo ', 'abc', "Carla Muster\xFF", 'Carla Muster'], null, []);
+
+        $this->assertSame(1, $anzahl);
+        $this->assertSame(['notiz' => ['alt' => 'am 12.03. mit Bo', 'neu' => 'ehemaliges Mitglied']], $this->aenderungen($id));
+    }
 }

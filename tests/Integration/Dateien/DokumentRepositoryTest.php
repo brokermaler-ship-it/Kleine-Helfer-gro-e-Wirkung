@@ -126,4 +126,30 @@ final class DokumentRepositoryTest extends DbTestCase
         $this->assertFileDoesNotExist($this->speicher . '/2026/10/a.jpg');
         $this->assertFileDoesNotExist($this->speicher . '/2026/10/a.jpg.vorschau.jpg');
     }
+
+    public function test_loeschen_behaelt_dateien_wenn_datenbankteil_scheitert(): void
+    {
+        $fz = $this->fahrzeug('EMC-0001');
+        $id = $this->dokument('a.jpg', 'onedrive', 'item-a');
+        $this->repo->zuordnen($id, 'fahrzeug', $fz);
+        $this->pdo->exec("CREATE TRIGGER test_dokument_sperre BEFORE DELETE ON dokument FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'gesperrt'");
+        try {
+            try {
+                $this->repo->loeschen($id);
+                $this->fail('Ausnahme erwartet');
+            } catch (\PDOException $e) {
+                $this->assertStringContainsString('gesperrt', $e->getMessage());
+            }
+        } finally {
+            $this->pdo->exec('DROP TRIGGER IF EXISTS test_dokument_sperre');
+        }
+
+        $this->assertFalse($this->pdo->inTransaction());
+        $this->assertNotNull($this->repo->finde($id));
+        $this->assertSame([$fz], $this->repo->objekte($id, 'fahrzeug'));
+        $this->assertSame(0, $this->anzahlAuftraege());
+        foreach (['', '.anzeige.jpg', '.vorschau.jpg'] as $endung) {
+            $this->assertFileExists($this->speicher . '/2026/10/a.jpg' . $endung);
+        }
+    }
 }

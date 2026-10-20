@@ -60,7 +60,7 @@ final class Aenderungsprotokoll
      * „ehemaliges Mitglied“ und leert `benutzer_id` für das Konto. Schlüssel und Nicht-Text-Werte bleiben unverändert.
      * Keine eigene Transaktion.
      *
-     * @param list<string> $begriffe z. B. „Vorname Nachname“, „Nachname, Vorname“, E-Mail, Telefon; leere werden ignoriert
+     * @param list<string> $begriffe z. B. „Vorname Nachname“, „Nachname, Vorname“, E-Mail, Telefon; leere, zu kurze und ungültige werden ignoriert
      * @param list<array{0:string,1:int}> $eigeneObjekte z. B. [['person', 17], ['benutzer', 5]]
      * @return int Anzahl gelöschter und geänderter Einträge (jeder Eintrag einmal)
      */
@@ -78,7 +78,8 @@ final class Aenderungsprotokoll
         $liste = self::bereinigeBegriffe($begriffe);
         if ($liste !== []) {
             $aendern = $this->pdo->prepare('UPDATE aenderungsprotokoll SET aenderungen = ? WHERE id = ?');
-            $muster = '/' . implode('|', array_map(fn(string $b): string => preg_quote($b, '/'), $liste)) . '/iu';
+            // Nur ganze Fundstellen: kein Buchstabe/keine Ziffer direkt davor oder danach („Carla Mustermann“ bleibt).
+            $muster = '/(?<![\\p{L}\\p{N}])(?:' . implode('|', array_map(fn(string $b): string => preg_quote($b, '/'), $liste)) . ')(?![\\p{L}\\p{N}])/iu';
             foreach ($this->kandidaten($liste) as $z) {
                 $roh = (string) $z['aenderungen'];
                 $daten = json_decode($roh, true);
@@ -109,8 +110,11 @@ final class Aenderungsprotokoll
         return $anzahl + count($geaendert);
     }
 
+    /** Kürzere Begriffe würden zu viele fremde Stellen treffen (z. B. Datumsteile). */
+    private const MINDESTLAENGE = 4;
+
     /**
-     * Getrimmt, ohne leere, ohne Dubletten (Groß-/Kleinschreibung egal), längste zuerst.
+     * Getrimmt, ohne ungültiges UTF-8, ohne zu kurze (< 4 Zeichen), ohne Dubletten (Groß-/Kleinschreibung egal), längste zuerst.
      *
      * @param list<string> $begriffe
      * @return list<string>
@@ -119,8 +123,12 @@ final class Aenderungsprotokoll
     {
         $liste = [];
         foreach ($begriffe as $b) {
-            $b = trim((string) $b);
-            if ($b !== '') {
+            $b = (string) $b;
+            if (!mb_check_encoding($b, 'UTF-8')) {
+                continue;
+            }
+            $b = trim($b);
+            if (mb_strlen($b) >= self::MINDESTLAENGE) {
                 $liste[mb_strtolower($b)] ??= $b;
             }
         }
