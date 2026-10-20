@@ -40,6 +40,7 @@ use Emc\OneDrive\TokenSpeicher;
 use Emc\OneDrive\Uebertragung;
 use Emc\Personen\BenutzerController;
 use Emc\Personen\BenutzerRepository;
+use Emc\Personen\DsgvoLoeschung;
 use Emc\Personen\KontoController;
 use Emc\Personen\PersonController;
 use Emc\Personen\PersonRepository;
@@ -157,6 +158,13 @@ final class App
             $c->get(Aenderungsprotokoll::class),
             $c->get(Auth::class),
             $c->get('session')
+        ));
+        $this->container->set(DsgvoLoeschung::class, fn(Container $c) => new DsgvoLoeschung(
+            $c->get('pdo'),
+            $c->get(DokumentRepository::class),
+            $c->get(Aenderungsprotokoll::class),
+            $c->get(FahrzeugRepository::class),
+            $c->get(Uebertragung::class)
         ));
         $this->container->set(SpurweiteRepository::class, fn(Container $c) => new SpurweiteRepository($c->get('pdo')));
         $this->container->set(SpurweiteController::class, fn(Container $c) => new SpurweiteController(

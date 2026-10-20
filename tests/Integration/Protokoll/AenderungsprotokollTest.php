@@ -128,4 +128,21 @@ final class AenderungsprotokollTest extends DbTestCase
         $this->assertSame(1, $anzahl);
         $this->assertSame(['notiz' => ['alt' => 'am 12.03. mit Bo', 'neu' => 'ehemaliges Mitglied']], $this->aenderungen($id));
     }
+
+    public function test_zaehle_betroffene_aendert_nichts_und_stimmt_mit_anonymisiere_ueberein(): void
+    {
+        $p = new Aenderungsprotokoll($this->pdo);
+        $this->eintrag($p, 5, 'person', 17, ['nachname' => ['alt' => null, 'neu' => 'Muster']]);
+        $this->eintrag($p, 5, 'fahrzeug', 1, ['bezeichnung' => ['alt' => null, 'neu' => 'Lok']]);
+        $this->eintrag($p, null, 'fahrzeug', 2, ['eigentuemer' => ['alt' => 'Carla Muster', 'neu' => 'Verein']]);
+        $this->eintrag($p, 5, 'fahrzeug', 3, ['notiz' => ['alt' => null, 'neu' => 'carla@test.de']]);
+        $this->eintrag($p, null, 'fahrzeug', 4, ['notiz' => ['alt' => null, 'neu' => 'Carla Mustermann']]);
+        $vorher = $this->pdo->query('SELECT id, benutzer_id, aenderungen FROM aenderungsprotokoll ORDER BY id')->fetchAll(\PDO::FETCH_ASSOC);
+
+        $gezaehlt = $p->zaehleBetroffene(self::BEGRIFFE, 5, [['person', 17]]);
+
+        $this->assertSame($vorher, $this->pdo->query('SELECT id, benutzer_id, aenderungen FROM aenderungsprotokoll ORDER BY id')->fetchAll(\PDO::FETCH_ASSOC));
+        $this->assertSame(4, $gezaehlt);
+        $this->assertSame($gezaehlt, $p->anonymisiere(self::BEGRIFFE, 5, [['person', 17]]));
+    }
 }

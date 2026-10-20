@@ -66,21 +66,62 @@ final class Aenderungsprotokoll
      */
     public function anonymisiere(array $begriffe, ?int $benutzerId, array $eigeneObjekte): int
     {
-        $anzahl = 0;
-        $loeschen = $this->pdo->prepare('DELETE FROM aenderungsprotokoll WHERE objekt_typ = ? AND objekt_id = ?');
+        $plan = $this->plane($begriffe, $benutzerId, $eigeneObjekte);
+        $loeschen = $this->pdo->prepare('DELETE FROM aenderungsprotokoll WHERE id = ?');
+        foreach ($plan['loeschen'] as $id) {
+            $loeschen->execute([$id]);
+        }
+        $aendern = $this->pdo->prepare('UPDATE aenderungsprotokoll SET aenderungen = ? WHERE id = ?');
+        foreach ($plan['texte'] as $id => $text) {
+            $aendern->execute([$text, $id]);
+        }
+        if ($benutzerId !== null) {
+            $this->pdo->prepare('UPDATE aenderungsprotokoll SET benutzer_id = NULL WHERE benutzer_id = ?')->execute([$benutzerId]);
+        }
+        return $plan['anzahl'];
+    }
+
+    /**
+     * Wie anonymisiere(), ändert aber nichts: Anzahl der Einträge, die gelöscht oder geändert würden (für die Vorschau).
+     *
+     * @param list<string> $begriffe
+     * @param list<array{0:string,1:int}> $eigeneObjekte
+     */
+    public function zaehleBetroffene(array $begriffe, ?int $benutzerId, array $eigeneObjekte): int
+    {
+        return $this->plane($begriffe, $benutzerId, $eigeneObjekte)['anzahl'];
+    }
+
+    /**
+     * @param list<string> $begriffe
+     * @param list<array{0:string,1:int}> $eigeneObjekte
+     * @return array{loeschen:list<int>,texte:array<int,string>,anzahl:int}
+     */
+    private function plane(array $begriffe, ?int $benutzerId, array $eigeneObjekte): array
+    {
+        /** @var array<int,true> $loeschen */
+        $loeschen = [];
+        $st = $this->pdo->prepare('SELECT id FROM aenderungsprotokoll WHERE objekt_typ = ? AND objekt_id = ?');
         foreach ($eigeneObjekte as [$typ, $id]) {
-            $loeschen->execute([(string) $typ, (int) $id]);
-            $anzahl += $loeschen->rowCount();
+            $st->execute([(string) $typ, (int) $id]);
+            foreach ($st->fetchAll(\PDO::FETCH_COLUMN) as $eintrag) {
+                $loeschen[(int) $eintrag] = true;
+            }
         }
 
         /** @var array<int,true> $geaendert */
         $geaendert = [];
+        /** @var array<int,string> $texte */
+        $texte = [];
         $liste = self::bereinigeBegriffe($begriffe);
         if ($liste !== []) {
-            $aendern = $this->pdo->prepare('UPDATE aenderungsprotokoll SET aenderungen = ? WHERE id = ?');
             // Nur ganze Fundstellen: kein Buchstabe/keine Ziffer direkt davor oder danach („Carla Mustermann“ bleibt).
             $muster = '/(?<![\\p{L}\\p{N}])(?:' . implode('|', array_map(fn(string $b): string => preg_quote($b, '/'), $liste)) . ')(?![\\p{L}\\p{N}])/iu';
             foreach ($this->kandidaten($liste) as $z) {
+                $id = (int) $z['id'];
+                if (isset($loeschen[$id])) {
+                    continue;
+                }
                 $roh = (string) $z['aenderungen'];
                 $daten = json_decode($roh, true);
                 if (is_array($daten)) {
@@ -92,8 +133,8 @@ final class Aenderungsprotokoll
                     $text = $ersetzt === $roh ? null : $ersetzt;
                 }
                 if ($text !== null) {
-                    $aendern->execute([$text, (int) $z['id']]);
-                    $geaendert[(int) $z['id']] = true;
+                    $texte[$id] = $text;
+                    $geaendert[$id] = true;
                 }
             }
         }
@@ -102,12 +143,13 @@ final class Aenderungsprotokoll
             $st = $this->pdo->prepare('SELECT id FROM aenderungsprotokoll WHERE benutzer_id = ?');
             $st->execute([$benutzerId]);
             foreach ($st->fetchAll(\PDO::FETCH_COLUMN) as $id) {
-                $geaendert[(int) $id] = true;
+                if (!isset($loeschen[(int) $id])) {
+                    $geaendert[(int) $id] = true;
+                }
             }
-            $this->pdo->prepare('UPDATE aenderungsprotokoll SET benutzer_id = NULL WHERE benutzer_id = ?')->execute([$benutzerId]);
         }
 
-        return $anzahl + count($geaendert);
+        return ['loeschen' => array_keys($loeschen), 'texte' => $texte, 'anzahl' => count($loeschen) + count($geaendert)];
     }
 
     /** Kürzere Begriffe würden zu viele fremde Stellen treffen (z. B. Datumsteile). */
