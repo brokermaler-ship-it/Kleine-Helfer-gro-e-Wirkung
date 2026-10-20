@@ -18,10 +18,11 @@ Stufe 2 wird in vier Teilen umgesetzt; jeder Teil bekommt einen eigenen Umsetzun
 
 | Teil | Inhalt |
 |---|---|
-| **2a** | Rolle **Fahrzeugwart** · **DSGVO-Löschung** einer Person |
+| **2a** | Rolle **Fahrzeugwart** · **DSGVO-Löschung** einer Person · **Abstellgleis** für ausgemusterte Fahrzeuge |
 | **2b** | **Einfache Anlagenliste** · Wartungsarten (Startbestand) · Wartungspläne mit Ausnahmen · Wartungsprotokoll · Fälligkeit/Ampel |
 | **2c** | Reparaturen · **Defekt melden** · Hinweise für Fahrzeugwart/Bearbeiter · Feld **„Code“** · Etiketten (Fahrzeug-Klebchen, Anlagen-QR) |
 | **2d** | Funktionstasten aus **PDF** auslesen |
+| **2e** | **Magazin** (Vereinsinventar mit Eingang/Ausgang) und **Modellbahnbörse** (Angebote, Kasse, Abrechnung, öffentlicher Bereich) – eigene Spezifikation `2026-10-20-magazin-modellbahnboerse-design.md` |
 
 Nicht Teil von Stufe 2: E-Mail-Benachrichtigungen, Texterkennung (OCR) für gescannte PDFs, Module/Bauteile/Anordnungen (Stufe 3), automatische Betriebsstunden aus Veranstaltungen (Stufe 4).
 
