@@ -418,6 +418,16 @@ final class App
             ) {
                 return $this->wartungsSeite();
             }
+            // 3a'. Administratoren dürfen vor dem Datenbank-Update lesen, aber nur Update, Sicherung und Abmelden absenden
+            //      (sonst scheitern Speichervorgänge an noch fehlenden Spalten mit einem Fehler 500).
+            if ($request->isPost()
+                && !in_array($pfad, ['/logout', '/admin/update', '/admin/sicherung'], true)
+                && Berechtigung::darf($benutzer, Berechtigung::BETRIEB)
+                && $this->container->get(Migrator::class)->ausstehend() !== []
+            ) {
+                $this->container->get('session')->meldung('warnung', 'Bitte zuerst das Datenbank-Update ausführen.');
+                return Response::redirect(url('/admin/update'));
+            }
             // 3b. Die OneDrive-Verwaltung erst nach dem Datenbank-Update öffnen.
             if (str_starts_with($pfad, '/admin/onedrive')
                 && Berechtigung::darf($benutzer, Berechtigung::BETRIEB)

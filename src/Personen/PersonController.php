@@ -87,7 +87,13 @@ final class PersonController
         try {
             $this->personen->loeschen((int) $person['id']);
         } catch (DomainFehler $e) {
-            $this->session->meldung('fehler', $e->getMessage());
+            $id = (int) $person['id'];
+            if ($this->personen->anzahlAbgestellteFahrzeuge($id) > 0) {
+                // Ausgemusterte Fahrzeuge fehlen in der Fahrzeugliste: direkt aufs Abstellgleis dieser Person verweisen.
+                $this->session->meldung('fehler', $e->getMessage(), url('/abstellgleis', ['person' => (string) $id]), 'Zum Abstellgleis');
+            } else {
+                $this->session->meldung('fehler', $e->getMessage());
+            }
             return Response::redirect(url('/personen'));
         }
         $alt = $this->vergleichswerte($person);

@@ -52,7 +52,9 @@ final class PersonRepository
     public function loeschen(int $id): void
     {
         if ($this->zaehle('SELECT COUNT(*) FROM fahrzeug WHERE eigentuemer_person_id = ?', $id) > 0) {
-            throw new DomainFehler('Diese Person kann nicht gelöscht werden, weil ihr noch Fahrzeuge gehören.');
+            $abgestellt = $this->anzahlAbgestellteFahrzeuge($id);
+            throw new DomainFehler('Diese Person kann nicht gelöscht werden, weil ihr noch Fahrzeuge gehören'
+                . ($abgestellt > 0 ? ' (davon ' . $abgestellt . ' auf dem Abstellgleis)' : '') . '.');
         }
         if ($this->zaehle('SELECT COUNT(*) FROM benutzer WHERE person_id = ?', $id) > 0) {
             throw new DomainFehler('Diese Person hat einen Zugang. Bitte zuerst den Zugang löschen oder die Person deaktivieren.');
@@ -63,6 +65,12 @@ final class PersonRepository
             // Gleichzeitig entstandener Bezug (Fremdschlüssel RESTRICT).
             throw new DomainFehler('Diese Person wird noch verwendet und kann nicht gelöscht werden. Bitte stattdessen deaktivieren.');
         }
+    }
+
+    /** Ausgemusterte Fahrzeuge der Person (sie fehlen in der Fahrzeugliste und stehen auf dem Abstellgleis). */
+    public function anzahlAbgestellteFahrzeuge(int $id): int
+    {
+        return $this->zaehle("SELECT COUNT(*) FROM fahrzeug WHERE eigentuemer_person_id = ? AND status = 'ausgemustert'", $id);
     }
 
     private function zaehle(string $sql, int $id): int

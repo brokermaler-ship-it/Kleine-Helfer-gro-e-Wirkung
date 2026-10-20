@@ -114,6 +114,27 @@ final class KontoUndVerwaltungHttpTest extends DbTestCase
         $this->assertStringContainsString('Diese Person hat einen Zugang.', $this->app()->handle(new Request('GET', '/personen'))->body);
     }
 
+    public function test_person_mit_abgestellten_fahrzeugen_loeschen_verweist_aufs_abstellgleis(): void
+    {
+        $this->anmelden('bearbeiter');
+        $this->pdo->exec("INSERT INTO person (vorname, nachname) VALUES ('Olga', 'Ohnezugang'), ('Paul', 'Aktiv')");
+        $olga = (int) $this->pdo->query("SELECT id FROM person WHERE nachname = 'Ohnezugang'")->fetchColumn();
+        $paul = (int) $this->pdo->query("SELECT id FROM person WHERE nachname = 'Aktiv'")->fetchColumn();
+        $ins = $this->pdo->prepare("INSERT INTO fahrzeug (inventarnummer, bezeichnung, spurweite_id, status, eigentuemer_person_id) VALUES (?, 'Lok', (SELECT MIN(id) FROM spurweite), ?, ?)");
+        $ins->execute(['EMC-0001', 'ausgemustert', $olga]);
+        $ins->execute(['EMC-0002', 'einsatzbereit', $paul]);
+
+        $this->assertSame(303, $this->post("/personen/$olga/loeschen")->status);
+        $body = $this->app()->handle(new Request('GET', '/personen'))->body;
+        $this->assertStringContainsString('weil ihr noch Fahrzeuge gehören (davon 1 auf dem Abstellgleis)', $body);
+        $this->assertStringContainsString('href="/abstellgleis?person=' . $olga . '"', $body);
+
+        $this->post("/personen/$paul/loeschen");
+        $body = $this->app()->handle(new Request('GET', '/personen'))->body;
+        $this->assertStringContainsString('weil ihr noch Fahrzeuge gehören.', $body);
+        $this->assertStringNotContainsString('/abstellgleis?person=', $body);
+    }
+
     public function test_benutzerverwaltung_nur_fuer_admin(): void
     {
         $this->anmelden('bearbeiter');

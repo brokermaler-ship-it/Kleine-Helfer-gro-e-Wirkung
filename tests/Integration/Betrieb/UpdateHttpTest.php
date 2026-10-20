@@ -110,6 +110,27 @@ final class UpdateHttpTest extends DbTestCase
         $this->assertStringContainsString('/admin/update', $r->body);
     }
 
+    public function test_admin_post_bei_ausstehender_migration_leitet_zum_update(): void
+    {
+        $this->ausstehendeMigration();
+        $this->anmelden('admin');
+        $h0 = (string) $this->pdo->query("SELECT id FROM spurweite WHERE name = 'H0'")->fetchColumn();
+        $r = $this->post('/fahrzeuge', ['bezeichnung' => 'Lok', 'gattung' => 'lok', 'spurweite_id' => $h0, 'stromsystem' => '2L', 'status' => 'einsatzbereit', 'betriebsstunden' => '0']);
+        $this->assertSame(303, $r->status);
+        $this->assertSame('/admin/update', $r->headers['Location']);
+        $this->assertSame(['typ' => 'warnung', 'text' => 'Bitte zuerst das Datenbank-Update ausführen.'], $this->sitzung['_meldungen'][0]);
+        $this->assertSame(0, (int) $this->pdo->query('SELECT COUNT(*) FROM fahrzeug')->fetchColumn());
+        $this->assertSame(200, $this->get('/fahrzeuge')->status, 'Lesen bleibt möglich');
+
+        // Sicherung und Abmelden bleiben erreichbar
+        $sicherung = $this->post('/admin/sicherung');
+        $this->assertNotSame('/admin/update', $sicherung->headers['Location'] ?? null);
+        $this->assertSame(200, $sicherung->status);
+        $abmelden = $this->post('/logout');
+        $this->assertSame(303, $abmelden->status);
+        $this->assertNotSame('/admin/update', $abmelden->headers['Location'] ?? null);
+    }
+
     public function test_ohne_ausstehende_migration_keine_update_leiste(): void
     {
         $this->anmelden('admin');

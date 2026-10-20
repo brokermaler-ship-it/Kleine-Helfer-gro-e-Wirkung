@@ -142,7 +142,7 @@ Hinweise:
 2. Das neue ZIP entpacken und die Dateien per FTP hochladen, bestehende Dateien überschreiben. **Dabei `config.php` und den Ordner `storage/` nicht löschen.** Das ZIP enthält keine `config.php` und keine hochgeladenen Dateien. Es enthält nur `storage/.htaccess`, `storage/dateien/.gitkeep` und `storage/sitzungen/.gitkeep`; diese drei Dateien beim Hochladen zu überschreiben ist harmlos, vorhandene Fotos, Dokumente und Sitzungen bleiben erhalten.
 3. Als Administrator anmelden. Gibt es Datenbank-Änderungen, erscheint oben der Hinweis „Es steht ein Datenbank-Update an.“ Dort auf den Link klicken oder **Verwaltung → Update** öffnen und „Datenbank jetzt aktualisieren“ wählen.
 
-Solange ein Datenbank-Update aussteht, sehen alle anderen Benutzer eine Wartungsseite. Nach dem Update ist alles wieder normal nutzbar.
+Solange ein Datenbank-Update aussteht, sehen alle anderen Benutzer eine Wartungsseite. Administratoren können lesen, aber außer Update, Sicherung und Abmelden nichts speichern; sie werden mit dem Hinweis „Bitte zuerst das Datenbank-Update ausführen.“ zur Update-Seite geleitet. Nach dem Update ist alles wieder normal nutzbar.
 
 ## Sicherung und Wiederherstellung
 

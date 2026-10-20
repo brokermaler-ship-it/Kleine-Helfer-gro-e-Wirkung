@@ -68,7 +68,7 @@ final class AbstellgleisHttpTest extends DbTestCase
 
     private function heute(): string
     {
-        return (string) $this->pdo->query('SELECT CURDATE()')->fetchColumn();
+        return date('Y-m-d'); // Zeitzone der Anwendung (von App::erzeuge gesetzt)
     }
 
     public function test_liste_blendet_aus_abstellgleis_zeigt_mit_datum(): void
@@ -221,6 +221,43 @@ final class AbstellgleisHttpTest extends DbTestCase
         $body = $this->get('/fahrzeuge', ['q' => 'EMC-0007'])->body;
         $this->assertStringContainsString('Alte Dampflok', $body);
         $this->assertStringContainsString('>Abstellgleis</span>', $body);
+    }
+
+    public function test_statusfilter_beschriftung_passt_zur_textsuche(): void
+    {
+        $this->als($this->mitglied);
+        $ohne = $this->get('/fahrzeuge')->body;
+        $this->assertStringContainsString('<option value="">ohne Abstellgleis</option>', $ohne);
+        $this->assertStringNotContainsString('ohne ausgemusterte', $ohne);
+        $mit = $this->get('/fahrzeuge', ['q' => 'Lok'])->body;
+        $this->assertStringContainsString('<option value="">alle (auch Abstellgleis)</option>', $mit);
+        $this->assertStringContainsString('Die Suche findet auch Fahrzeuge auf dem Abstellgleis.', $mit);
+    }
+
+    /** Das Abstelldatum folgt der Zeitzone der Anwendung, nicht der Sitzungszeitzone des Datenbankservers. */
+    public function test_datum_in_zeitzone_der_anwendung(): void
+    {
+        $alt = date_default_timezone_get();
+        $repo = new \Emc\Fahrzeuge\FahrzeugRepository($this->pdo);
+        $this->pdo->exec("SET time_zone = '+13:00'");
+        date_default_timezone_set('Etc/GMT+12'); // UTC-12: Datum weicht immer vom DB-Datum ab
+        try {
+            $erwartet = date('Y-m-d');
+            $this->assertNotSame($erwartet, (string) $this->pdo->query('SELECT CURDATE()')->fetchColumn());
+            $fz = $this->fahrzeug('EMC-0001', 'Lok');
+            $repo->setzeAbgestellt($fz, true);
+            $this->assertSame($erwartet, $this->feld($fz, 'ausgemustert_am'));
+
+            $daten = ['bezeichnung' => 'Neu', 'spurweite_id' => $this->h0, 'status' => 'ausgemustert'];
+            $neu = $repo->anlegen($daten);
+            $this->assertSame($erwartet, $this->feld($neu, 'ausgemustert_am'));
+            $this->pdo->exec("UPDATE fahrzeug SET status = 'defekt', ausgemustert_am = NULL WHERE id = $neu");
+            $repo->aktualisieren($neu, $daten, (string) $this->feld($neu, 'geaendert_am'));
+            $this->assertSame($erwartet, $this->feld($neu, 'ausgemustert_am'));
+        } finally {
+            date_default_timezone_set($alt);
+            $this->pdo->exec("SET time_zone = SYSTEM");
+        }
     }
 
     public function test_adresspruefung_ignoriert_ausgemusterte(): void

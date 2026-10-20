@@ -16,6 +16,9 @@
         <div class="col-12 col-md-4">
             <label for="q" class="form-label small mb-0">Suche</label>
             <input type="search" class="form-control" id="q" name="q" value="<?= e((string) $filter->text) ?>" placeholder="Nummer, Bezeichnung, Baureihe …">
+            <?php if ($mitStatusfilter): ?>
+                <div class="form-text">Die Suche findet auch Fahrzeuge auf dem Abstellgleis.</div>
+            <?php endif; ?>
         </div>
         <div class="col-6 col-md-2">
             <label for="f-spurweite" class="form-label small mb-0">Spurweite</label>
@@ -39,7 +42,7 @@
         <div class="col-6 col-md-2">
             <label for="f-status" class="form-label small mb-0">Status</label>
             <select class="form-select" id="f-status" name="status">
-                <option value="">ohne ausgemusterte</option>
+                <option value=""><?= $filter->text === null ? 'ohne Abstellgleis' : 'alle (auch Abstellgleis)' ?></option>
                 <?php foreach ($statusLabels as $wert => $text): ?>
                     <option value="<?= e($wert) ?>"<?= $filter->status === $wert ? ' selected' : '' ?>><?= e($text) ?></option>
                 <?php endforeach; ?>

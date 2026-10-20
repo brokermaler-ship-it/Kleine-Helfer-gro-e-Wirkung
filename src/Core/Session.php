@@ -99,14 +99,19 @@ final class Session
     }
 
     /** @param string $typ erfolg|warnung|fehler */
-    public function meldung(string $typ, string $text): void
+    /** Meldung für die nächste Seite; optional mit einem Link (Ziel-URL und Linktext, beides wird escaped ausgegeben). */
+    public function meldung(string $typ, string $text, ?string $linkUrl = null, ?string $linkText = null): void
     {
         $liste = $this->daten['_meldungen'] ?? [];
-        $liste[] = ['typ' => $typ, 'text' => $text];
+        $eintrag = ['typ' => $typ, 'text' => $text];
+        if ($linkUrl !== null && $linkText !== null) {
+            $eintrag += ['link_url' => $linkUrl, 'link_text' => $linkText];
+        }
+        $liste[] = $eintrag;
         $this->daten['_meldungen'] = $liste;
     }
 
-    /** @return list<array{typ:string,text:string}> */
+    /** @return list<array{typ:string,text:string,link_url?:string,link_text?:string}> */
     public function meldungenAbholen(): array
     {
         $liste = $this->daten['_meldungen'] ?? [];

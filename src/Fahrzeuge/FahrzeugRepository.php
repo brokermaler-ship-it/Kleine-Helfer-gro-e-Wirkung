@@ -11,11 +11,12 @@ final class FahrzeugRepository
         'spurweite_id', 'stromsystem', 'eigentuemer_person_id', 'status', 'betriebsstunden', 'notiz',
     ];
     /**
-     * Neues ausgemustert_am zum künftigen Status (Platzhalter): bleibt beim Speichern eines schon ausgemusterten
-     * Fahrzeugs erhalten, wird beim Wechsel auf „ausgemustert“ heute und sonst geleert. Muss in SET vor „status = ?“
-     * stehen, weil MySQL die Zuweisungen von links nach rechts mit den neuen Werten auswertet.
+     * Neues ausgemustert_am zum künftigen Status (1. Platzhalter) und heutigen Datum (2. und 3. Platzhalter): bleibt beim
+     * Speichern eines schon ausgemusterten Fahrzeugs erhalten, wird beim Wechsel auf „ausgemustert“ heute und sonst
+     * geleert. Muss in SET vor „status = ?“ stehen, weil MySQL die Zuweisungen von links nach rechts mit den neuen
+     * Werten auswertet. „Heute“ kommt aus PHP (Zeitzone der Anwendung), nicht aus CURDATE() der DB-Sitzung.
      */
-    private const AUSGEMUSTERT_AM = "CASE WHEN ? <> 'ausgemustert' THEN NULL WHEN status = 'ausgemustert' THEN COALESCE(ausgemustert_am, CURDATE()) ELSE CURDATE() END";
+    private const AUSGEMUSTERT_AM = "CASE WHEN ? <> 'ausgemustert' THEN NULL WHEN status = 'ausgemustert' THEN COALESCE(ausgemustert_am, ?) ELSE ? END";
     private const STANDARD = ['gattung' => 'lok', 'stromsystem' => '2L', 'status' => 'einsatzbereit', 'betriebsstunden' => 0];
 
     public function __construct(private \PDO $pdo)
@@ -92,7 +93,7 @@ final class FahrzeugRepository
     {
         if ($abgestellt) {
             $sql = "UPDATE fahrzeug SET ausgemustert_am = " . self::AUSGEMUSTERT_AM . ", status = 'ausgemustert' WHERE id = ?";
-            $this->pdo->prepare($sql)->execute(['ausgemustert', $id]);
+            $this->pdo->prepare($sql)->execute(['ausgemustert', self::heute(), self::heute(), $id]);
             return;
         }
         $this->pdo->prepare("UPDATE fahrzeug SET ausgemustert_am = NULL, status = 'einsatzbereit' WHERE id = ?")->execute([$id]);
@@ -123,8 +124,8 @@ final class FahrzeugRepository
             $nummer = Inventarnummer::naechste($this->pdo);
             try {
                 $this->pdo->prepare("INSERT INTO fahrzeug (inventarnummer, angelegt_von_benutzer_id, $spalten, ausgemustert_am) "
-                    . "VALUES ($platzhalter, IF(? = 'ausgemustert', CURDATE(), NULL))")
-                    ->execute([$nummer, $angelegtVonBenutzerId, ...$werte, $status]);
+                    . "VALUES ($platzhalter, ?)")
+                    ->execute([$nummer, $angelegtVonBenutzerId, ...$werte, $status === 'ausgemustert' ? self::heute() : null]);
             } catch (\PDOException $e) {
                 if ((string) $e->getCode() === '23000' && str_contains($e->getMessage(), 'uq_fahrzeug_inventarnummer')) {
                     $letzter = $e; // gleichzeitig vergeben: neu versuchen
@@ -150,7 +151,7 @@ final class FahrzeugRepository
         $werte = $this->werte($d);
         $status = $werte[array_search('status', self::FELDER, true)];
         $st = $this->pdo->prepare('UPDATE fahrzeug SET ausgemustert_am = ' . self::AUSGEMUSTERT_AM . ", $zuweisung, geaendert_am = NOW(6) WHERE id = ? AND geaendert_am = ?");
-        $st->execute([$status, ...$werte, $id, $erwarteterStand]);
+        $st->execute([$status, self::heute(), self::heute(), ...$werte, $id, $erwarteterStand]);
         if ($st->rowCount() === 0) {
             throw new KonfliktFehler();
         }
@@ -159,6 +160,12 @@ final class FahrzeugRepository
     public function loeschen(int $id): void
     {
         $this->pdo->prepare('DELETE FROM fahrzeug WHERE id = ?')->execute([$id]);
+    }
+
+    /** Heutiges Datum in der Zeitzone der Anwendung (App::setzeZeitzone). */
+    private static function heute(): string
+    {
+        return date('Y-m-d');
     }
 
     /**
