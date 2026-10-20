@@ -27,7 +27,7 @@ Nicht Teil von Stufe 2: E-Mail-Benachrichtigungen, Texterkennung (OCR) für gesc
 
 ## 3. Rollen (ersetzt die Tabelle in Hauptspezifikation Abschnitt 3)
 
-> **Zur Bestätigung durch den Vorstand:** Der Fahrzeugwart wird als **eigene Rolle** zwischen Mitglied und Bearbeiter eingeführt (Variante B). Alternativen wären gewesen: Bearbeiter nur umbenennen (A) oder Fahrzeugwart als Zusatz-Häkchen am Konto (C).
+Der Fahrzeugwart ist eine **eigene Rolle** zwischen Mitglied und Bearbeiter (vom Vorstand bestätigt, 20.10.2026).
 
 Die Rollen bauen aufeinander auf; jede höhere Rolle darf alles, was die darunter darf.
 
