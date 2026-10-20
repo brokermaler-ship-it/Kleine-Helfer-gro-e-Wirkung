@@ -141,3 +141,33 @@ Ablauf von `loesche` (in dieser Reihenfolge, Schritte 1–6 in **einer** Transak
 - [ ] **Step 3: Implement** Controller, Template (Tabelle wie in Spezifikation Abschnitt 4, Bootstrap-Gefahrenkasten), Routen, Schaltfläche, README, VERSION.
 - [ ] **Step 4:** Volle Suite grün; `bash bin/release.sh` erzeugt `dist/emc78-verwaltung-0.4.0.zip` mit `migrations/008_rolle_fahrzeugwart.sql`.
 - [ ] **Step 5: Commit** „DSGVO-Löschung in der Oberfläche, Version 0.4.0“.
+
+### Task 5: Abstellgleis für ausgemusterte Fahrzeuge
+
+Vom Vorstand am 20.10.2026 im Gespräch freigegeben. Stand heute: Die Fahrzeugliste blendet `ausgemustert` bereits aus (außer bei Statusfilter), die Adressprüfung ignoriert ausgemusterte Fahrzeuge (`src/Digital/Adresspruefung.php`).
+
+**Files:**
+- Create: `migrations/009_abstellgleis.sql`, `templates/fahrzeuge/abstellgleis.php`
+- Modify: `src/Fahrzeuge/FahrzeugController.php` (Aktionen `abstellgleis`, `abstellen`, `zurueckholen`), `src/Fahrzeuge/FahrzeugRepository.php`, `src/routes.php`, `templates/partials/navigation.php`, `templates/fahrzeuge/anzeigen.php` (bzw. Detail-Template), `README.md`, `tests/Integration/Betrieb/MigratorTest.php`
+- Test: `tests/Integration/Fahrzeuge/AbstellgleisHttpTest.php`
+
+**Interfaces:**
+- Migration: `ALTER TABLE fahrzeug ADD COLUMN ausgemustert_am DATE NULL;` und Nachtrag `UPDATE fahrzeug SET ausgemustert_am = DATE(geaendert_am), geaendert_am = geaendert_am WHERE status = 'ausgemustert';`
+- `FahrzeugRepository::setzeAbgestellt(int $id, bool $abgestellt): void` – `true`: Status `ausgemustert`, `ausgemustert_am = CURDATE()`; `false`: Status `einsatzbereit`, `ausgemustert_am = NULL`. Wird der Status über das normale Formular auf/von `ausgemustert` geändert, wird `ausgemustert_am` genauso gesetzt bzw. geleert.
+- Routen: `GET /abstellgleis` (`lesen`), `POST /fahrzeuge/{id}/abstellen` und `POST /fahrzeuge/{id}/zurueckholen` (`lesen` + `Berechtigung::verlangeFahrzeugBearbeiten`).
+- Menü: unter „Fahrzeuge“ ein Eintrag „Abstellgleis“ mit Anzahl.
+
+- [ ] **Step 1: Failing tests** (`AbstellgleisHttpTest`)
+  - `GET /fahrzeuge` zeigt ein ausgemustertes Fahrzeug nicht; `GET /abstellgleis` zeigt es mit „seit <Datum>“; Filter Spurweite und Verein/Mitglied wirken auf `/abstellgleis`.
+  - „Meine Fahrzeuge“ enthält ausgemusterte eigene Fahrzeuge nicht.
+  - Mitglied: `POST /fahrzeuge/{id}/abstellen` am selbst angelegten Fahrzeug → Status `ausgemustert`, `ausgemustert_am` = heute, Protokolleintrag „geaendert“; an fremdem Fahrzeug → 403. Fahrzeugwart an fremdem privaten Fahrzeug → erlaubt.
+  - `POST /fahrzeuge/{id}/zurueckholen` → `einsatzbereit`, `ausgemustert_am` NULL.
+  - Detailseite eines ausgemusterten Fahrzeugs zeigt „Auf dem Abstellgleis seit …“ und den Knopf „Zurück in Betrieb“; eines aktiven den Knopf „Aufs Abstellgleis“ (nur mit Bearbeitungsrecht).
+  - Adressprüfung: neues Fahrzeug mit derselben Adresse wie ein ausgemustertes → keine Warnung (bestehendes Verhalten absichern).
+  - Migration setzt `ausgemustert_am` für vorhandene ausgemusterte Fahrzeuge.
+- [ ] **Step 2:** Filter `Abstellgleis|Migrator` → FAIL.
+- [ ] **Step 3: Implement** wie in Interfaces; Abstellgleis-Seite nutzt `FahrzeugRepository::suche` mit Status `ausgemustert` und dieselbe Listen-Darstellung wie `/fahrzeuge`. README: kurzer Absatz „Abstellgleis“.
+- [ ] **Step 4:** Volle Suite grün.
+- [ ] **Step 5: Commit** „Abstellgleis für ausgemusterte Fahrzeuge“.
+
+Hinweis zur Reihenfolge: Task 5 läuft nach Task 4; die Version 0.4.0 aus Task 4 enthält dann auch Migration 009 (Release-ZIP in Task 5 neu bauen und prüfen).
