@@ -110,9 +110,9 @@ final class DateiController
 
     /**
      * Löschregel für Dateien (die Route kennt keinen Fahrzeugkontext, daher wird er aus den Zuordnungen abgeleitet):
-     * Bearbeiter und Admin dürfen jede Datei löschen. Alle anderen nur, wenn die Datei genau einem Fahrzeug
-     * zugeordnet ist (keine weiteren Zuordnungen, auch nicht zu anderen Objekttypen) und sie dieses Fahrzeug
-     * bearbeiten dürfen. Geteilte Dokumente bleiben damit Bearbeitern vorbehalten.
+     * Bearbeiter und Admin dürfen jede Datei löschen. Alle anderen (Fahrzeugwart und Mitglied) nur, wenn die Datei
+     * genau einem Fahrzeug zugeordnet ist (keine weiteren Zuordnungen, auch nicht zu anderen Objekttypen) und sie
+     * dieses Fahrzeug bearbeiten dürfen. Geteilte Dokumente bleiben damit Bearbeitern vorbehalten.
      *
      * @param array<string,mixed> $dok
      */

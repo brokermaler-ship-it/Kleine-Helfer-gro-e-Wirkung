@@ -3,7 +3,7 @@
 Stand 18.10.2026. Kleinere Punkte aus den Code-Prüfungen von Stufe 1, die bewusst zurückgestellt wurden. Keiner davon verhindert die Installation.
 
 ## Vor Eingabe echter Mitgliederdaten
-- DSGVO: Beim Löschen einer Person personenbezogene Daten auch im Änderungsprotokoll entfernen (erster Punkt von Stufe 2).
+- ~~DSGVO: Beim Löschen einer Person personenbezogene Daten auch im Änderungsprotokoll entfernen (erster Punkt von Stufe 2).~~ Erledigt in Version 0.4.0 (Stufe 2a): „Person endgültig löschen (DSGVO)“, siehe README „Person nach DSGVO löschen“.
 
 ## Rückstellungen aus den Prüfungen (technisch)
 - Task 1: Request basis_url prefix match not segment-safe (/app vs /application)

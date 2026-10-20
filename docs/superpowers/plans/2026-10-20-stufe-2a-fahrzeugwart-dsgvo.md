@@ -52,7 +52,7 @@
   - Migration: `ALTER TABLE benutzer MODIFY rolle ENUM('mitglied','fahrzeugwart','bearbeiter','admin') NOT NULL DEFAULT 'mitglied';`
   - `Rolle`: Fall `Fahrzeugwart = 'fahrzeugwart'` zwischen Mitglied und Bearbeiter (Reihenfolge der `cases()` bestimmt die Auswahlliste im Benutzerformular).
   - `Berechtigung`: Ränge wie oben, `match` um Fahrzeugwart ⇒ 2; Docblock „1 Mitglied, 2 Fahrzeugwart, 3 Bearbeiter, 4 Admin“; Kommentar von `darfFahrzeugBearbeiten` auf „Fahrzeugwart und höher“.
-  - `DemoDaten`: zusätzlicher Testzugang `fahrzeugwart@test.emc78.de` (Person „Dieter Wagner“, erfundener Name), Passwort `self::PASSWORT`; README-Abschnitt Testzugänge entsprechend.
+  - `DemoDaten`: zusätzlicher Testzugang `fahrzeugwart@test.emc78.de` (Person „Greta Wagner“, erfundener Name), Passwort `self::PASSWORT`; README-Abschnitt Testzugänge entsprechend.
   - README: Rollentabelle gemäß Spezifikation Abschnitt 3.
 - [ ] **Step 4:** Gleicher Filter → PASS; danach volle Suite grün.
 - [ ] **Step 5: Commit** „Rolle Fahrzeugwart: alles rund um alle Fahrzeuge“.

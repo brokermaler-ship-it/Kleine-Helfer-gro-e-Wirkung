@@ -149,7 +149,8 @@ final class App
             $c->get(PersonRepository::class),
             $c->get(Aenderungsprotokoll::class),
             $c->get(Auth::class),
-            $c->get('session')
+            $c->get('session'),
+            fn(): DsgvoLoeschung => $c->get(DsgvoLoeschung::class)
         ));
         $this->container->set(BenutzerController::class, fn(Container $c) => new BenutzerController(
             $this->view,

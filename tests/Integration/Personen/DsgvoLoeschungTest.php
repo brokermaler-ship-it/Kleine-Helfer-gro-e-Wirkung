@@ -145,13 +145,29 @@ final class DsgvoLoeschungTest extends DbTestCase
         $this->assertSame('carla@verein.de', $v['benutzer']['email']);
         $this->assertArrayNotHasKey('passwort_hash', $v['benutzer']);
         $this->assertSame([
-            ['id' => $s['fz1'], 'inventarnummer' => 'EMC-0001', 'bezeichnung' => 'Lok EMC-0001', 'dokumente' => 1],
-            ['id' => $s['fz2'], 'inventarnummer' => 'EMC-0002', 'bezeichnung' => 'Lok EMC-0002', 'dokumente' => 1],
+            ['id' => $s['fz1'], 'inventarnummer' => 'EMC-0001', 'bezeichnung' => 'Lok EMC-0001', 'dokumente' => 1, 'rechnungen' => 0],
+            ['id' => $s['fz2'], 'inventarnummer' => 'EMC-0002', 'bezeichnung' => 'Lok EMC-0002', 'dokumente' => 1, 'rechnungen' => 0],
         ], $v['fahrzeuge']);
+        $this->assertFalse($v['onedrive_konto_der_person']);
         $this->assertSame(1, $v['protokolleintraege']);
         $this->assertNull($v['verweigert']);
         // Die Vorschau ändert nichts.
         $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM aenderungsprotokoll WHERE benutzer_id = ?', [$s['konto']]));
+    }
+
+    public function test_vorschau_nennt_rechnungen_und_onedrive_konto_der_person(): void
+    {
+        $s = $this->szenario();
+        $rechnung = $this->dokument('kauf.pdf', [$s['fz1']]);
+        $this->pdo->prepare("UPDATE dokument SET kategorie = 'rechnung' WHERE id = ?")->execute([$rechnung]);
+        $this->pdo->prepare("INSERT INTO einstellung (schluessel, wert) VALUES ('onedrive_konto', 'Carla@Privat.de')")->execute();
+
+        $v = $this->dienst->vorschau($s['person'], $this->admin);
+
+        $this->assertSame(2, $v['fahrzeuge'][0]['dokumente']);
+        $this->assertSame(1, $v['fahrzeuge'][0]['rechnungen']);
+        $this->assertSame(0, $v['fahrzeuge'][1]['rechnungen']);
+        $this->assertTrue($v['onedrive_konto_der_person']);
     }
 
     public function test_vorschau_ohne_konto_und_ohne_fahrzeuge(): void
@@ -465,5 +481,39 @@ final class DsgvoLoeschungTest extends DbTestCase
         $this->assertTrue($this->dateienWeg('beide.jpg'));
         $this->assertSame(1, $this->zaehle("SELECT COUNT(*) FROM onedrive_auftrag WHERE art = 'loeschen' AND item_id = 'item-beide'"));
         $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM dokument_zuordnung'));
+    }
+
+    public function test_fruehere_mails_anderer_personen_und_konten_bleiben(): void
+    {
+        $person = $this->person('Carla', 'Beispiel', 'carla@privat.de', null);
+        $partner = $this->person('Bernd', 'Beispiel', 'familie@privat.de', null);
+        $kollege = $this->person('Frank', 'Fremd', null, null);
+        $this->konto($kollege, 'geteilt@verein.de');
+        $verein = $this->fahrzeug('EMC-0011', null);
+        $p = $this->protokoll;
+        $p->schreibe($this->admin, 'person', $person, 'geaendert', [
+            'email' => ['alt' => 'familie@privat.de', 'neu' => 'carla@privat.de'],
+        ]);
+        $p->schreibe($this->admin, 'benutzer', 77, 'angelegt', [
+            'email' => ['alt' => null, 'neu' => 'geteilt@verein.de'], 'person_id' => ['alt' => null, 'neu' => $person],
+        ]);
+        $p->schreibe($this->admin, 'benutzer', 77, 'geloescht', ['email' => ['alt' => 'geteilt@verein.de', 'neu' => null]]);
+        $p->schreibe($this->admin, 'person', $partner, 'angelegt', ['email' => ['alt' => null, 'neu' => 'familie@privat.de']]);
+        $p->schreibe($this->admin, 'fahrzeug', $verein, 'geaendert', ['notiz' => ['alt' => null, 'neu' => 'Fragen an GETEILT@verein.de oder carla@privat.de']]);
+        foreach (['familie@privat.de', 'Geteilt@verein.de', 'carla@privat.de'] as $mail) {
+            $this->pdo->prepare("INSERT INTO login_versuch (email, ip) VALUES (?, '127.0.0.1')")->execute([$mail]);
+        }
+
+        $this->dienst->loesche($person, [], $this->admin);
+
+        $this->assertSame(1, $this->zaehle("SELECT COUNT(*) FROM login_versuch WHERE email = 'familie@privat.de'"));
+        $this->assertSame(1, $this->zaehle("SELECT COUNT(*) FROM login_versuch WHERE email = 'geteilt@verein.de'"));
+        $this->assertSame(0, $this->zaehle("SELECT COUNT(*) FROM login_versuch WHERE email = 'carla@privat.de'"));
+        $this->assertSame(1, $this->zaehle("SELECT COUNT(*) FROM aenderungsprotokoll WHERE objekt_typ = 'person' AND objekt_id = ? AND aenderungen LIKE '%familie@privat.de%'", [$partner]));
+        $notiz = (string) $this->pdo->query("SELECT aenderungen FROM aenderungsprotokoll WHERE objekt_typ = 'fahrzeug' AND objekt_id = $verein")->fetchColumn();
+        $this->assertStringContainsString('GETEILT@verein.de', $notiz);
+        $this->assertStringNotContainsString('carla@privat.de', $notiz);
+        // Das frühere Konto 77 der Person verschwindet trotzdem aus dem Protokoll.
+        $this->assertSame(0, $this->zaehle("SELECT COUNT(*) FROM aenderungsprotokoll WHERE objekt_typ = 'benutzer' AND objekt_id = 77"));
     }
 }

@@ -169,7 +169,7 @@ final class DemoDatenTest extends DbTestCase
         $this->assertSame('admin', (string) $this->pdo->query("SELECT rolle FROM benutzer WHERE email = 'admin@test.emc78.de'")->fetchColumn());
         $this->assertSame('bearbeiter', (string) $this->pdo->query("SELECT rolle FROM benutzer WHERE email = 'bearbeiter@test.emc78.de'")->fetchColumn());
         $this->assertSame('fahrzeugwart', (string) $this->pdo->query("SELECT rolle FROM benutzer WHERE email = 'fahrzeugwart@test.emc78.de'")->fetchColumn());
-        $this->assertSame('Dieter Wagner', (string) $this->pdo->query("SELECT CONCAT(p.vorname, ' ', p.nachname) FROM benutzer b JOIN person p ON p.id = b.person_id WHERE b.email = 'fahrzeugwart@test.emc78.de'")->fetchColumn());
+        $this->assertSame('Greta Wagner', (string) $this->pdo->query("SELECT CONCAT(p.vorname, ' ', p.nachname) FROM benutzer b JOIN person p ON p.id = b.person_id WHERE b.email = 'fahrzeugwart@test.emc78.de'")->fetchColumn());
         $this->assertSame(0, (int) $this->pdo->query('SELECT COUNT(*) FROM benutzer WHERE muss_passwort_aendern = 1')->fetchColumn());
 
         $carla = (int) $this->pdo->query("SELECT id FROM benutzer WHERE email = 'mitglied@test.emc78.de'")->fetchColumn();

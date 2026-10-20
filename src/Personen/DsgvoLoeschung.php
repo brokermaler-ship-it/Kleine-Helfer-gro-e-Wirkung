@@ -36,7 +36,9 @@ final class DsgvoLoeschung
     /**
      * Was beim Löschen passieren würde; ändert nichts.
      *
-     * @return array{person: array<string,mixed>, benutzer: ?array<string,mixed>, fahrzeuge: list<array{id:int, inventarnummer:string, bezeichnung:string, dokumente:int}>, protokolleintraege:int, verweigert:?string}
+     * `onedrive_konto_der_person`: die OneDrive-Verbindung läuft über ein Microsoft-Konto mit einer E-Mail der Person.
+     *
+     * @return array{person: array<string,mixed>, benutzer: ?array<string,mixed>, fahrzeuge: list<array{id:int, inventarnummer:string, bezeichnung:string, dokumente:int, rechnungen:int}>, protokolleintraege:int, verweigert:?string, onedrive_konto_der_person:bool}
      */
     public function vorschau(int $personId, int $ausfuehrenderBenutzerId): array
     {
@@ -49,9 +51,17 @@ final class DsgvoLoeschung
                 'inventarnummer' => (string) $fz['inventarnummer'],
                 'bezeichnung' => (string) $fz['bezeichnung'],
                 'dokumente' => count($this->dokumente->idsFuerObjekt('fahrzeug', (int) $fz['id'])),
+                'rechnungen' => $this->rechnungen((int) $fz['id']),
             ];
         }
         $k = $this->kennungen($personId, $person, $benutzer);
+        $mails = array_map('mb_strtolower', array_filter(
+            [...$k['mails'], trim((string) ($person['email'] ?? '')), trim((string) ($benutzer['email'] ?? ''))],
+            fn(string $m): bool => $m !== ''
+        ));
+        $st = $this->pdo->prepare("SELECT wert FROM einstellung WHERE schluessel = 'onedrive_konto'");
+        $st->execute();
+        $onedriveKonto = mb_strtolower(trim((string) $st->fetchColumn()));
         $admins = array_map('intval', $this->pdo->query("SELECT id FROM benutzer WHERE rolle = 'admin' AND aktiv = 1")->fetchAll(\PDO::FETCH_COLUMN));
         $verweigert = $this->verweigerung($personId, $benutzer, $ausfuehrenderBenutzerId, $admins);
         if ($benutzer !== null) {
@@ -63,7 +73,18 @@ final class DsgvoLoeschung
             'fahrzeuge' => $fahrzeuge,
             'protokolleintraege' => $this->protokoll->zaehleBetroffene($k['begriffe'], $k['konten'], $k['objekte']),
             'verweigert' => $verweigert,
+            'onedrive_konto_der_person' => $onedriveKonto !== '' && in_array($onedriveKonto, $mails, true),
         ];
+    }
+
+    /** Anzahl der Rechnungen am Fahrzeug (bleiben bei Übergabe an den Verein erhalten, oft mit Name und Adresse). */
+    private function rechnungen(int $fahrzeugId): int
+    {
+        $st = $this->pdo->prepare(
+            "SELECT COUNT(*) FROM dokument d JOIN dokument_zuordnung z ON z.dokument_id = d.id WHERE z.objekt_typ = 'fahrzeug' AND z.objekt_id = ? AND d.kategorie = 'rechnung'"
+        );
+        $st->execute([$fahrzeugId]);
+        return (int) $st->fetchColumn();
     }
 
     /**
@@ -284,7 +305,7 @@ final class DsgvoLoeschung
                 $begriffe[] = $nachname . ' ' . $vorname;
             }
         }
-        $mails = array_values($werte['email']);
+        $mails = $this->ohneFremdeMails(array_values($werte['email']), $personId, $benutzer);
         array_push($begriffe, ...$mails, ...array_values($werte['telefon']));
 
         $objekte = [['person', $personId]];
@@ -292,6 +313,35 @@ final class DsgvoLoeschung
             $objekte[] = ['benutzer', $konto];
         }
         return ['begriffe' => $begriffe, 'mails' => $mails, 'konten' => $konten, 'objekte' => $objekte];
+    }
+
+    /**
+     * Ohne E-Mails, die heute einer anderen Person oder dem Konto einer anderen Person gehören (z. B. eine geteilte
+     * Familienadresse): deren Anmeldeversuche und Fundstellen im Protokoll gehören dem anderen. Die E-Mail des
+     * eigenen Kontos bleibt immer (sie ist eindeutig und wird mit dem Konto gelöscht).
+     *
+     * @param list<string> $mails
+     * @param ?array<string,mixed> $benutzer
+     * @return list<string>
+     */
+    private function ohneFremdeMails(array $mails, int $personId, ?array $benutzer): array
+    {
+        $konto = mb_strtolower(trim((string) ($benutzer['email'] ?? '')));
+        $person = $this->pdo->prepare('SELECT COUNT(*) FROM person WHERE email = ? AND id <> ?');
+        $fremdesKonto = $this->pdo->prepare('SELECT COUNT(*) FROM benutzer WHERE email = ? AND person_id <> ?');
+        $behalten = [];
+        foreach ($mails as $mail) {
+            if ($konto !== '' && mb_strtolower($mail) === $konto) {
+                $behalten[] = $mail;
+                continue;
+            }
+            $person->execute([$mail, $personId]);
+            $fremdesKonto->execute([$mail, $personId]);
+            if ((int) $person->fetchColumn() === 0 && (int) $fremdesKonto->fetchColumn() === 0) {
+                $behalten[] = $mail;
+            }
+        }
+        return $behalten;
     }
 
     /**

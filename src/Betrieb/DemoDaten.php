@@ -142,7 +142,7 @@ final class DemoDaten
             'anja' => ['Anja', 'Beispielmann', 'admin@test.emc78.de', 'Test-Administratorin'],
             'bernd' => ['Bernd', 'Probemeier', 'bearbeiter@test.emc78.de', 'Test-Bearbeiter'],
             'carla' => ['Carla', 'Mustermann', 'mitglied@test.emc78.de', 'Test-Mitglied'],
-            'wart' => ['Dieter', 'Wagner', 'fahrzeugwart@test.emc78.de', 'Test-Fahrzeugwart'],
+            'wart' => ['Greta', 'Wagner', 'fahrzeugwart@test.emc78.de', 'Test-Fahrzeugwart'],
             'dieter' => ['Dieter', 'Testfeld', null, 'Ohne Zugang'],
             'eva' => ['Eva', 'Musterfrau', null, 'Ohne Zugang'],
             'frank' => ['Frank', 'Demonstrant', null, 'Ohne Zugang'],

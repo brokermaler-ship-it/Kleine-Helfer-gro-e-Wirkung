@@ -16,13 +16,17 @@ use Emc\Protokoll\Aenderungsprotokoll;
 final class PersonController
 {
     private const FELDER = ['vorname', 'nachname', 'email', 'telefon', 'notiz', 'aktiv'];
+    public const DSGVO_BESTAETIGUNG = 'Bitte den Nachnamen zur Bestätigung eingeben.';
+    public const DSGVO_ERNEUT = 'Die Löschung konnte gerade nicht ausgeführt werden. Bitte erneut versuchen.';
 
+    /** @param \Closure(): DsgvoLoeschung $dsgvo erst bei Bedarf gebaut (braucht Dateiablage und OneDrive) */
     public function __construct(
         private View $view,
         private PersonRepository $personen,
         private Aenderungsprotokoll $protokoll,
         private Auth $auth,
         private Session $session,
+        private \Closure $dsgvo,
     ) {
     }
 
@@ -95,6 +99,63 @@ final class PersonController
         );
         $this->session->meldung('erfolg', 'Die Person wurde gelöscht.');
         return Response::redirect(url('/personen'));
+    }
+
+    public function dsgvoVorschau(Request $r, array $p): Response
+    {
+        return $this->dsgvoSeite($this->lade($p), [], null);
+    }
+
+    public function dsgvoLoeschen(Request $r, array $p): Response
+    {
+        $person = $this->lade($p);
+        $roh = $r->post('uebergeben', []);
+        $uebergeben = [];
+        foreach (is_array($roh) ? $roh : [] as $w) {
+            if (is_string($w) && ctype_digit($w)) {
+                $uebergeben[] = (int) $w;
+            }
+        }
+        $eingabe = $r->text('nachname');
+        if (mb_strtolower(trim($eingabe)) !== mb_strtolower(trim((string) $person['nachname'])) || trim($eingabe) === '') {
+            return $this->dsgvoSeite($person, $uebergeben, self::DSGVO_BESTAETIGUNG, 422);
+        }
+        try {
+            ($this->dsgvo)()->loesche((int) $person['id'], $uebergeben, (int) $this->auth->benutzer()?->id);
+        } catch (DomainFehler $e) {
+            return $this->dsgvoSeite($person, $uebergeben, $e->getMessage(), 422);
+        } catch (\PDOException $e) {
+            if (!self::istSperrkonflikt($e)) {
+                throw $e;
+            }
+            // Deadlock oder Sperr-Timeout: die Transaktion wurde zurückgerollt, es ist nichts gelöscht.
+            return $this->dsgvoSeite($person, $uebergeben, self::DSGVO_ERNEUT, 409);
+        }
+        $this->session->meldung('erfolg', 'Die Person wurde nach DSGVO gelöscht.');
+        return Response::redirect(url('/personen'));
+    }
+
+    /** SQLSTATE 40001 (Serialisierung/Deadlock) bzw. MySQL/MariaDB-Fehler 1213 (Deadlock) und 1205 (Sperr-Timeout). */
+    private static function istSperrkonflikt(\PDOException $e): bool
+    {
+        $info = $e->errorInfo ?? [];
+        return $e->getCode() === '40001' || ($info[0] ?? null) === '40001' || in_array((int) ($info[1] ?? 0), [1205, 1213], true);
+    }
+
+    /**
+     * @param array<string,mixed> $person
+     * @param list<int> $uebergeben
+     */
+    private function dsgvoSeite(array $person, array $uebergeben, ?string $fehler, int $status = 200): Response
+    {
+        $vorschau = ($this->dsgvo)()->vorschau((int) $person['id'], (int) $this->auth->benutzer()?->id);
+        return $this->html('personen/dsgvo', [
+            'titel' => 'Person nach DSGVO löschen',
+            'person' => $person,
+            'vorschau' => $vorschau,
+            'uebergeben' => $uebergeben,
+            'fehler' => $fehler,
+        ], $status);
     }
 
     /** @return array<string,mixed> */

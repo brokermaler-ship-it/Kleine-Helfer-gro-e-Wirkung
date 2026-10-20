@@ -89,6 +89,8 @@ return function (Router $router, App $app): void {
     $router->add('GET', '/personen/{id}/bearbeiten', $app->erfordert('person_bearbeiten', $person('bearbeiten')));
     $router->add('POST', '/personen/{id}', $app->erfordert('person_bearbeiten', $person('aendern')));
     $router->add('POST', '/personen/{id}/loeschen', $app->erfordert('person_bearbeiten', $person('loeschen')));
+    $router->add('GET', '/personen/{id}/dsgvo', $app->erfordert('person_dsgvo_loeschen', $person('dsgvoVorschau')));
+    $router->add('POST', '/personen/{id}/dsgvo', $app->erfordert('person_dsgvo_loeschen', $person('dsgvoLoeschen')));
 
     $benutzer = fn(string $m) => fn(Request $r, array $p = []) => $c->get(BenutzerController::class)->$m($r, $p);
     $router->add('GET', '/admin/benutzer', $app->erfordert('benutzer_verwalten', $benutzer('liste')));

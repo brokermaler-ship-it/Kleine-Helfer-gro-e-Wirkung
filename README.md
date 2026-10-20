@@ -21,6 +21,8 @@ Version 0.3.0 bringt die freiwillige OneDrive-Ablage (siehe „OneDrive anbinden
 
 Version 0.3.1 verbessert die OneDrive-Ablage: Jede übertragene Datei merkt sich, in welchem OneDrive sie liegt (sie bleibt auch nach einem Wechsel des Zielordners abrufbar und löschbar), liegen gebliebene Übertragungen werden auch ohne Cronjob nebenbei nachgeholt, und der Cronjob läuft auch, wenn der Hoster PHP dafür als `php-cgi` startet (in 0.3.0 brach `bin/onedrive-sync.php` mit einem Syntaxfehler ab). Beim Update auf 0.3.1 unter **Verwaltung → Update** einmal „Datenbank jetzt aktualisieren“ wählen; dabei läuft die Migration `007_onedrive_laufwerk`. Wer direkt von 0.2.x kommt, bekommt 004–007 in einem Schritt.
 
+Version 0.4.0 bringt die Rolle **Fahrzeugwart** und die **Löschung einer Person nach DSGVO** (siehe „Person nach DSGVO löschen“). Beim Update auf 0.4.0 unter **Verwaltung → Update** einmal „Datenbank jetzt aktualisieren“ wählen; dabei läuft die Migration `008_rolle_fahrzeugwart`. Bestehende Zugänge behalten ihre Rolle.
+
 ## Voraussetzungen
 
 - PHP ab Version 8.2 mit den Erweiterungen `pdo_mysql`, `mbstring`, `gd`, `fileinfo` und `zip`, für die OneDrive-Ablage zusätzlich `curl` und `openssl`
@@ -86,7 +88,7 @@ Neuerungen und Beispieldaten lassen sich gefahrlos auf einer eigenen Testinstanz
 
    Beides **löscht alle vorhandenen Daten der Testinstanz** und legt neu an: 7 erfundene Personen, 12 Fahrzeuge in H0 und N (Verein und Mitglieder, ein ausgemustertes), Decoder mit Funktionstasten und CVs, Beispielfotos und absichtlich **eine doppelte DCC-Adresse in H0**, an der man die Warnung der Adressprüfung sieht. Nach dem Laden im Browser wird man abgemeldet.
 7. Als Mitglied (Carla) kannst du die E 94 279 und den Eilzugwagen Bymb 421 bearbeiten – die hat Carla selbst angelegt; andere Fahrzeuge siehst du nur.
-8. Anmelden mit `bearbeiter@test.emc78.de`, `fahrzeugwart@test.emc78.de` (Dieter Wagner) oder `mitglied@test.emc78.de` (Passwort `Test-EMC78!`) oder als Administrator mit `admin@test.emc78.de` und dem Passwort aus `testumgebung_admin_passwort`. Den Admin-Zugang erfahren Tester beim Vorstand; er steht bewusst nicht auf der Anmeldeseite.
+8. Anmelden mit `bearbeiter@test.emc78.de`, `fahrzeugwart@test.emc78.de` (Greta Wagner) oder `mitglied@test.emc78.de` (Passwort `Test-EMC78!`) oder als Administrator mit `admin@test.emc78.de` und dem Passwort aus `testumgebung_admin_passwort`. Den Admin-Zugang erfahren Tester beim Vorstand; er steht bewusst nicht auf der Anmeldeseite.
 
 Anmeldungen gelten nur für die Instanz, an der man sich angemeldet hat: Echtbetrieb und Testinstanz speichern ihre Sitzungen getrennt (jeweils in `storage/sitzungen/`) und erkennen fremde Sitzungen, auch wenn beide im selben STRATO-Paket liegen.
 
@@ -144,7 +146,7 @@ Solange ein Datenbank-Update aussteht, sehen alle anderen Benutzer eine Wartungs
 - `dateien/` – alle hochgeladenen Fotos und Dokumente,
 - `info.txt` – Datum, Programmversion und letzte Datenbank-Änderung.
 
-Die ZIP-Datei bitte an einem sicheren Ort außerhalb des Webspace aufbewahren. Ist die letzte Sicherung älter als 30 Tage, erinnert die Anwendung die Administratoren daran.
+Die ZIP-Datei bitte an einem sicheren Ort außerhalb des Webspace aufbewahren. Ist die letzte Sicherung älter als 30 Tage, erinnert die Anwendung die Administratoren daran. Sicherungen enthalten alle Personendaten, auch von inzwischen gelöschten Personen: **Sicherungen nach 12 Monaten vernichten.**
 
 **Wiederherstellung:**
 
@@ -155,6 +157,27 @@ Die ZIP-Datei bitte an einem sicheren Ort außerhalb des Webspace aufbewahren. I
 5. Die Anwendung aufrufen und wie gewohnt anmelden.
 
 Eine Sicherung des Echtbetriebs **nie in die Testinstanz** einspielen, solange dort OneDrive mit dem Vereinskonto verbunden ist (siehe „Testumgebung“: sonst können echte Vereinsdateien gelöscht werden). Ist es doch geschehen, in der Testinstanz sofort **„Trennen“** klicken und vor dem nächsten Verbinden einen eigenen Testordner wählen.
+
+## Person nach DSGVO löschen
+
+Verlangt ein Mitglied die Löschung seiner Daten, öffnet ein **Administrator** die Person unter **Personen → Bearbeiten** und wählt **„Person endgültig löschen (DSGVO)“**. Die Vorschau zeigt, was passiert:
+
+- Die Person (Name, E-Mail, Telefon, Notiz) und ihr Benutzerkonto werden gelöscht, ebenso ihre Anmeldeversuche.
+- **Eigene Fahrzeuge** der Person werden samt Fotos und Dokumenten (Webspace und OneDrive), Decodern, Funktionstasten und CVs mitgelöscht. Fahrzeuge, die in der Vorschau mit **„an den Verein übergeben“** angehakt werden, bleiben erhalten; Eigentümer wird der Verein.
+- Bezüge in Vereinsdaten (z. B. „angelegt von“, „hochgeladen von“) werden entfernt und als „ehemaliges Mitglied“ angezeigt.
+- Im Änderungsprotokoll verschwinden die Einträge zur Person und zu ihren Zugängen; in allen übrigen Einträgen werden Name, E-Mail und Telefon (auch frühere Werte) durch „ehemaliges Mitglied“ ersetzt. Übrig bleibt genau ein Nachweis „Person Nr. N nach DSGVO gelöscht“ mit dem ausführenden Administrator.
+
+Zur Bestätigung den **Nachnamen** eingeben. Der Datenbankteil läuft ganz oder gar nicht; erst danach werden die Dateien vom Webspace entfernt und die OneDrive-Löschungen angestoßen. Meldet die Seite „Bitte erneut versuchen“, wurde nichts gelöscht. Die eigene Person und den letzten aktiven Administrator kann man so nicht löschen.
+
+**Von Hand prüfen** (die Löschung kann das nicht):
+
+- Freitexte wie Notizen, Decoder- und CV-Felder und Dateititel werden nicht durchsucht.
+- An den Verein übergebene Fahrzeuge behalten alle Dokumente. **Rechnungen** mit Name oder Adresse vorher löschen.
+- Telefonnummern werden nur in der gespeicherten Schreibweise ersetzt.
+- Läuft die OneDrive-Verbindung über das persönliche Microsoft-Konto der Person, unter **Verwaltung → OneDrive** mit dem Vereinskonto neu verbinden.
+- **Ältere Datensicherungen** enthalten die Person weiterhin. Deshalb Sicherungen nach **12 Monaten vernichten**.
+
+Die bisherige einfache Löschung („Löschen“ in der Personenliste) bleibt für Personen ohne Zugang und ohne Fahrzeuge bestehen.
 
 ## OneDrive anbinden
 

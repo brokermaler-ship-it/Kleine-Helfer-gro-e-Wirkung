@@ -31,6 +31,11 @@ $feld = function (string $name, string $label, string $typ = 'text', bool $pflic
             <button type="submit" class="btn btn-primary">Speichern</button>
             <a class="btn btn-link" href="<?= e(url('/personen')) ?>">Abbrechen</a>
         </form>
+        <?php if ($person !== null && $darf(\Emc\Auth\Berechtigung::PERSON_DSGVO_LOESCHEN)): ?>
+            <div class="mt-4">
+                <a class="btn btn-outline-danger" href="<?= e(url('/personen/' . $person['id'] . '/dsgvo')) ?>">Person endgültig löschen (DSGVO)</a>
+            </div>
+        <?php endif; ?>
         <?php if ($person !== null): ?>
             <?php include dirname(__DIR__) . '/partials/verlauf.php'; ?>
         <?php endif; ?>
