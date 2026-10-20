@@ -2,7 +2,7 @@
 
 Ergänzung zur Hauptspezifikation `2026-10-18-emc78-fahrzeug-anlagen-verwaltung-design.md` und zur Stufe-2-Ergänzung `2026-10-20-stufe-2-wartung-reparatur-design.md`. Umsetzung als **Teil 2e** nach 2a–2d.
 
-Stand: 20.10.2026 · abgestimmt mit dem Vorstand im Gespräch.
+Stand: 20.10.2026 · abgestimmt und freigegeben vom stellvertretenden Vorstand (in Abstimmung mit dem Vorsitzenden).
 
 ## 1. Ziel und Erfolgskriterien
 
@@ -72,7 +72,7 @@ Erster Bereich der App ohne Anmeldung, unter `<oeffentliche_url>/boerse` (Link v
 - **Sammlung anbieten:** Name, Kontakt, Beschreibung, bis zu 5 Fotos (Bilder nach derselben Prüfung wie intern, Metadaten wie Aufnahmeort werden entfernt), Auswahl „verkaufen an den Verein“ oder „spenden“.
 - **Schutz:** CSRF-Token, unsichtbares Fangfeld, Mindestausfüllzeit 3 s, höchstens 5 Anfragen je Stunde und IP-Adresse (IP nur gehasht und nur für diese Begrenzung, nach 24 h gelöscht), Größenbegrenzung der Fotos wie `upload_max_mb`.
 - **Datenschutz:** Pflicht-Häkchen zur Einwilligung mit Link auf die Datenschutzerklärung (Konfigurationsschlüssel `datenschutz_url`); ohne gesetzte `datenschutz_url` ist der öffentliche Bereich **abgeschaltet**. Anfragen samt Fotos werden **12 Monate** nach Eingang automatisch gelöscht (bei Seitenaufrufen bzw. Cronjob), einzeln jederzeit von Hand.
-- **Abschaltbar:** Konfigurationsschlüssel `boerse_oeffentlich` (Standard `false`), damit der Bereich erst nach Freigabe durch den Vorstand online geht. Die Testinstanz zeigt den Bereich nur mit deutlichem Testhinweis.
+- **Abschaltbar:** Konfigurationsschlüssel `boerse_oeffentlich` (Standard `false`); der Bereich geht online, sobald der Vorstand ihn in der Konfiguration einschaltet (Entscheidung liegt beim Vorstand, keine weitere Freigabe nötig). Die Testinstanz zeigt den Bereich nur mit deutlichem Testhinweis.
 
 **Eingang in der App:** Anfragen erscheinen beim Börsenwart als Hinweis „N neue Börsenanfragen“ (wie Defektmeldungen); Status `offen → in_bearbeitung → erledigt`; Antwort per E-Mail aus dem eigenen Postfach über einen `mailto:`-Link mit vorbereitetem Betreff. Aus einer Anfrage „Sammlung anbieten“ kann der Börsenwart nach Annahme direkt einen Magazin-Eingang anlegen (Herkunft und Fotos übernommen).
 
