@@ -38,7 +38,7 @@ $konto = $vorschau['benutzer'];
                                 <?php if ($fahrzeuge === []): ?>
                                     keine
                                 <?php else: ?>
-                                    <strong>mitgelöscht</strong> samt Fotos und Dokumenten (Webspace und OneDrive), Decoder, Funktionen und CVs –
+                                    <strong>mitgelöscht</strong> samt Fotos und Dokumenten (Webspace und OneDrive), Decodern, Funktionstasten und CVs –
                                     außer den angehakten, die an den Verein übergeben werden:
                                     <ul class="list-unstyled mt-2 mb-0">
                                         <?php foreach ($fahrzeuge as $fz): ?>
@@ -80,7 +80,8 @@ $konto = $vorschau['benutzer'];
             <div class="alert alert-info" role="note">
                 <h2 class="h6">Bitte beachten – das prüft die Löschung nicht</h2>
                 <ul class="mb-0">
-                    <li>Freitexte (Notizen, Decoder- und CV-Felder, Dateititel) werden nicht durchsucht. Bitte von Hand prüfen.</li>
+                    <li>Freitexte in den Daten selbst (Notizen an Fahrzeugen, Decoder- und CV-Felder, Dateititel) werden nicht durchsucht. Bitte von Hand prüfen.</li>
+                    <li>Eine E-Mail-Adresse, die auch eine andere Person nutzt (z. B. eine Familienadresse), bleibt samt deren Anmeldeversuchen und Fundstellen im Protokoll erhalten.</li>
                     <li>An den Verein übergebene Fahrzeuge behalten alle Dokumente. Rechnungen mit Name oder Adresse bitte vorher löschen.</li>
                     <li>Telefonnummern werden nur in der gespeicherten Schreibweise ersetzt.</li>
                     <li>Ältere Datensicherungen enthalten die Person weiterhin. Sicherungen nach 12 Monaten vernichten (siehe README).</li>

@@ -17,6 +17,7 @@ final class PersonController
 {
     private const FELDER = ['vorname', 'nachname', 'email', 'telefon', 'notiz', 'aktiv'];
     public const DSGVO_BESTAETIGUNG = 'Bitte den Nachnamen zur Bestätigung eingeben.';
+    public const DSGVO_AUSWAHL = 'Ungültige Fahrzeugauswahl.';
     public const DSGVO_ERNEUT = 'Die Löschung konnte gerade nicht ausgeführt werden. Bitte erneut versuchen.';
 
     /** @param \Closure(): DsgvoLoeschung $dsgvo erst bei Bedarf gebaut (braucht Dateiablage und OneDrive) */
@@ -109,20 +110,31 @@ final class PersonController
     public function dsgvoLoeschen(Request $r, array $p): Response
     {
         $person = $this->lade($p);
+        // Ungültige Auswahl nie still verwerfen: sonst würde ein zu übergebendes Fahrzeug gelöscht.
         $roh = $r->post('uebergeben', []);
         $uebergeben = [];
+        $gueltig = is_array($roh);
         foreach (is_array($roh) ? $roh : [] as $w) {
-            if (is_string($w) && ctype_digit($w)) {
-                $uebergeben[] = (int) $w;
+            if (!is_string($w) || !ctype_digit($w) || strlen($w) > 18) {
+                $gueltig = false;
+                break;
             }
+            $uebergeben[] = (int) $w;
         }
-        $eingabe = $r->text('nachname');
-        if (mb_strtolower(trim($eingabe)) !== mb_strtolower(trim((string) $person['nachname'])) || trim($eingabe) === '') {
+        if (!$gueltig) {
+            return $this->dsgvoSeite($person, [], self::DSGVO_AUSWAHL, 422);
+        }
+        $eingabe = self::normiere($r->text('nachname'));
+        if ($eingabe === '' || $eingabe !== self::normiere((string) $person['nachname'])) {
             return $this->dsgvoSeite($person, $uebergeben, self::DSGVO_BESTAETIGUNG, 422);
         }
         try {
             ($this->dsgvo)()->loesche((int) $person['id'], $uebergeben, (int) $this->auth->benutzer()?->id);
         } catch (DomainFehler $e) {
+            if ($this->personen->finde((int) $person['id']) === null) {
+                $this->session->meldung('warnung', 'Die Person wurde inzwischen bereits gelöscht.');
+                return Response::redirect(url('/personen'));
+            }
             return $this->dsgvoSeite($person, $uebergeben, $e->getMessage(), 422);
         } catch (\PDOException $e) {
             if (!self::istSperrkonflikt($e)) {
@@ -133,6 +145,19 @@ final class PersonController
         }
         $this->session->meldung('erfolg', 'Die Person wurde nach DSGVO gelöscht.');
         return Response::redirect(url('/personen'));
+    }
+
+    /**
+     * Für den Nachnamen-Vergleich: Leerzeichen am Rand (auch geschützte) weg, NFC (falls intl vorhanden),
+     * Groß-/Kleinschreibung per Case-Folding (damit „STRAUSS“ = „Strauß“).
+     */
+    private static function normiere(string $s): string
+    {
+        $s = (string) preg_replace('/^[\s\x{00A0}]+|[\s\x{00A0}]+$/u', '', $s);
+        if (class_exists(\Normalizer::class)) {
+            $s = (string) \Normalizer::normalize($s, \Normalizer::FORM_C);
+        }
+        return mb_convert_case($s, MB_CASE_FOLD, 'UTF-8');
     }
 
     /** SQLSTATE 40001 (Serialisierung/Deadlock) bzw. MySQL/MariaDB-Fehler 1213 (Deadlock) und 1205 (Sperr-Timeout). */

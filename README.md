@@ -162,16 +162,16 @@ Eine Sicherung des Echtbetriebs **nie in die Testinstanz** einspielen, solange d
 
 Verlangt ein Mitglied die Löschung seiner Daten, öffnet ein **Administrator** die Person unter **Personen → Bearbeiten** und wählt **„Person endgültig löschen (DSGVO)“**. Die Vorschau zeigt, was passiert:
 
-- Die Person (Name, E-Mail, Telefon, Notiz) und ihr Benutzerkonto werden gelöscht, ebenso ihre Anmeldeversuche.
+- Die Person (Name, E-Mail, Telefon, Notiz) und ihr Benutzerkonto werden gelöscht, ebenso ihre Anmeldeversuche (außer bei einer E-Mail-Adresse, die auch eine andere Person nutzt).
 - **Eigene Fahrzeuge** der Person werden samt Fotos und Dokumenten (Webspace und OneDrive), Decodern, Funktionstasten und CVs mitgelöscht. Fahrzeuge, die in der Vorschau mit **„an den Verein übergeben“** angehakt werden, bleiben erhalten; Eigentümer wird der Verein.
 - Bezüge in Vereinsdaten (z. B. „angelegt von“, „hochgeladen von“) werden entfernt und als „ehemaliges Mitglied“ angezeigt.
-- Im Änderungsprotokoll verschwinden die Einträge zur Person und zu ihren Zugängen; in allen übrigen Einträgen werden Name, E-Mail und Telefon (auch frühere Werte) durch „ehemaliges Mitglied“ ersetzt. Übrig bleibt genau ein Nachweis „Person Nr. N nach DSGVO gelöscht“ mit dem ausführenden Administrator.
+- Im Änderungsprotokoll verschwinden die Einträge zur Person und zu ihren Zugängen; in allen übrigen Einträgen werden Name, E-Mail und Telefon (auch frühere Werte) durch „ehemaliges Mitglied“ ersetzt (außer einer E-Mail-Adresse, die auch eine andere Person nutzt, z. B. eine Familienadresse). Übrig bleibt genau ein Nachweis „Person Nr. N nach DSGVO gelöscht“ mit dem ausführenden Administrator.
 
 Zur Bestätigung den **Nachnamen** eingeben. Der Datenbankteil läuft ganz oder gar nicht; erst danach werden die Dateien vom Webspace entfernt und die OneDrive-Löschungen angestoßen. Meldet die Seite „Bitte erneut versuchen“, wurde nichts gelöscht. Die eigene Person und den letzten aktiven Administrator kann man so nicht löschen.
 
 **Von Hand prüfen** (die Löschung kann das nicht):
 
-- Freitexte wie Notizen, Decoder- und CV-Felder und Dateititel werden nicht durchsucht.
+- Freitexte in den Daten selbst (Notizen an Fahrzeugen, Decoder- und CV-Felder, Dateititel) werden nicht durchsucht.
 - An den Verein übergebene Fahrzeuge behalten alle Dokumente. **Rechnungen** mit Name oder Adresse vorher löschen.
 - Telefonnummern werden nur in der gespeicherten Schreibweise ersetzt.
 - Läuft die OneDrive-Verbindung über das persönliche Microsoft-Konto der Person, unter **Verwaltung → OneDrive** mit dem Vereinskonto neu verbinden.

@@ -7,7 +7,13 @@ namespace Emc\Tests\Integration\Personen;
 use Emc\Core\App;
 use Emc\Core\Request;
 use Emc\Core\Response;
+use Emc\Core\Container;
 use Emc\Core\Session;
+use Emc\Dateien\DokumentRepository;
+use Emc\Fahrzeuge\FahrzeugRepository;
+use Emc\OneDrive\Auftraege;
+use Emc\Personen\DsgvoLoeschung;
+use Emc\Protokoll\Aenderungsprotokoll;
 use Emc\Tests\Integration\Dateien\UploadServiceTest;
 use Emc\Tests\Integration\DbTestCase;
 
@@ -193,5 +199,59 @@ final class DsgvoHttpTest extends DbTestCase
         $b = $this->get("/personen/{$this->person}/bearbeiten");
         $this->assertSame(200, $b->status);
         $this->assertStringNotContainsString('Person endgültig löschen (DSGVO)', $b->body);
+    }
+
+    public function test_ungueltige_fahrzeugauswahl_bricht_ab(): void
+    {
+        $this->als($this->admin);
+        foreach ([['abc'], [(string) $this->fz1, '1x'], [[(string) $this->fz1]], (string) $this->fz1, ['-1'], ['']] as $wert) {
+            $a = $this->post("/personen/{$this->person}/dsgvo", ['nachname' => 'Beispiel', 'uebergeben' => $wert]);
+            $this->assertSame(422, $a->status, json_encode($wert));
+            $this->assertStringContainsString('Ungültige Fahrzeugauswahl.', $a->body);
+        }
+        $this->assertTrue($this->personDa());
+        $this->assertSame(2, (int) $this->pdo->query('SELECT COUNT(*) FROM fahrzeug')->fetchColumn());
+    }
+
+    public function test_bestaetigung_mit_eszett_nbsp_und_nfd(): void
+    {
+        $this->als($this->admin);
+        foreach (["STRAUSS", "\u{00A0}strauß\u{00A0}", "Strau\u{00DF} "] as $eingabe) {
+            $this->pdo->prepare("INSERT INTO person (vorname, nachname) VALUES ('Eva', 'Strauß')")->execute();
+            $id = (int) $this->pdo->lastInsertId();
+            $a = $this->post("/personen/$id/dsgvo", ['nachname' => $eingabe]);
+            $this->assertSame(303, $a->status, $eingabe);
+        }
+        if (class_exists(\Normalizer::class)) {
+            $this->pdo->prepare("INSERT INTO person (vorname, nachname) VALUES ('Eva', 'Müller')")->execute();
+            $id = (int) $this->pdo->lastInsertId();
+            $this->assertSame(303, $this->post("/personen/$id/dsgvo", ['nachname' => "Mu\u{0308}ller"])->status);
+        }
+        $this->assertSame(0, (int) $this->pdo->query("SELECT COUNT(*) FROM person WHERE vorname = 'Eva'")->fetchColumn());
+    }
+
+    public function test_inzwischen_geloeschte_person_leitet_um(): void
+    {
+        $this->pdo->prepare("INSERT INTO person (vorname, nachname) VALUES ('Eva', 'Weg')")->execute();
+        $id = (int) $this->pdo->lastInsertId();
+        $this->als($this->admin);
+        $app = $this->app();
+        // Ein anderer löscht die Person, nachdem der Controller sie geladen hat (der Dienst wird erst danach gebaut).
+        $app->container()->set(DsgvoLoeschung::class, function (Container $c) use ($id): DsgvoLoeschung {
+            $this->pdo->prepare('DELETE FROM person WHERE id = ?')->execute([$id]);
+            return new DsgvoLoeschung($c->get('pdo'), $c->get(DokumentRepository::class), $c->get(Aenderungsprotokoll::class),
+                $c->get(FahrzeugRepository::class), $c->get(Auftraege::class), null);
+        });
+        $a = $app->handle(new Request('POST', "/personen/$id/dsgvo", [], ['nachname' => 'Weg', '_csrf' => str_repeat('a', 64)]));
+
+        $this->assertSame(303, $a->status);
+        $this->assertSame('/personen', $a->headers['Location']);
+        $this->assertStringContainsString('Die Person wurde inzwischen bereits gelöscht.', $this->get('/personen')->body);
+    }
+
+    public function test_hinweis_auf_geteilte_mail(): void
+    {
+        $this->als($this->admin);
+        $this->assertStringContainsString('die auch eine andere Person nutzt', $this->get("/personen/{$this->person}/dsgvo")->body);
     }
 }
