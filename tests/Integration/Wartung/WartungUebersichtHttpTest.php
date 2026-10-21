@@ -104,13 +104,49 @@ final class WartungUebersichtHttpTest extends DbTestCase
         self::assertStringContainsString('Keine Fälligkeiten', $r->body);
     }
 
+    public function test_uebersicht_zaehlt_und_filtert_nach_stand(): void
+    {
+        $r = $this->get('/wartung');
+        self::assertStringContainsString('1 überfällig', $r->body);
+        self::assertStringContainsString('1 bald fällig', $r->body);
+        self::assertStringContainsString('6 noch nie erfasst', $r->body);
+        self::assertStringContainsString('0 in Ordnung', $r->body);
+
+        $r = $this->get('/wartung', ['stand' => 'nie']);
+        self::assertSame(200, $r->status);
+        self::assertMatchesRegularExpression('#<option value="nie" selected>#', $r->body);
+        self::assertStringNotContainsString('Kupplungen prüfen', $r->body);
+        self::assertStringNotContainsString('Gleise reinigen', $r->body);
+        self::assertStringContainsString('Weichen und Antriebe prüfen', $r->body);
+        self::assertSame(6, substr_count($r->body, '>noch nie erfasst</span>'));
+        // Die Zählung bleibt die ohne Stand-Filter.
+        self::assertStringContainsString('1 überfällig', $r->body);
+
+        $r = $this->get('/wartung', ['stand' => 'rot']);
+        self::assertStringContainsString('Kupplungen prüfen', $r->body);
+        self::assertStringNotContainsString('Weichen und Antriebe prüfen', $r->body);
+        $r = $this->get('/wartung', ['stand' => 'quatsch']);
+        self::assertStringContainsString('Weichen und Antriebe prüfen', $r->body);
+    }
+
+    public function test_alle_arten_abgeschaltet(): void
+    {
+        $this->pdo->prepare("INSERT INTO wartungsplan_ausnahme (objekt_typ, objekt_id, wartungsart_id, aus) SELECT 'anlage', ?, id, 1 FROM wartungsart WHERE gilt_fuer = 'anlage'")
+            ->execute([$this->anlage]);
+        $r = $this->get('/anlagen/' . $this->anlage);
+        self::assertStringContainsString('Alle Wartungsarten sind für dieses Objekt abgeschaltet.', $r->body);
+        self::assertStringNotContainsString('Für dieses Objekt sind keine Wartungsarten vorgesehen.', $r->body);
+    }
+
     public function test_startseite_mit_kachel(): void
     {
         $r = $this->get('/');
         self::assertSame(200, $r->status);
         self::assertStringContainsString('Wartung', $r->body);
         self::assertStringContainsString('1 überfällig', $r->body);
-        self::assertMatchesRegularExpression('#\d+ bald fällig#', $r->body);
+        // „bald fällig“ und „noch nie erfasst“ getrennt gezählt.
+        self::assertStringContainsString('1 bald fällig', $r->body);
+        self::assertStringContainsString('6 noch nie erfasst', $r->body);
         self::assertStringContainsString('Alle Fälligkeiten', $r->body);
         self::assertStringContainsString('href="/fahrzeuge/' . $this->lok . '"', $r->body);
         self::assertStringContainsString('href="/fahrzeuge"', $r->body);

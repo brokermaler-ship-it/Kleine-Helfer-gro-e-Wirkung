@@ -55,6 +55,30 @@ final class AnlageRepositoryTest extends DbTestCase
         $this->assertSame('A10', $this->repo->finde($id)['code']);
     }
 
+    /**
+     * In der Transaktion eines Aufrufers hilft ein neuer Versuch nicht (gleicher Schnappschuss, gleiche Nummer):
+     * der Fehler geht sofort an den Aufrufer, dessen Transaktion bleibt offen.
+     */
+    public function test_doppelte_nummer_in_fremder_transaktion_sofort_weiter(): void
+    {
+        $zweite = self::verbindung();
+        $this->pdo->beginTransaction();
+        $this->pdo->query('SELECT COUNT(*) FROM anlage')->fetchColumn(); // Schnappschuss
+        $zweite->prepare("INSERT INTO anlage (nummer, name, spurweite_id) VALUES (1, 'Gleichzeitig', ?)")->execute([$this->h0]);
+        $zaehle = fn(): int => (int) $this->pdo->query("SHOW SESSION STATUS LIKE 'Questions'")->fetch(\PDO::FETCH_NUM)[1];
+        $vorher = $zaehle();
+        try {
+            $this->repo->anlegen($this->daten());
+            $this->fail('Doppelte Nummer erwartet');
+        } catch (\PDOException $e) {
+            $this->assertSame('23000', (string) $e->getCode());
+        }
+        $abfragen = $zaehle() - $vorher - 1; // ohne die Zählabfrage selbst
+        $this->assertTrue($this->pdo->inTransaction());
+        $this->pdo->rollBack();
+        $this->assertLessThanOrEqual(3, $abfragen, 'nur ein Versuch: MAX(nummer), Zähler, INSERT');
+    }
+
     public function test_stand_pruefung(): void
     {
         $id = $this->repo->anlegen($this->daten());

@@ -56,7 +56,7 @@ final class WartungsartValidator
         $roh = self::text($eingabe['sortierung'] ?? null);
         if ($roh !== null) {
             if (preg_match('/^-?\d{1,6}$/', $roh) !== 1 || abs((int) $roh) > self::SORTIERUNG_MAX) {
-                $f['sortierung'] = 'Bitte eine ganze Zahl angeben.';
+                $f['sortierung'] = 'Bitte eine ganze Zahl von -' . self::SORTIERUNG_MAX . ' bis ' . self::SORTIERUNG_MAX . ' angeben.';
             } else {
                 $sortierung = (int) $roh;
             }

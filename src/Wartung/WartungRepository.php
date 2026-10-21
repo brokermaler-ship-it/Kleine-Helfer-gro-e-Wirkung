@@ -7,6 +7,9 @@ namespace Emc\Wartung;
 /** Wartungsprotokoll: eingetragene Wartungen je Objekt (Fahrzeug oder Anlage) mit ihren Wartungsarten. */
 final class WartungRepository
 {
+    /** SQL-Ausdruck (Alias f für fahrzeug) für dieselbe Regel wie fuehrtStunden – für Listen in einer Abfrage. */
+    public const FUEHRT_STUNDEN_SQL = "(f.betriebsstunden > 0 OR EXISTS (SELECT 1 FROM wartung ws WHERE ws.objekt_typ = 'fahrzeug' AND ws.objekt_id = f.id AND ws.betriebsstunden IS NOT NULL))";
+
     public function __construct(private \PDO $pdo)
     {
     }
@@ -117,27 +120,53 @@ final class WartungRepository
     /**
      * Letzte Wartung je Objekt und Wartungsart: maßgeblich ist das jüngste Datum (bei gleichem Datum die höchste ID),
      * nicht der höchste Stundenstand – ein nachgetragener älterer Eintrag verdrängt die jüngere Wartung nicht.
+     * Der Stundenstand kommt aus der jüngsten Wartung dieser Art **mit** Stundenstand (stundenstand_bezug nicht NULL),
+     * damit ein Nachtrag ohne Stand den Stundenbezug nicht verliert. Eine Abfrage (zwei Fensterfunktionen).
      *
      * @return array<string, array{datum:string, stundenstand:?float}> Schlüssel "<typ>:<id>:<artId>"
      */
     public function letzteJeArt(string $objektTyp, ?int $objektId = null): array
     {
-        $sql = 'SELECT objekt_typ, objekt_id, wartungsart_id, datum, stundenstand_bezug FROM ('
+        $teil = 'PARTITION BY w.objekt_typ, w.objekt_id, wa.wartungsart_id';
+        $sql = 'SELECT objekt_typ, objekt_id, wartungsart_id, datum, stundenstand_bezug, rang, rang_stand FROM ('
             . 'SELECT w.objekt_typ, w.objekt_id, wa.wartungsart_id, w.datum, w.stundenstand_bezug, '
-            . 'ROW_NUMBER() OVER (PARTITION BY w.objekt_typ, w.objekt_id, wa.wartungsart_id ORDER BY w.datum DESC, w.id DESC) AS rang '
+            . "ROW_NUMBER() OVER ($teil ORDER BY w.datum DESC, w.id DESC) AS rang, "
+            . "ROW_NUMBER() OVER ($teil, w.stundenstand_bezug IS NULL ORDER BY w.datum DESC, w.id DESC) AS rang_stand "
             . 'FROM wartung w JOIN wartung_art wa ON wa.wartung_id = w.id '
             . 'WHERE w.objekt_typ = ?' . ($objektId === null ? '' : ' AND w.objekt_id = ?')
-            . ') t WHERE rang = 1';
+            . ') t WHERE rang = 1 OR (rang_stand = 1 AND stundenstand_bezug IS NOT NULL)';
         $st = $this->pdo->prepare($sql);
         $st->execute($objektId === null ? [$objektTyp] : [$objektTyp, $objektId]);
-        $ergebnis = [];
+        $datum = [];
+        $stand = [];
         foreach ($st->fetchAll(\PDO::FETCH_ASSOC) as $z) {
-            $ergebnis[$z['objekt_typ'] . ':' . (int) $z['objekt_id'] . ':' . (int) $z['wartungsart_id']] = [
-                'datum' => (string) $z['datum'],
-                'stundenstand' => $z['stundenstand_bezug'] === null ? null : (float) $z['stundenstand_bezug'],
-            ];
+            $k = $z['objekt_typ'] . ':' . (int) $z['objekt_id'] . ':' . (int) $z['wartungsart_id'];
+            if ((int) $z['rang'] === 1) {
+                $datum[$k] = (string) $z['datum'];
+            }
+            if ($z['stundenstand_bezug'] !== null && (int) $z['rang_stand'] === 1) {
+                $stand[$k] = (float) $z['stundenstand_bezug'];
+            }
+        }
+        $ergebnis = [];
+        foreach ($datum as $k => $d) {
+            $ergebnis[$k] = ['datum' => $d, 'stundenstand' => $stand[$k] ?? null];
         }
         return $ergebnis;
+    }
+
+    /**
+     * Ob das Fahrzeug Betriebsstunden führt: Stand über 0 oder mindestens eine Wartung mit eingegebenem Stand (auch 0).
+     * Sonst (Stand 0, nie eingegeben – z. B. Wagen) zählt bei Fälligkeiten nur die Zeit.
+     */
+    public function fuehrtStunden(int $fahrzeugId, float $aktuell): bool
+    {
+        if ($aktuell > 0) {
+            return true;
+        }
+        $st = $this->pdo->prepare("SELECT 1 FROM wartung WHERE objekt_typ = 'fahrzeug' AND objekt_id = ? AND betriebsstunden IS NOT NULL LIMIT 1");
+        $st->execute([$fahrzeugId]);
+        return $st->fetchColumn() !== false;
     }
 
     /**

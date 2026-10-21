@@ -31,6 +31,7 @@ final class Faelligkeitsrechner
         $rest = null;
         $faelligAm = null;
         $faelligBei = null;
+        $stundenstandFehlt = false;
 
         if ($monate !== null && $monate > 0) {
             $faelligAm = self::plusMonate($letzteAm, $monate);
@@ -46,9 +47,15 @@ final class Faelligkeitsrechner
             $rest = self::tage($heute, $faelligAm) / $intervallTage;
         }
 
-        if ($stunden !== null && $stunden > 0 && $letzteStunden !== null) {
-            $faelligBei = round($letzteStunden + $stunden, 1);
-            if ($aktuelleStunden !== null) {
+        if ($stunden !== null && $stunden > 0 && $aktuelleStunden !== null) {
+            if ($letzteStunden === null) {
+                // Das Fahrzeug führt Betriebsstunden, aber keine Wartung dieser Art hat einen Stundenstand:
+                // dieses Kriterium ist wie „noch nie erfasst“ (Gelb, Rest 0.0) – ein Rot aus der Zeit bleibt Rot.
+                $stundenstandFehlt = $ampel === Ampel::Gruen;
+                $ampel = self::schlechter($ampel, Ampel::Gelb);
+                $rest = min($rest ?? PHP_FLOAT_MAX, 0.0);
+            } else {
+                $faelligBei = round($letzteStunden + $stunden, 1);
                 $differenz = round($faelligBei - $aktuelleStunden, 1);
                 if ($differenz < 0) {
                     $std = Ampel::Rot;
@@ -60,9 +67,16 @@ final class Faelligkeitsrechner
                 $ampel = self::schlechter($ampel, $std);
                 $rest = min($rest ?? PHP_FLOAT_MAX, $differenz / $stunden);
             }
+        } elseif ($stunden !== null && $stunden > 0 && $letzteStunden !== null) {
+            // Ohne aktuellen Stand nur zur Anzeige.
+            $faelligBei = round($letzteStunden + $stunden, 1);
         }
 
-        return new Faelligkeit($ampel, false, $faelligAm, $faelligBei, $rest ?? 1.0);
+        if ($rest === null) {
+            // Kein Kriterium berechenbar (z. B. nur Stundenintervall, Fahrzeug ohne Betriebsstunden): wie „noch nie erfasst“.
+            return new Faelligkeit(Ampel::Gelb, true, $faelligAm, $faelligBei, 0.0);
+        }
+        return new Faelligkeit($ampel, false, $faelligAm, $faelligBei, $rest, $stundenstandFehlt);
     }
 
     /** Addiert Monate; der Tag wird auf das Monatsende begrenzt (31.08. + 6 Monate → 28.02. bzw. 29.02.). */

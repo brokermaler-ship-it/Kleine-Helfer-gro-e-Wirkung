@@ -162,4 +162,42 @@ final class VorMigrationTest extends DbTestCase
         self::assertSame(303, $uebersicht->status);
         self::assertSame('/admin/update', $uebersicht->headers['Location']);
     }
+
+    /** Absenden von Wartung und Wartungsplan vor Migration 013 führt Administratoren zum Update, nicht zu einem Fehler 500. */
+    public function test_wartung_absenden_vor_migration_013(): void
+    {
+        $id = $this->legeBenutzerAn('admin@verein.de', 'geheim-passwort-1', 'admin');
+        [$fz] = $this->dokumentMitFahrzeug();
+        $this->pdo->exec('DROP TABLE wartung_art');
+        $this->pdo->exec('DROP TABLE wartung');
+        $this->pdo->exec('DROP TABLE wartungsplan_ausnahme');
+        $sitzung = ['_csrf' => str_repeat('a', 64)];
+        $this->sitzungAnmelden($sitzung, $id);
+        $post = fn(string $pfad, array $daten = []) => \Emc\Core\App::erzeuge(self::testConfig(), new \Emc\Core\Session($sitzung))
+            ->handle(new \Emc\Core\Request('POST', $pfad, [], $daten + ['_csrf' => str_repeat('a', 64)]));
+        // Tabellen fehlen, obwohl die Version eingetragen ist (z. B. abgebrochenes Update): der Controller fängt es ab.
+        foreach (["/fahrzeuge/$fz/wartungen", "/fahrzeuge/$fz/wartungsplan", '/wartungen/1/loeschen'] as $pfad) {
+            $r = $post($pfad, ['datum' => date('Y-m-d'), 'arten' => ['1']]);
+            self::assertSame(303, $r->status, $pfad);
+            self::assertSame('/admin/update', $r->headers['Location'], $pfad);
+        }
+        // Steht die Migration aus, leitet schon App weiter.
+        $this->pdo->exec("DELETE FROM schema_migration WHERE version >= '013'");
+        $r = $post("/fahrzeuge/$fz/wartungen", ['datum' => date('Y-m-d')]);
+        self::assertSame(303, $r->status);
+        self::assertSame('/admin/update', $r->headers['Location']);
+    }
+
+    /** App merkt sich die ausstehenden Migrationen nur für eine Anfrage: nach dem Update gilt sofort der neue Stand. */
+    public function test_ausstehende_migrationen_je_anfrage_neu_ermittelt(): void
+    {
+        $id = $this->legeBenutzerAn('admin@verein.de', 'geheim-passwort-1', 'admin');
+        $this->pdo->exec("DELETE FROM schema_migration WHERE version = '013_wartung'");
+        $sitzung = ['_csrf' => str_repeat('a', 64)];
+        $this->sitzungAnmelden($sitzung, $id);
+        $app = \Emc\Core\App::erzeuge(self::testConfig(), new \Emc\Core\Session($sitzung));
+        self::assertSame(303, $app->handle(new \Emc\Core\Request('GET', '/anlagen'))->status);
+        $this->pdo->exec("INSERT INTO schema_migration (version) VALUES ('013_wartung')");
+        self::assertSame(200, $app->handle(new \Emc\Core\Request('GET', '/anlagen'))->status);
+    }
 }

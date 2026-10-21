@@ -2,7 +2,7 @@
 /**
  * Startseite: Kachel „Wartung“ (Stufe 2c ergänzt „Offene Defekte“) und Schnellzugriffe.
  *
- * @var ?array{rot:int, gelb:int, dringendste: list<array<string,mixed>>} $wartung null, solange das Datenbank-Update aussteht
+ * @var ?array{rot:int, gelb:int, nie:int, dringendste: list<array<string,mixed>>} $wartung null, solange das Datenbank-Update aussteht
  */
 use Emc\Wartung\Wartungsplan;
 ?>
@@ -17,6 +17,7 @@ use Emc\Wartung\Wartungsplan;
                 <p class="mb-2">
                     <span class="badge text-bg-danger fs-6"><?= (int) $wartung['rot'] ?> überfällig</span>
                     <span class="badge text-bg-warning fs-6"><?= (int) $wartung['gelb'] ?> bald fällig</span>
+                    <span class="badge text-bg-secondary fs-6"><?= (int) $wartung['nie'] ?> noch nie erfasst</span>
                 </p>
                 <?php if ($wartung['dringendste'] !== []): ?>
                     <ul class="list-unstyled mb-2">

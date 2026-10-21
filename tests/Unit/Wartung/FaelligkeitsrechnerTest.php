@@ -80,11 +80,47 @@ final class FaelligkeitsrechnerTest extends TestCase
         // Ohne aktuellen Stundenstand (Anlage) zählt nur die Zeit.
         $f = Faelligkeitsrechner::berechne(3, 20, self::d('2026-10-01'), 100.0, null, self::d('2026-10-21'));
         self::assertSame(Ampel::Gruen, $f->ampel);
-        // Intervall nur in Stunden, aber kein Stundenstand bei der letzten Wartung: nichts zu prüfen → grün.
+        // Intervall nur in Stunden, Fahrzeug führt Stunden, aber keine Wartung der Art hat einen Stand → gelb „Stundenstand fehlt“.
         $f = Faelligkeitsrechner::berechne(null, 20, self::d('2020-01-01'), null, 500.0, self::d('2026-10-21'));
-        self::assertSame(Ampel::Gruen, $f->ampel);
+        self::assertSame(Ampel::Gelb, $f->ampel);
+        self::assertFalse($f->nochNieErfasst);
+        self::assertTrue($f->stundenstandFehlt);
+        self::assertSame(0.0, $f->rest);
+        self::assertSame('Stundenstand fehlt', $f->text());
         self::assertNull($f->faelligAm);
         self::assertNull($f->faelligBeiStunden);
+    }
+
+    public function test_fehlender_stundenstand_bei_monaten_und_stunden(): void
+    {
+        $heute = self::d('2026-10-21');
+        // Zeit grün, Stundenstand fehlt → gelb mit Rest 0.0.
+        $f = Faelligkeitsrechner::berechne(6, 20, self::d('2026-10-01'), null, 40.0, $heute);
+        self::assertSame(Ampel::Gelb, $f->ampel);
+        self::assertTrue($f->stundenstandFehlt);
+        self::assertSame(0.0, $f->rest);
+        self::assertSame('2027-04-01', $f->faelligAm?->format('Y-m-d'));
+        self::assertSame('Stundenstand fehlt', $f->text());
+        // Zeit rot bleibt rot.
+        $f = Faelligkeitsrechner::berechne(6, 20, self::d('2026-01-01'), null, 40.0, $heute);
+        self::assertSame(Ampel::Rot, $f->ampel);
+        self::assertFalse($f->stundenstandFehlt);
+        self::assertLessThan(0.0, $f->rest);
+        self::assertSame('überfällig', $f->text());
+        // Zeit gelb: Text „bald fällig“.
+        $f = Faelligkeitsrechner::berechne(6, 20, self::d('2026-05-01'), null, 40.0, $heute);
+        self::assertSame(Ampel::Gelb, $f->ampel);
+        self::assertSame('bald fällig', $f->text());
+    }
+
+    public function test_kein_kriterium_berechenbar_ist_noch_nie_erfasst(): void
+    {
+        // Nur Stundenintervall, Fahrzeug ohne Betriebsstunden (aktuell null): nichts berechenbar → gelb „noch nie erfasst“.
+        $f = Faelligkeitsrechner::berechne(null, 20, self::d('2026-10-01'), null, null, self::d('2026-10-21'));
+        self::assertSame(Ampel::Gelb, $f->ampel);
+        self::assertTrue($f->nochNieErfasst);
+        self::assertSame(0.0, $f->rest);
+        self::assertSame('noch nie erfasst', $f->text());
     }
 
     public function test_rest_ordnet_dringlichkeit(): void

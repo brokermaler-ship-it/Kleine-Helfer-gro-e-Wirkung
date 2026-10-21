@@ -14,6 +14,13 @@ abstract class DbTestCase extends TestCase
 {
     protected \PDO $pdo;
 
+    /**
+     * Zeilen der Tabelle wartungsart direkt nach dem Migrieren (Startbestand aller Migrationen).
+     *
+     * @var list<array<string,mixed>>
+     */
+    private static array $wartungsartBestand = [];
+
     public static function verbindung(): \PDO
     {
         return Database::verbinde(
@@ -43,35 +50,41 @@ abstract class DbTestCase extends TestCase
         $pdo = self::verbindung();
         self::alleTabellenLoeschen($pdo);
         (new Migrator($pdo, dirname(__DIR__, 2) . '/migrations'))->ausfuehren();
+        self::$wartungsartBestand = $pdo->query('SELECT * FROM wartungsart ORDER BY id')->fetchAll(\PDO::FETCH_ASSOC);
     }
 
     protected function setUp(): void
     {
         $this->pdo = self::verbindung();
         $this->pdo->exec('SET FOREIGN_KEY_CHECKS=0');
-        foreach (self::tabellen($this->pdo) as $tabelle) {
+        $tabellen = self::tabellen($this->pdo);
+        foreach ($tabellen as $tabelle) {
             if ($tabelle !== 'schema_migration' && $tabelle !== 'spurweite') {
                 $this->pdo->exec('TRUNCATE TABLE `' . $tabelle . '`');
             }
         }
         $this->pdo->exec('SET FOREIGN_KEY_CHECKS=1');
-        self::startbestandWartungsarten($this->pdo);
+        if (in_array('wartungsart', $tabellen, true)) {
+            self::startbestandWartungsarten($this->pdo);
+        }
     }
 
     /**
-     * Stellt den Startbestand der Wartungsarten aus Migration 012 wieder her (die Tabelle wird wie alle anderen geleert,
-     * damit Änderungen eines Tests nicht in den nächsten durchschlagen). Ohne Tabelle (Tests vor Migration 012) nichts.
+     * Stellt den Startbestand der Wartungsarten wieder her, wie er nach dem Migrieren in setUpBeforeClass() war (die
+     * Tabelle wird wie alle anderen geleert, damit Änderungen eines Tests nicht in den nächsten durchschlagen). So folgt
+     * die Testdatenbank jeder Migration, die den Startbestand ändert, ohne die SQL-Dateien selbst auszuwerten.
      */
     protected static function startbestandWartungsarten(\PDO $pdo): void
     {
-        static $einfuegen = null;
-        if ($einfuegen === null) {
-            $sql = (string) file_get_contents(dirname(__DIR__, 2) . '/migrations/012_wartungsart.sql');
-            preg_match('/^INSERT INTO wartungsart .*?;/ms', $sql, $treffer);
-            $einfuegen = $treffer[0] ?? '';
+        if (self::$wartungsartBestand === []) {
+            return;
         }
-        if ($einfuegen !== '' && in_array('wartungsart', self::tabellen($pdo), true)) {
-            $pdo->exec($einfuegen);
+        $spalten = array_keys(self::$wartungsartBestand[0]);
+        $st = $pdo->prepare(
+            'INSERT INTO wartungsart (`' . implode('`, `', $spalten) . '`) VALUES (' . implode(', ', array_fill(0, count($spalten), '?')) . ')'
+        );
+        foreach (self::$wartungsartBestand as $zeile) {
+            $st->execute(array_values($zeile));
         }
     }
 

@@ -69,7 +69,8 @@ final class AnlageRepository
 
     /**
      * Legt die Anlage an und vergibt die nächste Nummer in einer Transaktion (in einer laufenden Transaktion des
-     * Aufrufers ohne eigene). Wurde dieselbe Nummer gleichzeitig vergeben, wird neu gezählt.
+     * Aufrufers ohne eigene). Wurde dieselbe Nummer gleichzeitig vergeben, wird mit eigener Transaktion neu gezählt;
+     * in der Transaktion des Aufrufers geht der Fehler sofort an ihn (er muss seine Transaktion wiederholen).
      *
      * @param array<string,mixed> $d
      */
@@ -97,8 +98,10 @@ final class AnlageRepository
                 if ($eigene && $this->pdo->inTransaction()) {
                     $this->pdo->rollBack();
                 }
-                if ($t instanceof \PDOException && (string) $t->getCode() === '23000' && str_contains($t->getMessage(), 'uq_anlage_nummer')) {
-                    $letzter = $t; // gleichzeitig vergeben: neu versuchen
+                // Gleichzeitig vergeben: nur mit eigener Transaktion neu versuchen. In der Transaktion des Aufrufers
+                // sähe ein neuer Versuch denselben Schnappschuss (REPEATABLE READ) und dieselbe Nummer – also sofort weiter.
+                if ($eigene && $t instanceof \PDOException && (string) $t->getCode() === '23000' && str_contains($t->getMessage(), 'uq_anlage_nummer')) {
+                    $letzter = $t;
                     continue;
                 }
                 throw $t;

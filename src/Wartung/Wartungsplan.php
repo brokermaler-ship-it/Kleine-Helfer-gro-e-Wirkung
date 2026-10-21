@@ -26,7 +26,8 @@ final class Wartungsplan
     /**
      * Fälligkeiten eines Objekts in der Reihenfolge der Wartungsarten.
      *
-     * @param array<string,mixed> $objekt Zeile aus fahrzeug bzw. anlage (id, bei Fahrzeugen gattung, status, betriebsstunden)
+     * @param array<string,mixed> $objekt Zeile aus fahrzeug bzw. anlage (id, bei Fahrzeugen gattung, status, betriebsstunden;
+     *        optional fuehrt_stunden, sonst per WartungRepository::fuehrtStunden ermittelt)
      * @return list<array{art: array<string,mixed>, monate: ?int, stunden: ?int, eigenes_intervall: bool, letzte: ?array{datum:string, stundenstand:?float}, faelligkeit: Faelligkeit}>
      */
     public function fuerObjekt(string $objektTyp, array $objekt, \DateTimeImmutable $heute): array
@@ -38,6 +39,9 @@ final class Wartungsplan
         $arten = $this->arten->passendeFuer($objektTyp, $objektTyp === 'fahrzeug' ? (string) ($objekt['gattung'] ?? '') : null);
         if ($arten === []) {
             return [];
+        }
+        if ($objektTyp === 'fahrzeug' && !isset($objekt['fuehrt_stunden'])) {
+            $objekt['fuehrt_stunden'] = $this->wartungen->fuehrtStunden($id, (float) ($objekt['betriebsstunden'] ?? 0));
         }
         $ausnahmen = $this->ausnahmen->fuerObjekt($objektTyp, $id);
         $letzte = $this->wartungen->letzteJeArt($objektTyp, $id);
@@ -96,30 +100,47 @@ final class Wartungsplan
                 }
             }
         }
+        if ($f->stand !== null) {
+            $ergebnis = array_values(array_filter($ergebnis, fn(array $z): bool => $f->passtStand($z['faelligkeit'])));
+        }
         usort($ergebnis, [self::class, 'vergleiche']);
         return $ergebnis;
     }
 
     /**
-     * Für die Kachel auf der Startseite.
+     * Anzahl je Stand (Faelligkeit::kategorie).
      *
-     * @return array{rot:int, gelb:int, dringendste: list<array<string,mixed>>} dringendste: höchstens fünf Einträge, nur Rot/Gelb
+     * @param list<array{faelligkeit: Faelligkeit}> $zeilen
+     * @return array{rot:int, gelb:int, nie:int, gruen:int}
+     */
+    public static function zaehle(array $zeilen): array
+    {
+        $n = ['rot' => 0, 'gelb' => 0, 'nie' => 0, 'gruen' => 0];
+        foreach ($zeilen as $z) {
+            $n[$z['faelligkeit']->kategorie()]++;
+        }
+        return $n;
+    }
+
+    /**
+     * Für die Kachel auf der Startseite: überfällig, bald fällig und noch nie erfasst getrennt gezählt
+     * (sonst stünde gleich nach der Einrichtung „250 bald fällig“ da).
+     *
+     * @return array{rot:int, gelb:int, nie:int, dringendste: list<array<string,mixed>>} gelb ohne „noch nie erfasst“;
+     *         dringendste: höchstens fünf Einträge, nur Rot/Gelb (auch „noch nie erfasst“, nach den datierten)
      */
     public function zusammenfassung(\DateTimeImmutable $heute): array
     {
-        $rot = 0;
-        $gelb = 0;
+        $zeilen = $this->uebersicht(new WartungFilter(), $heute);
+        $n = self::zaehle($zeilen);
         $dringendste = [];
-        foreach ($this->uebersicht(new WartungFilter(), $heute) as $z) {
-            if ($z['faelligkeit']->ampel === Ampel::Gruen) {
+        foreach ($zeilen as $z) {
+            if ($z['faelligkeit']->ampel === Ampel::Gruen || count($dringendste) >= self::DRINGENDSTE) {
                 break; // sortiert: danach kommt nur noch Grün
             }
-            $z['faelligkeit']->ampel === Ampel::Rot ? $rot++ : $gelb++;
-            if (count($dringendste) < self::DRINGENDSTE) {
-                $dringendste[] = $z;
-            }
+            $dringendste[] = $z;
         }
-        return ['rot' => $rot, 'gelb' => $gelb, 'dringendste' => $dringendste];
+        return ['rot' => $n['rot'], 'gelb' => $n['gelb'], 'nie' => $n['nie'], 'dringendste' => $dringendste];
     }
 
     /** Anzeigename eines Objekts (für Sortierung und Anzeige): Bezeichnung bzw. Name. */
@@ -150,10 +171,14 @@ final class Wartungsplan
         $monate = $eigen ? $ausnahme['intervall_monate'] : $art['intervall_monate'];
         $stunden = $eigen ? $ausnahme['intervall_stunden'] : $art['intervall_stunden'];
         $aktuell = null;
+        $letzteStunden = $letzte['stundenstand'] ?? null;
         if ($objektTyp === 'anlage') {
             $stunden = null; // Anlagen haben keine Betriebsstunden.
+        } elseif ((bool) ($objekt['fuehrt_stunden'] ?? true) && isset($objekt['betriebsstunden'])) {
+            $aktuell = (float) $objekt['betriebsstunden'];
         } else {
-            $aktuell = isset($objekt['betriebsstunden']) ? (float) $objekt['betriebsstunden'] : null;
+            // Fahrzeug ohne Betriebsstunden (Stand 0, nie eingegeben): Stundenkriterium wird nicht geprüft und nicht angezeigt.
+            $letzteStunden = null;
         }
         return [
             'art' => $art,
@@ -165,7 +190,7 @@ final class Wartungsplan
                 $monate,
                 $stunden,
                 $letzte === null ? null : new \DateTimeImmutable($letzte['datum']),
-                $letzte['stundenstand'] ?? null,
+                $letzteStunden,
                 $aktuell,
                 $heute
             ),
@@ -196,7 +221,8 @@ final class Wartungsplan
             $wo[] = 'f.eigentuemer_person_id IS NOT NULL';
         }
         $st = $this->pdo->prepare(
-            'SELECT f.id, f.inventarnummer, f.bezeichnung, f.gattung, f.status, f.betriebsstunden, f.spurweite_id, f.eigentuemer_person_id, s.name AS spurweite_name '
+            'SELECT f.id, f.inventarnummer, f.bezeichnung, f.gattung, f.status, f.betriebsstunden, f.spurweite_id, f.eigentuemer_person_id, s.name AS spurweite_name, '
+            . WartungRepository::FUEHRT_STUNDEN_SQL . ' AS fuehrt_stunden '
             . 'FROM fahrzeug f JOIN spurweite s ON s.id = f.spurweite_id WHERE ' . implode(' AND ', $wo) . ' ORDER BY f.inventarnummer, f.id'
         );
         $st->execute($p);

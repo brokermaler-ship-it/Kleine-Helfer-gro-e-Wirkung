@@ -166,6 +166,61 @@ final class WartungsplanTest extends DbTestCase
         self::assertSame(Ampel::Gruen, $z['faelligkeit']->ampel);
     }
 
+    public function test_stundenbezug_aus_juengster_wartung_mit_stand(): void
+    {
+        $lok = $this->fahrzeug('lok', stunden: '78.5');
+        $this->wartung('fahrzeug', $lok, '2026-09-01', ['Räder und Radschleifer reinigen'], 60.0);
+        // Nachtrag ohne Stand mit jüngerem Datum: Zeitbezug 01.10., Stundenbezug bleibt 60 (01.09.).
+        (new WartungRepository($this->pdo))->eintragen('fahrzeug', $lok, [
+            'datum' => '2026-10-01', 'betriebsstunden' => null, 'stundenstand_bezug' => null, 'ausgefuehrt_von_person_id' => null, 'notiz' => null,
+        ], [$this->art('Räder und Radschleifer reinigen')], null);
+        $z = self::nachArt($this->fuerObjekt('fahrzeug', $lok))['Räder und Radschleifer reinigen'];
+        self::assertSame(['datum' => '2026-10-01', 'stundenstand' => 60.0], $z['letzte']);
+        self::assertSame('2027-04-01', $z['faelligkeit']->faelligAm?->format('Y-m-d'));
+        self::assertSame(80.0, $z['faelligkeit']->faelligBeiStunden);
+        self::assertSame(Ampel::Gelb, $z['faelligkeit']->ampel); // 78,5 von 80 h
+        self::assertFalse($z['faelligkeit']->stundenstandFehlt);
+
+        // Gar kein Stand bei dieser Art, Fahrzeug führt Stunden → Stundenkriterium gelb „Stundenstand fehlt“.
+        $this->wartung('fahrzeug', $lok, '2026-10-01', ['Getriebe und Lager schmieren']);
+        $z = self::nachArt($this->fuerObjekt('fahrzeug', $lok))['Getriebe und Lager schmieren'];
+        self::assertSame(Ampel::Gelb, $z['faelligkeit']->ampel);
+        self::assertTrue($z['faelligkeit']->stundenstandFehlt);
+        self::assertSame(0.0, $z['faelligkeit']->rest);
+
+        // Gleiches Ergebnis in der Übersicht (eine Abfrage für alle Objekte).
+        $ueb = array_values(array_filter($this->plan()->uebersicht(new WartungFilter(), $this->heute), fn($z) => $z['art']['name'] === 'Räder und Radschleifer reinigen'));
+        self::assertSame(['datum' => '2026-10-01', 'stundenstand' => 60.0], $ueb[0]['letzte']);
+    }
+
+    public function test_fahrzeug_ohne_betriebsstunden_ignoriert_stundenkriterium(): void
+    {
+        $wagen = $this->fahrzeug('wagen', stunden: '0.0');
+        $this->wartung('fahrzeug', $wagen, '2026-10-01', ['Räder und Radschleifer reinigen']);
+        $z = self::nachArt($this->fuerObjekt('fahrzeug', $wagen))['Räder und Radschleifer reinigen'];
+        self::assertSame(Ampel::Gruen, $z['faelligkeit']->ampel); // nur die 6 Monate zählen
+        self::assertNull($z['faelligkeit']->faelligBeiStunden);
+        self::assertFalse($z['faelligkeit']->stundenstandFehlt);
+
+        // Eigenes Intervall nur in Stunden: nichts berechenbar → gelb „noch nie erfasst“.
+        (new AusnahmeRepository($this->pdo))->speichere('fahrzeug', $wagen, $this->art('Räder und Radschleifer reinigen'), 'eigen', null, 20);
+        $z = self::nachArt($this->fuerObjekt('fahrzeug', $wagen))['Räder und Radschleifer reinigen'];
+        self::assertSame(Ampel::Gelb, $z['faelligkeit']->ampel);
+        self::assertTrue($z['faelligkeit']->nochNieErfasst);
+        $ueb = $this->plan()->uebersicht(new WartungFilter(), $this->heute);
+        $r = array_values(array_filter($ueb, fn($z) => $z['art']['name'] === 'Räder und Radschleifer reinigen'))[0];
+        self::assertTrue($r['faelligkeit']->nochNieErfasst);
+
+        // Ein eingegebener Stand (auch 0) heißt: das Fahrzeug führt Stunden.
+        $lok = $this->fahrzeug('lok', stunden: '0.0');
+        $this->wartung('fahrzeug', $lok, '2026-10-01', ['Räder und Radschleifer reinigen'], 0.0);
+        $z = self::nachArt($this->fuerObjekt('fahrzeug', $lok))['Räder und Radschleifer reinigen'];
+        self::assertSame(20.0, $z['faelligkeit']->faelligBeiStunden);
+        self::assertSame(Ampel::Gruen, $z['faelligkeit']->ampel);
+        $z = self::nachArt($this->fuerObjekt('fahrzeug', $lok))['Getriebe und Lager schmieren'];
+        self::assertTrue($z['faelligkeit']->nochNieErfasst);
+    }
+
     public function test_eine_wartung_mehrere_arten(): void
     {
         $lok = $this->fahrzeug('lok');
@@ -229,10 +284,14 @@ final class WartungsplanTest extends DbTestCase
         self::assertSame(["fahrzeug:$f1", "anlage:$a1", "fahrzeug:$f3", "anlage:$a2"], $schluessel($this->plan()->uebersicht(new WartungFilter(null, null, 'verein'), $this->heute)));
         self::assertSame(["fahrzeug:$f3", "anlage:$a2"], $schluessel($this->plan()->uebersicht(new WartungFilter(null, $this->n), $this->heute)));
         self::assertSame(["anlage:$a2"], $schluessel($this->plan()->uebersicht(new WartungFilter('anlage', $this->n, 'verein'), $this->heute)));
+        self::assertSame(["fahrzeug:$f3"], $schluessel($this->plan()->uebersicht(new WartungFilter(stand: 'nie'), $this->heute)));
+        self::assertSame(["anlage:$a1"], $schluessel($this->plan()->uebersicht(new WartungFilter(stand: 'gelb'), $this->heute)));
+        self::assertSame(["anlage:$a2"], $schluessel($this->plan()->uebersicht(new WartungFilter(stand: 'gruen'), $this->heute)));
 
         $s = $this->plan()->zusammenfassung($this->heute);
         self::assertSame(2, $s['rot']);
-        self::assertSame(2, $s['gelb']);
+        self::assertSame(1, $s['gelb']);
+        self::assertSame(1, $s['nie']);
         self::assertSame(["fahrzeug:$f2", "fahrzeug:$f1", "anlage:$a1", "fahrzeug:$f3"], $schluessel($s['dringendste']));
     }
 
@@ -243,7 +302,8 @@ final class WartungsplanTest extends DbTestCase
         }
         $s = $this->plan()->zusammenfassung($this->heute);
         self::assertSame(0, $s['rot']);
-        self::assertSame(15, $s['gelb']);
+        self::assertSame(0, $s['gelb']);
+        self::assertSame(15, $s['nie']);
         self::assertCount(5, $s['dringendste']);
     }
 

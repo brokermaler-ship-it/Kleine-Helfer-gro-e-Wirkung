@@ -69,6 +69,13 @@ final class App
     private Container $container;
     private Router $router;
     private View $view;
+    /**
+     * Ausstehende Migrationen der laufenden Anfrage (glob + Abfrage nur einmal je Anfrage statt je Prüfung);
+     * handle() setzt den Wert zu Beginn jeder Anfrage zurück. Das Update selbst leitet danach immer weiter.
+     *
+     * @var ?list<string>
+     */
+    private ?array $ausstehend = null;
 
     /** @param array<string,mixed> $config */
     private function __construct(private array $config, ?Session $session, private string $migrationsVerzeichnis)
@@ -136,7 +143,7 @@ final class App
             }
             // Stehen Migrationen aus, ruht OneDrive: sonst würde z. B. ein Upload gelingen, das Speichern der neuen
             // Spalten aber scheitern, und jeder weitere Versuch hinterließe eine Kopie im OneDrive.
-            if ($c->get(Migrator::class)->ausstehend() !== []) {
+            if ($this->ausstehend() !== []) {
                 return null;
             }
             try {
@@ -351,7 +358,8 @@ final class App
             $c->get(Auth::class),
             $c->get('session'),
             $c->get(Uebertragung::class),
-            $c->get(Uebertragung::class) !== null ? $c->get(Graph::class) : null
+            $c->get(Uebertragung::class) !== null ? $c->get(Graph::class) : null,
+            $c->get(WartungRepository::class)
         ));
         $this->container->set(Sicherung::class, fn(Container $c) => new Sicherung(
             $c->get('pdo'),
@@ -416,6 +424,7 @@ final class App
 
     public function handle(Request $request): Response
     {
+        $this->ausstehend = null;
         try {
             $this->richteViewEin();
             $antwort = $this->durchMiddleware($request);
@@ -506,7 +515,7 @@ final class App
 
         $oeffentlich = in_array($pfad, ['/login', '/install', '/kennwort/vergessen', '/kennwort/neu'], true);
         // 2b. „Kennwort vergessen“ braucht die Tabellen aus Migration 010.
-        if (str_starts_with($pfad, '/kennwort/') && $this->container->get(Migrator::class)->ausstehend() !== []) {
+        if (str_starts_with($pfad, '/kennwort/') && $this->ausstehend() !== []) {
             return $this->wartungsSeite();
         }
         if (!$oeffentlich) {
@@ -519,7 +528,7 @@ final class App
             // 3a. Stehen Migrationen aus, dürfen nur Administratoren weiterarbeiten (Update ausführen).
             if (!in_array($pfad, ['/logout', '/admin/update'], true)
                 && !Berechtigung::darf($benutzer, Berechtigung::BETRIEB)
-                && $this->container->get(Migrator::class)->ausstehend() !== []
+                && $this->ausstehend() !== []
             ) {
                 return $this->wartungsSeite();
             }
@@ -528,7 +537,7 @@ final class App
             if ($request->isPost()
                 && !in_array($pfad, ['/logout', '/admin/update', '/admin/sicherung'], true)
                 && Berechtigung::darf($benutzer, Berechtigung::BETRIEB)
-                && $this->container->get(Migrator::class)->ausstehend() !== []
+                && $this->ausstehend() !== []
             ) {
                 $this->container->get('session')->meldung('warnung', 'Bitte zuerst das Datenbank-Update ausführen.');
                 return Response::redirect(url('/admin/update'));
@@ -536,16 +545,17 @@ final class App
             // 3b. Die OneDrive-Verwaltung erst nach dem Datenbank-Update öffnen.
             if (str_starts_with($pfad, '/admin/onedrive')
                 && Berechtigung::darf($benutzer, Berechtigung::BETRIEB)
-                && $this->container->get(Migrator::class)->ausstehend() !== []
+                && $this->ausstehend() !== []
             ) {
                 $this->container->get('session')->meldung('warnung', 'Bitte zuerst das Datenbank-Update ausführen; bis dahin ruht die OneDrive-Übertragung.');
                 return Response::redirect(url('/admin/update'));
             }
-            // 3c. Anlagen, Wartungsarten und die Übersicht „Wartung“ brauchen die Tabellen aus Migration 011–013
-            //     (Nicht-Administratoren sehen schon die Wartungsseite).
+            // 3c. Anlagen, Wartungsarten und die Übersicht „Wartung“ brauchen die Tabellen aus Migration 011–013.
+            //     Geprüft wird bewusst „irgendeine Migration steht aus“ (nicht einzeln 011/012/013): Administratoren
+            //     sollen ohnehin zuerst das Update ausführen. Nicht-Administratoren sehen schon die Wartungsseite (3a).
             if (($pfad === '/anlagen' || str_starts_with($pfad, '/anlagen/') || $pfad === '/wartung'
                     || $pfad === '/admin/wartungsarten' || str_starts_with($pfad, '/admin/wartungsarten/'))
-                && $this->container->get(Migrator::class)->ausstehend() !== []
+                && $this->ausstehend() !== []
             ) {
                 $this->container->get('session')->meldung('warnung', 'Bitte zuerst das Datenbank-Update ausführen.');
                 return Response::redirect(url('/admin/update'));
@@ -557,6 +567,12 @@ final class App
         }
 
         return $this->router->dispatchOderWirf($request);
+    }
+
+    /** @return list<string> ausstehende Migrationen, je Anfrage einmal ermittelt */
+    private function ausstehend(): array
+    {
+        return $this->ausstehend ??= $this->container->get(Migrator::class)->ausstehend();
     }
 
     private function wartungsSeite(): Response
@@ -575,7 +591,7 @@ final class App
         $hinweise = [];
         try {
             $benutzer = $this->container->get(Auth::class)->benutzer();
-            if (Berechtigung::darf($benutzer, Berechtigung::BENUTZER_VERWALTEN) && $this->container->get(Migrator::class)->ausstehend() === []) {
+            if (Berechtigung::darf($benutzer, Berechtigung::BENUTZER_VERWALTEN) && $this->ausstehend() === []) {
                 $n = $this->container->get(KennwortVergessen::class)->anzahlOffen();
                 if ($n > 0) {
                     $hinweise[] = ['typ' => 'info', 'text' => ($n === 1 ? '1 Anfrage' : $n . ' Anfragen') . ' auf neues Kennwort', 'link' => '/admin/benutzer', 'linktext' => 'Anfragen ansehen'];
@@ -588,7 +604,7 @@ final class App
             if (!Berechtigung::darf($this->container->get(Auth::class)->benutzer(), Berechtigung::BETRIEB)) {
                 return $hinweise;
             }
-            if ($this->container->get(Migrator::class)->ausstehend() !== []) {
+            if ($this->ausstehend() !== []) {
                 $hinweise[] = ['typ' => 'warning', 'text' => 'Es steht ein Datenbank-Update an.', 'link' => '/admin/update', 'linktext' => 'Jetzt aktualisieren'];
             }
             if ($this->container->get(Sicherung::class)->istUeberfaellig(new \DateTimeImmutable())) {

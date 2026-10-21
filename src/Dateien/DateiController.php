@@ -17,6 +17,8 @@ use Emc\OneDrive\GraphFehler;
 use Emc\OneDrive\Uebertragung;
 use Emc\Protokoll\Aenderungsprotokoll;
 use Emc\OneDrive\Graph;
+use Emc\Wartung\WartungController;
+use Emc\Wartung\WartungRepository;
 
 final class DateiController
 {
@@ -33,6 +35,7 @@ final class DateiController
         private Session $session,
         private ?Uebertragung $uebertragung = null,
         private ?Graph $graph = null,
+        private ?WartungRepository $wartungen = null,
     ) {
     }
 
@@ -143,7 +146,8 @@ final class DateiController
     public function loeschen(Request $r, array $p): Response
     {
         $dok = $this->ladeDokument($p);
-        $this->verlangeLoeschrecht($dok);
+        $wartungsObjekte = $this->wartungsObjekte((int) $dok['id']);
+        $this->verlangeLoeschrecht($dok, $wartungsObjekte);
         $objekte = [
             'fahrzeug' => $this->dokumente->objekte((int) $dok['id'], 'fahrzeug'),
             'anlage' => $this->dokumente->objekte((int) $dok['id'], 'anlage'),
@@ -155,11 +159,20 @@ final class DateiController
                 $this->protokoll->schreibe($this->auth->benutzer()?->id, $typ, $objektId, 'geaendert', ['datei' => ['alt' => $dok['titel'], 'neu' => null]]);
             }
         }
+        // Wartungsfoto: Protokoll am Fahrzeug bzw. an der Anlage der Wartung.
+        foreach ($wartungsObjekte as $w) {
+            $this->protokoll->schreibe($this->auth->benutzer()?->id, $w['typ'], (int) $w['objekt']['id'], 'geaendert', [
+                'datei' => ['alt' => $dok['titel'] . ' (Wartung vom ' . date('d.m.Y', (int) strtotime($w['datum'])) . ')', 'neu' => null],
+            ]);
+        }
         $this->session->meldung('erfolg', 'Die Datei wurde gelöscht.');
         foreach ($objekte as $typ => $ids) {
             if (isset($ids[0])) {
                 return $this->zurueck($typ, $ids[0]);
             }
+        }
+        if (isset($wartungsObjekte[0])) {
+            return Response::redirect(WartungController::objektUrl($wartungsObjekte[0]['typ'], (int) $wartungsObjekte[0]['objekt']['id']));
         }
         return Response::redirect(url('/fahrzeuge'));
     }
@@ -172,13 +185,48 @@ final class DateiController
      *
      * @param array<string,mixed> $dok
      */
-    private function verlangeLoeschrecht(array $dok): void
+    /**
+     * Wartungen, denen das Dokument (als Foto) zugeordnet ist, samt Objekt.
+     *
+     * @return list<array{typ:string, objekt:array<string,mixed>, datum:string}>
+     */
+    private function wartungsObjekte(int $dokumentId): array
+    {
+        $ergebnis = [];
+        foreach ($this->dokumente->objekte($dokumentId, 'wartung') as $wartungId) {
+            $w = $this->wartungen?->finde($wartungId);
+            if ($w === null) {
+                continue;
+            }
+            $typ = (string) $w['objekt_typ'];
+            $objekt = $typ === 'anlage' ? $this->anlagen->finde((int) $w['objekt_id']) : $this->fahrzeuge->finde((int) $w['objekt_id']);
+            if ($objekt !== null) {
+                $ergebnis[] = ['typ' => $typ, 'objekt' => $objekt, 'datum' => (string) $w['datum']];
+            }
+        }
+        return $ergebnis;
+    }
+
+    /**
+     * Ab Bearbeiter (Dateien bearbeiten) immer; sonst nur eine Datei mit genau einer Zuordnung: an einem Fahrzeug,
+     * das man bearbeiten darf, oder als Foto einer Wartung mit demselben Recht wie beim Löschen der Wartung.
+     *
+     * @param list<array{typ:string, objekt:array<string,mixed>, datum:string}> $wartungsObjekte
+     */
+    private function verlangeLoeschrecht(array $dok, array $wartungsObjekte = []): void
     {
         $benutzer = $this->auth->benutzer();
         if (Berechtigung::darf($benutzer, Berechtigung::DATEI_BEARBEITEN)) {
             return;
         }
         $zuordnungen = $this->dokumente->zuordnungen((int) $dok['id']);
+        if (count($zuordnungen) === 1 && $zuordnungen[0]['objekt_typ'] === 'wartung') {
+            $w = $wartungsObjekte[0] ?? throw new HttpFehler(403);
+            if (!Berechtigung::darfWartungEintragen($benutzer, $w['typ'], $w['objekt'])) {
+                throw new HttpFehler(403);
+            }
+            return;
+        }
         if (count($zuordnungen) !== 1 || $zuordnungen[0]['objekt_typ'] !== 'fahrzeug') {
             throw new HttpFehler(403);
         }

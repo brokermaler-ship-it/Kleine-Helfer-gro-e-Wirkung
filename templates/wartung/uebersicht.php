@@ -4,8 +4,10 @@
  *
  * @var \Emc\Wartung\WartungFilter $filter
  * @var list<array<string,mixed>> $spurweiten
- * @var list<array<string,mixed>> $zeilen aus Wartungsplan::uebersicht
+ * @var list<array<string,mixed>> $zeilen aus Wartungsplan::uebersicht (nach Stand gefiltert)
+ * @var array{rot:int, gelb:int, nie:int, gruen:int} $anzahl je Stand, ohne den Stand-Filter
  */
+use Emc\Wartung\WartungFilter;
 use Emc\Wartung\Wartungsplan;
 
 $stundenText = fn(mixed $h): string => number_format((float) $h, 1, ',', '.') . ' h';
@@ -16,7 +18,7 @@ $stundenText = fn(mixed $h): string => number_format((float) $h, 1, ',', '.') . 
         aria-expanded="<?= $filter->istGesetzt() ? 'true' : 'false' ?>" aria-controls="filterleiste">Filter</button>
 <form method="get" action="<?= e(url('/wartung')) ?>" id="filterleiste" class="collapse d-md-block card card-body mb-3<?= $filter->istGesetzt() ? ' show' : '' ?>">
     <div class="row g-2">
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md-2">
             <label for="f-typ" class="form-label small mb-0">Objekt</label>
             <select class="form-select" id="f-typ" name="typ">
                 <option value="">alle</option>
@@ -24,7 +26,7 @@ $stundenText = fn(mixed $h): string => number_format((float) $h, 1, ',', '.') . 
                 <option value="anlage"<?= $filter->typ === 'anlage' ? ' selected' : '' ?>>Anlagen</option>
             </select>
         </div>
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md-2">
             <label for="f-spurweite" class="form-label small mb-0">Spurweite</label>
             <select class="form-select" id="f-spurweite" name="spurweite">
                 <option value="">alle</option>
@@ -33,7 +35,7 @@ $stundenText = fn(mixed $h): string => number_format((float) $h, 1, ',', '.') . 
                 <?php endforeach; ?>
             </select>
         </div>
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md-2">
             <label for="f-eigentuemer" class="form-label small mb-0">Eigentum</label>
             <select class="form-select" id="f-eigentuemer" name="eigentuemer">
                 <option value="">alle</option>
@@ -41,12 +43,28 @@ $stundenText = fn(mixed $h): string => number_format((float) $h, 1, ',', '.') . 
                 <option value="mitglied"<?= $filter->eigentuemer === 'mitglied' ? ' selected' : '' ?>>Mitglieder (extern)</option>
             </select>
         </div>
-        <div class="col-6 col-md-3 d-flex align-items-end gap-2">
+        <div class="col-6 col-md-3">
+            <label for="f-stand" class="form-label small mb-0">Stand</label>
+            <select class="form-select" id="f-stand" name="stand">
+                <option value="">alle</option>
+                <?php foreach (WartungFilter::STAENDE as $wert => $name): ?>
+                    <option value="<?= e($wert) ?>"<?= $filter->stand === $wert ? ' selected' : '' ?>><?= e($name) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="col-12 col-md-3 d-flex align-items-end gap-2">
             <button type="submit" class="btn btn-primary">Filtern</button>
             <a class="btn btn-link" href="<?= e(url('/wartung')) ?>">Zurücksetzen</a>
         </div>
     </div>
 </form>
+
+<p class="mb-3 wartung-anzahl">
+    <span class="badge text-bg-danger"><?= (int) $anzahl['rot'] ?> überfällig</span>
+    <span class="badge text-bg-warning"><?= (int) $anzahl['gelb'] ?> bald fällig</span>
+    <span class="badge text-bg-secondary"><?= (int) $anzahl['nie'] ?> noch nie erfasst</span>
+    <span class="badge text-bg-success"><?= (int) $anzahl['gruen'] ?> in Ordnung</span>
+</p>
 
 <?php if ($zeilen === []): ?>
     <p class="text-muted">Keine Fälligkeiten gefunden.</p>

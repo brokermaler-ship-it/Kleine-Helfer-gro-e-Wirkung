@@ -148,7 +148,7 @@ final class WartungHttpTest extends DbTestCase
         $fz = $this->fahrzeug('lok', $pid, null);
         $r = $this->post("/fahrzeuge/$fz/wartungen", $this->eintrag($pid));
         $this->assertSame(303, $r->status);
-        $this->assertSame("/fahrzeuge/$fz", $r->headers['Location']);
+        $this->assertSame("/fahrzeuge/$fz#wartung", $r->headers['Location']);
         $this->assertSame('Die Wartung wurde eingetragen.', $this->meldung('erfolg'));
         $w = $this->letzteWartung();
         $this->assertSame('fahrzeug', $w['objekt_typ']);
@@ -202,7 +202,7 @@ final class WartungHttpTest extends DbTestCase
         $anlage = $this->anlage();
         $r = $this->post("/anlagen/$anlage/wartungen", $this->eintrag($pid, ['arten' => [(string) $this->art('Gleise reinigen')], 'betriebsstunden' => '99']));
         $this->assertSame(303, $r->status);
-        $this->assertSame("/anlagen/$anlage", $r->headers['Location']);
+        $this->assertSame("/anlagen/$anlage#wartung", $r->headers['Location']);
         $w = $this->letzteWartung();
         $this->assertSame('anlage', $w['objekt_typ']);
         $this->assertNull($w['betriebsstunden']);
@@ -224,7 +224,7 @@ final class WartungHttpTest extends DbTestCase
         $this->assertSame('52.5', $w['betriebsstunden']);
         $this->assertSame('52.5', $w['stundenstand_bezug']);
         $eintrag = json_decode((string) $this->pdo->query("SELECT aenderungen FROM aenderungsprotokoll WHERE objekt_typ = 'fahrzeug' AND objekt_id = $fz ORDER BY id DESC LIMIT 1")->fetchColumn(), true);
-        $this->assertEquals(['alt' => 40.0, 'neu' => 52.5], $eintrag['betriebsstunden']);
+        $this->assertSame(['alt' => '40,0', 'neu' => '52,5'], $eintrag['betriebsstunden']);
     }
 
     public function test_niedrigerer_stand_nachtrag_aendert_fahrzeug_nicht(): void
@@ -250,6 +250,33 @@ final class WartungHttpTest extends DbTestCase
         $this->assertSame('40.0', $w['stundenstand_bezug']);
     }
 
+    public function test_nachtrag_ohne_stand_hat_keinen_stundenbezug(): void
+    {
+        [, $pid] = $this->anmelden('fahrzeugwart');
+        $fz = $this->fahrzeug('lok', null, null, '40.0');
+        $this->assertSame(303, $this->post("/fahrzeuge/$fz/wartungen", $this->eintrag($pid, ['datum' => date('Y-m-d', strtotime('-1 day'))]))->status);
+        $w = $this->letzteWartung();
+        $this->assertNull($w['betriebsstunden']);
+        $this->assertNull($w['stundenstand_bezug']); // damaliger Stand unbekannt
+        $this->assertSame('40.0', $this->pdo->query("SELECT betriebsstunden FROM fahrzeug WHERE id = $fz")->fetchColumn());
+    }
+
+    public function test_fahrzeug_ohne_betriebsstunden_bekommt_keinen_bezug(): void
+    {
+        [, $pid] = $this->anmelden('fahrzeugwart');
+        $wagen = $this->fahrzeug('wagen', null, null, '0.0');
+        $this->assertSame(303, $this->post("/fahrzeuge/$wagen/wartungen", $this->eintrag($pid))->status);
+        $this->assertNull($this->letzteWartung()['stundenstand_bezug']);
+        // Hat das Fahrzeug schon einmal einen eingegebenen Stand (auch 0), zählt der aktuelle Stand als Bezug.
+        $lok = $this->fahrzeug('lok', null, null, '0.0');
+        $this->assertSame(303, $this->post("/fahrzeuge/$lok/wartungen", $this->eintrag($pid, ['betriebsstunden' => '0']))->status);
+        $this->assertSame(303, $this->post("/fahrzeuge/$lok/wartungen", $this->eintrag($pid))->status);
+        $this->assertSame('0.0', $this->letzteWartung()['stundenstand_bezug']);
+        // Ohne Stunden zeigt der Wagen kein „bei … h“.
+        $seite = $this->get("/fahrzeuge/$wagen")->body;
+        $this->assertStringNotContainsString('bei 20,0 h', $seite);
+    }
+
     public function test_unpassende_art_422(): void
     {
         [, $pid] = $this->anmelden('fahrzeugwart');
@@ -258,6 +285,7 @@ final class WartungHttpTest extends DbTestCase
         $this->assertSame(422, $r->status);
         $this->assertStringContainsString('Diese Wartungsart passt nicht zu diesem Objekt.', $r->body);
         $this->assertStringContainsString('Mein Text', $r->body);
+        $this->assertStringContainsString('href="' . e("/fahrzeuge/$fz#wartung") . '"', $r->body); // „Zurück“ führt zum Tab Wartung
         $this->assertSame(0, $this->zahl('SELECT COUNT(*) FROM wartung'));
         $r = $this->post("/fahrzeuge/$fz/wartungen", $this->eintrag($pid, ['datum' => date('Y-m-d', strtotime('+1 day'))]));
         $this->assertSame(422, $r->status);
@@ -288,6 +316,37 @@ final class WartungHttpTest extends DbTestCase
         $this->assertSame([], (new \Emc\Dateien\DokumentRepository($this->pdo, $this->speicher))->fuerObjekt('fahrzeug', $fz));
     }
 
+    public function test_einzelnes_wartungsfoto_loeschen(): void
+    {
+        [, $pid] = $this->anmelden('mitglied');
+        $fz = $this->fahrzeug('lok', $pid);
+        $this->assertSame(303, $this->post("/fahrzeuge/$fz/wartungen", $this->eintrag($pid), ['fotos' => $this->upload('foto_gedreht.jpg')])->status);
+        $dok = $this->zahl("SELECT dokument_id FROM dokument_zuordnung WHERE objekt_typ = 'wartung'");
+        $titel = (string) $this->pdo->query("SELECT titel FROM dokument WHERE id = $dok")->fetchColumn();
+        $pfad = (string) $this->pdo->query("SELECT pfad FROM dokument WHERE id = $dok")->fetchColumn();
+        $loeschUrl = e("/dateien/$dok/loeschen");
+        $this->assertStringContainsString($loeschUrl, $this->get("/fahrzeuge/$fz")->body);
+
+        // Fremdes Mitglied: kein Link, Löschen verboten.
+        $this->anmelden('mitglied', 'fremd@verein.de');
+        $this->assertStringNotContainsString($loeschUrl, $this->get("/fahrzeuge/$fz")->body);
+        $this->assertSame(403, $this->post("/dateien/$dok/loeschen")->status);
+        $this->assertSame(1, $this->zahl('SELECT COUNT(*) FROM dokument'));
+
+        // Eigentümer: gleiches Recht wie beim Löschen der Wartung.
+        $this->sitzung = [];
+        $this->sitzungAnmelden($this->sitzung, (int) $this->pdo->query("SELECT id FROM benutzer WHERE email = 'mitglied@verein.de'")->fetchColumn());
+        $this->sitzung['_csrf'] = str_repeat('a', 64);
+        $r = $this->post("/dateien/$dok/loeschen");
+        $this->assertSame(303, $r->status);
+        $this->assertSame("/fahrzeuge/$fz#wartung", $r->headers['Location']);
+        $this->assertSame(0, $this->zahl('SELECT COUNT(*) FROM dokument'));
+        $this->assertFileDoesNotExist($this->speicher . '/' . $pfad);
+        $this->assertSame(1, $this->zahl('SELECT COUNT(*) FROM wartung'));
+        $eintrag = json_decode((string) $this->pdo->query("SELECT aenderungen FROM aenderungsprotokoll WHERE objekt_typ = 'fahrzeug' AND objekt_id = $fz ORDER BY id DESC LIMIT 1")->fetchColumn(), true);
+        $this->assertSame(['alt' => $titel . ' (Wartung vom ' . date('d.m.Y') . ')', 'neu' => null], $eintrag['datei']);
+    }
+
     public function test_ausnahmen(): void
     {
         $fz = $this->fahrzeug('lok');
@@ -301,7 +360,7 @@ final class WartungHttpTest extends DbTestCase
         [, $pid] = $this->anmelden('fahrzeugwart', 'w@verein.de');
         $r = $this->post("/fahrzeuge/$fz/wartungsplan", ['modus' => [$raeder => 'aus', $kupplung => 'standard']]);
         $this->assertSame(303, $r->status);
-        $this->assertSame("/fahrzeuge/$fz", $r->headers['Location']);
+        $this->assertSame("/fahrzeuge/$fz#wartung", $r->headers['Location']);
         $this->assertSame('Der Wartungsplan wurde gespeichert.', $this->meldung('erfolg'));
         $this->assertSame(1, $this->zahl("SELECT aus FROM wartungsplan_ausnahme WHERE objekt_typ = 'fahrzeug' AND objekt_id = $fz AND wartungsart_id = $raeder"));
         $seite = $this->get("/fahrzeuge/$fz")->body;
@@ -386,7 +445,7 @@ final class WartungHttpTest extends DbTestCase
         $this->assertSame(404, $this->post('/wartungen/999999/loeschen')->status);
         $r = $this->post("/wartungen/$eigeneWartung/loeschen");
         $this->assertSame(303, $r->status);
-        $this->assertSame("/fahrzeuge/$eigenes", $r->headers['Location']);
+        $this->assertSame("/fahrzeuge/$eigenes#wartung", $r->headers['Location']);
         $this->assertSame('Die Wartung wurde gelöscht.', $this->meldung('erfolg'));
         $this->assertSame([$fremdeWartung], array_map('intval', $this->pdo->query('SELECT id FROM wartung')->fetchAll(\PDO::FETCH_COLUMN)));
         $this->assertSame(1, $this->zahl('SELECT COUNT(*) FROM wartung_art'));

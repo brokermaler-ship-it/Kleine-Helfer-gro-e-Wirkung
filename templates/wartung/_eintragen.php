@@ -12,7 +12,7 @@ $pre = 'wartung-' . e($objektTyp) . '-';
     <?php include dirname(__DIR__) . '/partials/csrf.php'; ?>
     <h3 class="h6">Wartung eintragen</h3>
     <?php if ($eintragbar === []): ?>
-        <p class="text-muted mb-0">Für dieses Objekt sind keine Wartungsarten vorgesehen.</p>
+        <p class="text-muted mb-0"><?= $arten !== [] ? 'Alle Wartungsarten sind für dieses Objekt abgeschaltet.' : 'Für dieses Objekt sind keine Wartungsarten vorgesehen.' ?></p>
     <?php else: ?>
     <div class="row g-3">
         <div class="col-12 col-md-4">

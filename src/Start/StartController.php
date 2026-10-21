@@ -27,7 +27,7 @@ final class StartController
         return new Response($html, 200, ['Content-Type' => 'text/html; charset=utf-8']);
     }
 
-    /** @return ?array{rot:int, gelb:int, dringendste: list<array<string,mixed>>} null, solange das Datenbank-Update aussteht */
+    /** @return ?array{rot:int, gelb:int, nie:int, dringendste: list<array<string,mixed>>} null, solange das Datenbank-Update aussteht */
     private function wartung(\DateTimeImmutable $heute): ?array
     {
         try {

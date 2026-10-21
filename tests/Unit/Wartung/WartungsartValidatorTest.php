@@ -72,7 +72,12 @@ final class WartungsartValidatorTest extends TestCase
         [, $f] = WartungsartValidator::pruefe($this->eingabe(['gilt_fuer' => 'boot']));
         $this->assertSame('Bitte wählen, wofür die Wartungsart gilt.', $f['gilt_fuer']);
         [, $f] = WartungsartValidator::pruefe($this->eingabe(['sortierung' => 'x']));
-        $this->assertSame('Bitte eine ganze Zahl angeben.', $f['sortierung']);
+        $this->assertSame('Bitte eine ganze Zahl von -999999 bis 999999 angeben.', $f['sortierung']);
+        [, $f] = WartungsartValidator::pruefe($this->eingabe(['sortierung' => '1234567']));
+        $this->assertSame('Bitte eine ganze Zahl von -999999 bis 999999 angeben.', $f['sortierung']);
+        [$d, $f] = WartungsartValidator::pruefe($this->eingabe(['sortierung' => '-999999']));
+        $this->assertArrayNotHasKey('sortierung', $f);
+        $this->assertSame(-999999, $d['sortierung']);
         [, $f] = WartungsartValidator::pruefe(['name' => ['x'], 'gilt_fuer' => ['y'], 'intervall_monate' => ['1']]);
         $this->assertArrayHasKey('name', $f);
         $this->assertArrayHasKey('gilt_fuer', $f);

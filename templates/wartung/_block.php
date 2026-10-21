@@ -10,6 +10,8 @@ include __DIR__ . '/_daten.php';
 <h3 class="h6">Fälligkeiten</h3>
 <?php if ($ausgemustert): ?>
     <p class="text-muted">Ausgemusterte Fahrzeuge werden im Wartungsplan nicht berücksichtigt.</p>
+<?php elseif ($plan === [] && $arten !== []): ?>
+    <p class="text-muted">Alle Wartungsarten sind für dieses Objekt abgeschaltet.</p>
 <?php elseif ($plan === []): ?>
     <p class="text-muted">Für dieses Objekt sind keine Wartungsarten vorgesehen.</p>
 <?php else: ?>
@@ -68,9 +70,18 @@ include __DIR__ . '/_daten.php';
                 <?php if ($w['fotos'] !== []): ?>
                     <div class="d-flex flex-wrap gap-2 mt-2">
                         <?php foreach ($w['fotos'] as $f): ?>
-                            <a href="<?= e(url('/dateien/' . $f['id'])) ?>" target="_blank" rel="noopener">
-                                <img src="<?= e(url('/dateien/' . $f['id'] . '/vorschau')) ?>" alt="<?= e((string) $f['titel']) ?>" loading="lazy" class="rounded border" style="width:96px;height:72px;object-fit:cover">
-                            </a>
+                            <div class="text-center">
+                                <a href="<?= e(url('/dateien/' . $f['id'])) ?>" target="_blank" rel="noopener">
+                                    <img src="<?= e(url('/dateien/' . $f['id'] . '/vorschau')) ?>" alt="<?= e((string) $f['titel']) ?>" loading="lazy" class="rounded border" style="width:96px;height:72px;object-fit:cover">
+                                </a>
+                                <?php if ($darfEintragen): ?>
+                                    <form method="post" action="<?= e(url('/dateien/' . $f['id'] . '/loeschen')) ?>"
+                                          onsubmit="return confirm('Dieses Foto löschen?');">
+                                        <?php include dirname(__DIR__) . '/partials/csrf.php'; ?>
+                                        <button type="submit" class="btn btn-link btn-sm text-danger p-0">Foto löschen<span class="visually-hidden">: <?= e((string) $f['titel']) ?></span></button>
+                                    </form>
+                                <?php endif; ?>
+                            </div>
                         <?php endforeach; ?>
                     </div>
                 <?php endif; ?>

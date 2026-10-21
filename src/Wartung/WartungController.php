@@ -51,26 +51,50 @@ final class WartungController
 
     public function eintragenFahrzeug(Request $r, array $p): Response
     {
-        return $this->eintragen($r, 'fahrzeug', $this->objekt('fahrzeug', self::id($p)));
+        return self::vorUpdate(fn() => $this->eintragen($r, 'fahrzeug', $this->objekt('fahrzeug', self::id($p))), $this->session);
     }
 
     public function eintragenAnlage(Request $r, array $p): Response
     {
-        return $this->eintragen($r, 'anlage', $this->objekt('anlage', self::id($p)));
+        return self::vorUpdate(fn() => $this->eintragen($r, 'anlage', $this->objekt('anlage', self::id($p))), $this->session);
     }
 
     public function planFahrzeug(Request $r, array $p): Response
     {
-        return $this->plan($r, 'fahrzeug', $this->objekt('fahrzeug', self::id($p)));
+        return self::vorUpdate(fn() => $this->plan($r, 'fahrzeug', $this->objekt('fahrzeug', self::id($p))), $this->session);
     }
 
     public function planAnlage(Request $r, array $p): Response
     {
-        return $this->plan($r, 'anlage', $this->objekt('anlage', self::id($p)));
+        return self::vorUpdate(fn() => $this->plan($r, 'anlage', $this->objekt('anlage', self::id($p))), $this->session);
     }
 
     /** Löschen mit demselben Recht wie das Eintragen am Objekt; der Betriebsstundenstand des Fahrzeugs bleibt. */
     public function loeschen(Request $r, array $p): Response
+    {
+        return self::vorUpdate(fn() => $this->loescheWartung($p), $this->session);
+    }
+
+    /**
+     * Fehlen die Tabellen aus Migration 012/013 noch (Programmdateien neu, Update nicht ausgeführt), führt ein
+     * Absenden zum Update statt zu einem Fehler 500. Im Normalfall fängt das schon App (3a/3a') ab.
+     *
+     * @param callable():Response $aktion
+     */
+    private static function vorUpdate(callable $aktion, Session $session): Response
+    {
+        try {
+            return $aktion();
+        } catch (\PDOException $e) {
+            if ((string) $e->getCode() !== '42S02') {
+                throw $e;
+            }
+            $session->meldung('warnung', 'Bitte zuerst das Datenbank-Update ausführen.');
+            return Response::redirect(url('/admin/update'));
+        }
+    }
+
+    private function loescheWartung(array $p): Response
     {
         $id = self::id($p);
         $w = $id > 0 ? $this->wartungen->finde($id) : null;
@@ -137,11 +161,16 @@ final class WartungController
                     throw new HttpFehler(404); // zwischenzeitlich gelöscht
                 }
                 $aktuell = (float) $aktuell;
-                $bezug = $d['betriebsstunden'] ?? $aktuell;
+                $bezug = $d['betriebsstunden'] ?? self::bezugOhneEingabe(
+                    (string) $d['datum'],
+                    $aktuell,
+                    fn(): bool => $this->wartungen->fuehrtStunden($objektId, $aktuell)
+                );
                 if ($d['betriebsstunden'] !== null && $d['betriebsstunden'] > $aktuell) {
                     // Nur ein höherer Stand zählt: ein Nachtrag mit kleinerem Stand senkt den Zähler nicht.
                     $this->pdo->prepare('UPDATE fahrzeug SET betriebsstunden = ? WHERE id = ?')->execute([$d['betriebsstunden'], $objektId]);
-                    $aenderungen['betriebsstunden'] = ['alt' => $aktuell, 'neu' => $d['betriebsstunden']];
+                    // Wie in der Anzeige (52,5), damit der Verlauf nicht „40 → 52.5“ zeigt.
+                    $aenderungen['betriebsstunden'] = ['alt' => self::stundenText($aktuell), 'neu' => self::stundenText((float) $d['betriebsstunden'])];
                 }
             }
             $wartungId = $this->wartungen->eintragen($typ, $objektId, [
@@ -256,6 +285,27 @@ final class WartungController
         return Response::redirect(self::objektUrl($typ, $objektId));
     }
 
+    /**
+     * Stundenbezug einer Wartung ohne eingegebenen Stand: der aktuelle Stand des Fahrzeugs, aber nur bei einem
+     * Eintrag für heute (bei einem Nachtrag ist der damalige Stand unbekannt) und nur, wenn das Fahrzeug Betriebsstunden
+     * führt (Stand über 0 oder schon einmal eingegeben) – sonst NULL, damit ein späterer erster Stand nicht alle
+     * Stundenintervalle ab 0 h rot werden lässt.
+     *
+     * @param callable():bool $fuehrtStunden
+     */
+    private static function bezugOhneEingabe(string $datum, float $aktuell, callable $fuehrtStunden): ?float
+    {
+        if ($datum !== (new \DateTimeImmutable('today'))->format('Y-m-d')) {
+            return null;
+        }
+        return $fuehrtStunden() ? $aktuell : null;
+    }
+
+    private static function stundenText(float $stunden): string
+    {
+        return number_format($stunden, 1, ',', '.');
+    }
+
     /** @param ?array{aus:bool, intervall_monate:?int, intervall_stunden:?int} $ausnahme */
     private static function planText(?array $ausnahme): string
     {
@@ -323,9 +373,10 @@ final class WartungController
         return $objekt;
     }
 
-    private static function objektUrl(string $typ, int $id): string
+    /** Fahrzeug- bzw. Anlagenseite mit geöffnetem Tab bzw. Abschnitt „Wartung“. */
+    public static function objektUrl(string $typ, int $id): string
     {
-        return url(($typ === 'anlage' ? '/anlagen/' : '/fahrzeuge/') . $id);
+        return url(($typ === 'anlage' ? '/anlagen/' : '/fahrzeuge/') . $id) . '#wartung';
     }
 
     private static function id(array $p): int

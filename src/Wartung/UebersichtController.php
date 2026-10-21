@@ -23,11 +23,14 @@ final class UebersichtController
     {
         $filter = WartungFilter::ausRequest($r);
         $heute = new \DateTimeImmutable('today');
+        // Zählung je Stand über die übrigen Filter, danach erst nach Stand filtern (eine Berechnung).
+        $alle = $this->plan->uebersicht($filter->ohneStand(), $heute);
         $html = $this->view->render('wartung/uebersicht', [
             'titel' => 'Wartung',
             'filter' => $filter,
             'spurweiten' => $this->spurweiten->alle(),
-            'zeilen' => $this->plan->uebersicht($filter, $heute),
+            'anzahl' => Wartungsplan::zaehle($alle),
+            'zeilen' => array_values(array_filter($alle, fn(array $z): bool => $filter->passtStand($z['faelligkeit']))),
         ]);
         return new Response($html, 200, ['Content-Type' => 'text/html; charset=utf-8']);
     }
