@@ -7,7 +7,9 @@ $abgestellt = $fz['status'] === 'ausgemustert';
 <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
     <div>
         <h1 class="h3 mb-1"><?= e($fz['bezeichnung']) ?></h1>
-        <div>
+        <div class="d-flex flex-wrap align-items-center gap-1">
+            <?php $fzCode = \Emc\Codes\Code::fahrzeug((string) $fz['inventarnummer']); ?>
+            <?php if ($fzCode !== null): ?><span class="fahrzeug-code me-2" title="Code für das Feld „Code“ und die Etiketten"><?= e($fzCode) ?></span><?php endif; ?>
             <span class="text-muted me-2"><?= e($fz['inventarnummer']) ?></span>
             <?= $statusBadge($fz) ?>
             <?= $eigentumBadge($fz) ?>

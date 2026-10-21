@@ -14,6 +14,11 @@ use Emc\Auth\Berechtigung;
             <span>Lokschuppen</span>
         </a>
         <?php if ($benutzer !== null): ?>
+        <form method="get" action="<?= e(url('/code')) ?>" role="search" class="emc-codefeld d-flex ms-auto me-2 order-lg-last ms-lg-3 me-lg-0">
+            <label for="code-q" class="visually-hidden">Code</label>
+            <input type="search" class="form-control form-control-sm" id="code-q" name="q" autocapitalize="characters"
+                   autocomplete="off" spellcheck="false" placeholder="Code, z. B. F12">
+        </form>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#hauptmenue"
                 aria-controls="hauptmenue" aria-expanded="false" aria-label="Menü umschalten">
             <span class="navbar-toggler-icon"></span>

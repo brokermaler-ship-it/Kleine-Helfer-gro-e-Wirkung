@@ -19,6 +19,8 @@ use Emc\Betrieb\Sicherung;
 use Emc\Betrieb\SicherungController;
 use Emc\Betrieb\TestdatenController;
 use Emc\Betrieb\UpdateController;
+use Emc\Codes\CodeAufloesung;
+use Emc\Codes\CodeController;
 use Emc\Dateien\Bildbearbeitung;
 use Emc\Dateien\DateiController;
 use Emc\Dateien\DokumentRepository;
@@ -286,6 +288,14 @@ final class App
             $c->get(WartungDienst::class)
         ));
         $this->container->set(AnlageRepository::class, fn(Container $c) => new AnlageRepository($c->get('pdo')));
+        $this->container->set(CodeAufloesung::class, fn(Container $c) => new CodeAufloesung(
+            $c->get(FahrzeugRepository::class),
+            $c->get(AnlageRepository::class)
+        ));
+        $this->container->set(CodeController::class, fn(Container $c) => new CodeController(
+            $this->view,
+            $c->get(CodeAufloesung::class)
+        ));
         $this->container->set(AnlageController::class, fn(Container $c) => new AnlageController(
             $this->view,
             $c->get(AnlageRepository::class),
@@ -552,11 +562,13 @@ final class App
                 $this->container->get('session')->meldung('warnung', 'Bitte zuerst das Datenbank-Update ausführen; bis dahin ruht die OneDrive-Übertragung.');
                 return Response::redirect(url('/admin/update'));
             }
-            // 3c. Anlagen, Wartungsarten und die Übersicht „Wartung“ brauchen die Tabellen aus Migration 011–013.
+            // 3c. Anlagen, Wartungsarten, die Übersicht „Wartung“ und das Feld „Code“ (sucht auch Anlagen) brauchen die
+            //     Tabellen aus Migration 011–013.
             //     Geprüft wird bewusst „irgendeine Migration steht aus“ (nicht einzeln 011/012/013): Administratoren
             //     sollen ohnehin zuerst das Update ausführen. Nicht-Administratoren sehen schon die Wartungsseite (3a).
             if (($pfad === '/anlagen' || str_starts_with($pfad, '/anlagen/') || $pfad === '/wartung'
-                    || $pfad === '/admin/wartungsarten' || str_starts_with($pfad, '/admin/wartungsarten/'))
+                    || $pfad === '/admin/wartungsarten' || str_starts_with($pfad, '/admin/wartungsarten/')
+                    || $pfad === '/code' || str_starts_with($pfad, '/c/'))
                 && $this->ausstehend() !== []
             ) {
                 $this->container->get('session')->meldung('warnung', 'Bitte zuerst das Datenbank-Update ausführen.');

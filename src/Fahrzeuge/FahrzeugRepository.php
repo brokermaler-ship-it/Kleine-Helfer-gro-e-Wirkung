@@ -112,6 +112,39 @@ final class FahrzeugRepository
         return $z === false ? null : $z;
     }
 
+    /**
+     * Fahrzeug zum Code F<n>: Inventarnummer EMC-<Zahl> mit dem Zahlenwert n (führende Nullen egal). Gäbe es mehrere
+     * Schreibweisen derselben Zahl (EMC-12 und EMC-0012), gewinnt die zuerst angelegte.
+     *
+     * @return ?array<string,mixed>
+     */
+    public function findeNachCodeNummer(int $n): ?array
+    {
+        $st = $this->pdo->prepare(
+            "SELECT id FROM fahrzeug WHERE inventarnummer REGEXP '^EMC-[0-9]+$' "
+            . 'AND CAST(SUBSTRING(inventarnummer, 5) AS UNSIGNED) = ? ORDER BY id LIMIT 1'
+        );
+        $st->execute([$n]);
+        $id = $st->fetchColumn();
+        return $id === false ? null : $this->finde((int) $id);
+    }
+
+    /**
+     * Verschiedene Fahrzeuge mit einem Decoder dieser Adresse (alle Protokolle, auch ausgemusterte), nach Inventarnummer.
+     *
+     * @return list<array<string,mixed>> mit spurweite_name, titelbild_dokument_id, bezeichnung, status, inventarnummer
+     */
+    public function nachAdresse(int $adresse): array
+    {
+        $st = $this->pdo->prepare(
+            'SELECT f.*, s.name AS spurweite_name FROM fahrzeug f JOIN spurweite s ON s.id = f.spurweite_id '
+            . 'WHERE EXISTS (SELECT 1 FROM decoder d WHERE d.fahrzeug_id = f.id AND d.adresse = ?) '
+            . 'ORDER BY f.inventarnummer, f.id'
+        );
+        $st->execute([$adresse]);
+        return $st->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
     /** @param array<string,mixed> $d */
     public function anlegen(array $d, ?int $angelegtVonBenutzerId = null): int
     {

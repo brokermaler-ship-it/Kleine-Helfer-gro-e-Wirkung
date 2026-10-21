@@ -12,6 +12,7 @@ use Emc\Core\Router;
 use Emc\Betrieb\SicherungController;
 use Emc\Betrieb\TestdatenController;
 use Emc\Betrieb\UpdateController;
+use Emc\Codes\CodeController;
 use Emc\Dateien\DateiController;
 use Emc\Digital\AdressenController;
 use Emc\Digital\CvController;
@@ -52,6 +53,10 @@ return function (Router $router, App $app): void {
 
     $router->add('GET', '/install', fn(Request $r) => $c->get(InstallController::class)->formular($r));
     $router->add('POST', '/install', fn(Request $r) => $c->get(InstallController::class)->installiere($r));
+
+    // Feld „Code“ in der Kopfzeile und Kurzlink (z. B. aus dem QR-Code an der Anlage); ohne Anmeldung zuerst Login.
+    $router->add('GET', '/code', $app->erfordert('lesen', fn(Request $r) => $c->get(CodeController::class)->suche($r)));
+    $router->add('GET', '/c/{code}', $app->erfordert('lesen', fn(Request $r, array $p = []) => $c->get(CodeController::class)->kurzlink($r, $p)));
 
     $fz = fn(string $m) => fn(Request $r, array $p = []) => $c->get(FahrzeugController::class)->$m($r, $p);
     $router->add('GET', '/fahrzeuge', $app->erfordert('lesen', $fz('liste')));

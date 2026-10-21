@@ -69,6 +69,9 @@ main { padding-bottom: 2rem; flex: 1 0 auto; }
 .emc-navbar .navbar-toggler { border-color: rgba(255, 255, 255, .7); }
 .navbar-logo { display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 50%; background: #fff; flex-shrink: 0; }
 .navbar-logo img { width: 34px; height: auto; display: block; }
+/* Feld „Code“ in der Kopfzeile: auch auf dem Handy neben dem Menüknopf sichtbar */
+.emc-codefeld .form-control { width: 9.5rem; }
+.fahrzeug-code { font-size: 1.5rem; font-weight: 700; letter-spacing: .02em; line-height: 1; }
 
 /* Fußzeile */
 .emc-fuss { border-top: 1px solid var(--emc-grau); background: var(--emc-grau-hell); color: var(--emc-schwarz); flex-shrink: 0; }
