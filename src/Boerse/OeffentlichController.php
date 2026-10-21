@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Emc\Boerse;
 
+use Emc\Core\Csrf;
 use Emc\Core\DomainFehler;
 use Emc\Core\HttpFehler;
 use Emc\Core\Instanz;
@@ -41,9 +42,30 @@ final class OeffentlichController
         private SpurweiteRepository $spurweiten,
         private AnfrageDienst $anfragen,
         private Spamschutz $spam,
-        private Session $session,
+        Session|\Closure $session,
         private ?DokumentRepository $dokumente = null,
+        ?Csrf $csrf = null,
     ) {
+        $this->session = $session;
+        $this->csrf = $csrf;
+    }
+
+    /** @var Session|\Closure():Session erst bei Bedarf gestartet (Fotos und die Liste brauchen keine Sitzung) */
+    private Session|\Closure $session;
+    private ?Csrf $csrf;
+
+    private function sitzung(): Session
+    {
+        if ($this->session instanceof \Closure) {
+            $this->session = ($this->session)();
+        }
+        return $this->session;
+    }
+
+    /** CSRF-Token der Sitzung: bindet die Zeitmarke an diese Sitzung (eine Marke aus einer anderen Sitzung gilt nicht). */
+    private function bindung(): string
+    {
+        return $this->csrf?->token() ?? '';
     }
 
     public function liste(Request $r): Response
@@ -74,7 +96,7 @@ final class OeffentlichController
         if ($a === null) {
             return $this->nichtGefunden();
         }
-        return $this->angebotSeite($a, [], [], $this->spam->zeitmarke(new \DateTimeImmutable()), null, 200);
+        return $this->angebotSeite($a, [], [], $this->spam->zeitmarke(new \DateTimeImmutable(), $this->bindung()), null, 200);
     }
 
     /** POST /boerse/angebot/{nummer}/anfrage */
@@ -92,7 +114,7 @@ final class OeffentlichController
     {
         $this->verlangeAktiv();
         $this->raeumeAuf();
-        return $this->sammlungSeite([], [], $this->spam->zeitmarke(new \DateTimeImmutable()), null, 200);
+        return $this->sammlungSeite([], [], $this->spam->zeitmarke(new \DateTimeImmutable(), $this->bindung()), null, 200);
     }
 
     /** POST /boerse/sammlung-anbieten */
@@ -106,8 +128,8 @@ final class OeffentlichController
     {
         $this->verlangeAktiv();
         $this->raeumeAuf();
-        $abgelehnt = (int) $this->session->hole(self::ABGELEHNT, 0);
-        $this->session->entferne(self::ABGELEHNT);
+        $abgelehnt = (int) $this->sitzung()->hole(self::ABGELEHNT, 0);
+        $this->sitzung()->entferne(self::ABGELEHNT);
         return $this->seite('danke', ['titel' => 'Danke', 'abgelehnt' => max(0, $abgelehnt)], 200, true);
     }
 
@@ -171,7 +193,7 @@ final class OeffentlichController
     {
         $jetzt = new \DateTimeImmutable();
         $schutz = [Spamschutz::FANGFELD => $r->post(Spamschutz::FANGFELD), Spamschutz::ZEITFELD => $r->post(Spamschutz::ZEITFELD)];
-        if (!$this->spam->istMensch($schutz, $jetzt)) {
+        if (!$this->spam->istMensch($schutz, $jetzt, $this->bindung())) {
             // Stilles Verwerfen: dieselbe Antwort wie bei Erfolg, nichts gespeichert, nicht gezählt.
             return Response::redirect(url('/boerse/danke'));
         }
@@ -196,7 +218,7 @@ final class OeffentlichController
             return $this->formular($art, $angebot, $eingabe, [], $zeitmarke, self::BEGRENZT, 429);
         }
         if ($this->anfragen->abgelehnteFotos() > 0) {
-            $this->session->setze(self::ABGELEHNT, $this->anfragen->abgelehnteFotos());
+            $this->sitzung()->setze(self::ABGELEHNT, $this->anfragen->abgelehnteFotos());
         }
         return Response::redirect(url('/boerse/danke'));
     }

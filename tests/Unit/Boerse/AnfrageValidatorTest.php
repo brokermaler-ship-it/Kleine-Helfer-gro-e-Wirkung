@@ -53,6 +53,19 @@ final class AnfrageValidatorTest extends TestCase
         $this->assertSame('Bitte gib deinen Namen an.', $f['name']);
     }
 
+    /** Adressen, die FILTER_VALIDATE_EMAIL zulässt, die aber einen mailto:-Link umbauen könnten (cc, bcc, body …). */
+    public function test_email_nur_schlichte_adressen(): void
+    {
+        foreach (['a?cc=x&bcc=spy@evil.example', 'a%3Fbcc@evil.example', 'a&body=x@evil.example', 'a=b@evil.example', "o'brien@test.emc78.de", 'a#b@evil.example', 'a@localhost', 'a@[127.0.0.1]', 'a@x.d3'] as $adresse) {
+            [, $f] = AnfrageValidator::pruefe($this->eingabe(['email' => $adresse]), 'kaufanfrage');
+            $this->assertSame('Bitte gib eine gültige E-Mail-Adresse an.', $f['email'] ?? null, $adresse);
+        }
+        foreach (['erika.beispiel+boerse@test.emc78.de', 'E_K-1@mail.test-emc78.de'] as $adresse) {
+            [, $f] = AnfrageValidator::pruefe($this->eingabe(['email' => $adresse]), 'kaufanfrage');
+            $this->assertArrayNotHasKey('email', $f, $adresse);
+        }
+    }
+
     public function test_ohne_einwilligung(): void
     {
         foreach ([[], ['einwilligung' => '0'], ['einwilligung' => 'on']] as $mehr) {

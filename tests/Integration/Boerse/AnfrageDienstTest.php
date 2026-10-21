@@ -115,6 +115,28 @@ final class AnfrageDienstTest extends DbTestCase
         $this->assertSame(1, $this->zahl('SELECT COUNT(*) FROM boerse_anfrage_sperre'));
     }
 
+    /** Das Original (mit GPS) wird nie in den Speicherordner verschoben – auch nicht kurz; bei Fehlern bleibt dort nichts. */
+    public function test_original_nie_im_speicher(): void
+    {
+        $verschoben = 0;
+        $upload = new UploadService($this->pdo, $this->speicher, 8 * 1048576, new Bildbearbeitung(), fn($t) => is_file($t), function ($a, $b) use (&$verschoben) {
+            $verschoben++;
+            return copy($a, $b);
+        });
+        $dienst = new AnfrageDienst($this->pdo, new AnfrageRepository($this->pdo), new Spamschutz($this->pdo, new Einstellungen($this->pdo)), $upload, $this->dok, new Aenderungsprotokoll($this->pdo));
+        $heic = "\0\0\0\x18ftypheic\0\0\0\0mif1heic" . str_repeat("\0", 64);
+        $kaputt = substr(ExifJpeg::erzeuge(), 0, 400);
+        $dienst->nimmEntgegen('sammlung', null, $this->daten(), [$this->foto($heic, 'a.jpg'), $this->foto($kaputt, 'b.jpg')], '203.0.113.7', new \DateTimeImmutable('2026-10-21 12:00'));
+        $this->assertSame(2, $dienst->abgelehnteFotos());
+        $dateien = iterator_to_array(new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($this->speicher, \FilesystemIterator::SKIP_DOTS)));
+        $this->assertSame([], array_keys(array_filter($dateien, fn($f) => $f->isFile())), 'keine Datei im Speicherordner');
+        $tmp = $this->foto(ExifJpeg::erzeuge(), 'c.jpg');
+        $dienst->nimmEntgegen('sammlung', null, $this->daten(), [$tmp], '203.0.113.8', new \DateTimeImmutable('2026-10-21 12:00'));
+        $this->assertSame(0, $dienst->abgelehnteFotos());
+        $this->assertSame(0, $verschoben, 'move_uploaded_file wird für öffentliche Uploads nie benutzt');
+        $this->assertFileExists($tmp['tmp_name'], 'die PHP-Temp-Datei löscht PHP am Ende der Anfrage');
+    }
+
     public function test_begrenzung(): void
     {
         $jetzt = new \DateTimeImmutable('2026-10-21 12:00:00');

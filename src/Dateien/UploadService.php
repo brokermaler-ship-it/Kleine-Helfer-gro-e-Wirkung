@@ -155,12 +155,9 @@ final class UploadService
         if (!is_dir($ordner) && !@mkdir($ordner, 0750, true) && !is_dir($ordner)) {
             throw new UploadFehler('Die Datei konnte nicht gespeichert werden.');
         }
-        if (!($this->verschiebe)($tmp, $ziel)) {
-            throw new UploadFehler('Die Datei konnte nicht gespeichert werden.');
-        }
-        @chmod($ziel, 0640);
-        // Das Original (mit Aufnahmeort, Kamera …) wird sofort überschrieben; was GD nicht lesen kann, wird gelöscht.
-        if (!$this->bild->ohneMetadaten($ziel)) {
+        // Direkt aus der PHP-Temp-Datei neu kodieren: das Original (mit Aufnahmeort, Kamera …) kommt nie in den
+        // Speicherordner, auch nicht kurz (PHP löscht tmp_name am Ende der Anfrage, auch nach einem Abbruch).
+        if (!$this->bild->ohneMetadaten($tmp, $ziel)) {
             @unlink($ziel);
             throw new UploadFehler(self::NICHT_VERARBEITBAR);
         }

@@ -16,6 +16,8 @@ final class Spamschutz
     public const SALZ = 'boerse_ip_salz';
     public const MIN_SEKUNDEN = 3;
     public const MAX_JE_STUNDE = 5;
+    /** Obergrenze angenommener Anfragen je Stunde für die ganze Instanz (schützt Webspace und Rechenzeit vor verteilten Bots). */
+    public const MAX_GESAMT_JE_STUNDE = 60;
     public const AUFBEWAHRUNG_STUNDEN = 24;
     public const FANGFELD = 'webseite';
     public const ZEITFELD = 'zeitmarke';
@@ -26,11 +28,14 @@ final class Spamschutz
     {
     }
 
-    /** „<unix>.<hmac>“ – Zeitpunkt, zu dem das Formular ausgeliefert wurde, gegen Fälschung signiert. */
-    public function zeitmarke(\DateTimeImmutable $jetzt): string
+    /**
+     * „<unix>.<hmac>“ – Zeitpunkt, zu dem das Formular ausgeliefert wurde, gegen Fälschung signiert und an die Sitzung
+     * gebunden ($bindung = CSRF-Token): eine Marke aus einer anderen Sitzung gilt nicht, ein Bot muss je Sitzung warten.
+     */
+    public function zeitmarke(\DateTimeImmutable $jetzt, string $bindung = ''): string
     {
         $zeit = (string) $jetzt->getTimestamp();
-        return $zeit . '.' . $this->signatur($zeit);
+        return $zeit . '.' . $this->signatur($zeit, $bindung);
     }
 
     /**
@@ -38,7 +43,7 @@ final class Spamschutz
      *
      * @param array<string,mixed> $post
      */
-    public function istMensch(array $post, \DateTimeImmutable $jetzt): bool
+    public function istMensch(array $post, \DateTimeImmutable $jetzt, string $bindung = ''): bool
     {
         $fang = $post[self::FANGFELD] ?? '';
         if (!is_string($fang) || $fang !== '') {
@@ -48,20 +53,20 @@ final class Spamschutz
         if (!is_string($marke) || preg_match('/^(\d{1,12})\.([0-9a-f]{64})$/', $marke, $m) !== 1) {
             return false;
         }
-        if (!hash_equals($this->signatur($m[1]), $m[2])) {
+        if (!hash_equals($this->signatur($m[1], $bindung), $m[2])) {
             return false;
         }
         $alter = $jetzt->getTimestamp() - (int) $m[1];
         return $alter >= self::MIN_SEKUNDEN && $alter <= self::AUFBEWAHRUNG_STUNDEN * 3600;
     }
 
-    /** HMAC der IP-Adresse mit dem Salz; IPv6 zählt je /64-Netz (ein Anschluss hat meist ein ganzes /64). */
+    /** HMAC der IP-Adresse mit dem Salz; IPv6 zählt je /56-Netz (ein Anschluss bekommt meist ein /56 oder mehr). */
     public function ipHash(string $ip): string
     {
         return hash_hmac('sha256', self::netz($ip), $this->salz());
     }
 
-    /** IPv4 unverändert, IPv6 als /64-Präfix („2001:db8:1:2::/64“); Unlesbares unverändert. */
+    /** IPv4 unverändert, IPv6 als /56-Präfix („2001:db8:1::/56“); Unlesbares unverändert. */
     public static function netz(string $ip): string
     {
         if (!str_contains($ip, ':')) {
@@ -74,15 +79,21 @@ final class Spamschutz
         if (str_starts_with($bin, str_repeat("\0", 10) . "\xff\xff")) {
             return (string) inet_ntop(substr($bin, 12)); // IPv4 in IPv6 (::ffff:203.0.113.7)
         }
-        return (string) inet_ntop(substr($bin, 0, 8) . str_repeat("\0", 8)) . '/64';
+        return (string) inet_ntop(substr($bin, 0, 7) . str_repeat("\0", 9)) . '/56';
     }
 
-    /** Mindestens MAX_JE_STUNDE gezählte Anfragen in der Stunde vor $jetzt. */
+    /** Mindestens MAX_JE_STUNDE Anfragen dieser IP oder MAX_GESAMT_JE_STUNDE insgesamt in der Stunde vor $jetzt. */
     public function begrenzt(string $ipHash, \DateTimeImmutable $jetzt): bool
     {
+        $seit = $jetzt->modify('-1 hour')->format('Y-m-d H:i:s');
         $st = $this->pdo->prepare('SELECT COUNT(*) FROM boerse_anfrage_sperre WHERE ip_hash = ? AND zeitpunkt > ?');
-        $st->execute([$ipHash, $jetzt->modify('-1 hour')->format('Y-m-d H:i:s')]);
-        return (int) $st->fetchColumn() >= self::MAX_JE_STUNDE;
+        $st->execute([$ipHash, $seit]);
+        if ((int) $st->fetchColumn() >= self::MAX_JE_STUNDE) {
+            return true;
+        }
+        $st = $this->pdo->prepare('SELECT COUNT(*) FROM boerse_anfrage_sperre WHERE zeitpunkt > ?');
+        $st->execute([$seit]);
+        return (int) $st->fetchColumn() >= self::MAX_GESAMT_JE_STUNDE;
     }
 
     public function zaehle(string $ipHash, \DateTimeImmutable $jetzt): void
@@ -108,9 +119,9 @@ final class Spamschutz
         $this->pdo->prepare('SELECT wert FROM einstellung WHERE schluessel = ? FOR UPDATE')->execute([self::SALZ]);
     }
 
-    private function signatur(string $zeit): string
+    private function signatur(string $zeit, string $bindung): string
     {
-        return hash_hmac('sha256', 'boerse-zeitmarke|' . $zeit, $this->salz());
+        return hash_hmac('sha256', 'boerse-zeitmarke|' . $zeit . '|' . $bindung, $this->salz());
     }
 
     /** Geheimes Salz der Instanz (32 Zufallsbytes hex), beim ersten Bedarf per INSERT IGNORE angelegt. */

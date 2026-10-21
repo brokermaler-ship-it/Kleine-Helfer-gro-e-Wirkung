@@ -12,6 +12,7 @@ final class Bildbearbeitung
     /** Öffentliche Uploads: längste Seite und JPEG-Qualität der neu kodierten Datei (statt des Originals). */
     private const MAX_SEITE_OEFFENTLICH = 2000;
     private const QUALITAET_OEFFENTLICH = 85;
+    private const MAX_PIXEL_OEFFENTLICH = 24000000;
 
     private ?\Closure $budget;
 
@@ -71,47 +72,52 @@ final class Bildbearbeitung
     }
 
     /**
-     * Kodiert ein JPEG, PNG oder WebP mit GD neu und überschreibt die Datei: aufgerichtet (EXIF-Ausrichtung), längste
-     * Seite höchstens 2000 px, JPEG Qualität 85. GD schreibt keine EXIF-, GPS-, XMP- oder IPTC-Daten, das Ergebnis
-     * enthält also keinen Aufnahmeort und keine Kamera. Gleiche Pixel- und Speichergrenzen wie erzeugeVarianten().
+     * Kodiert ein JPEG, PNG oder WebP mit GD neu: aufgerichtet (EXIF-Ausrichtung), längste Seite höchstens 2000 px,
+     * JPEG Qualität 85. GD schreibt keine EXIF-, GPS-, XMP- oder IPTC-Daten, das Ergebnis enthält also keinen Aufnahmeort
+     * und keine Kamera. Für öffentliche Uploads: höchstens 24 Megapixel (GD-Speicher liegt bei System-libgd außerhalb
+     * von memory_limit), dazu die Speicherschätzung wie bei erzeugeVarianten().
      *
-     * @return bool false bei jedem Fehler (anderes Format, unlesbar, zu groß); die Datei bleibt dann unverändert
+     * @param string $quelle zu lesende Datei (öffentliche Uploads: direkt die PHP-Temp-Datei, das Original kommt nie in
+     *                       den Speicherordner)
+     * @param ?string $ziel Ergebnis; null überschreibt die Quelle. Geschrieben wird über eine Temp-Datei neben dem Ziel
+     *                      und rename – bei false entsteht kein Ziel und die Quelle bleibt unverändert.
      */
-    public function ohneMetadaten(string $pfad): bool
+    public function ohneMetadaten(string $quelle, ?string $ziel = null): bool
     {
-        if (!function_exists('imagecreatefromstring') || !function_exists('imagejpeg') || !is_file($pfad)) {
+        $ziel ??= $quelle;
+        if (!function_exists('imagecreatefromstring') || !function_exists('imagejpeg') || !is_file($quelle)) {
             return false;
         }
-        $info = @getimagesize($pfad);
+        $info = @getimagesize($quelle);
         if ($info === false || !in_array($info[2], [IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_WEBP], true)
-            || $info[0] < 1 || $info[1] < 1 || $info[0] * $info[1] > self::MAX_PIXEL
+            || $info[0] < 1 || $info[1] < 1 || $info[0] * $info[1] > self::MAX_PIXEL_OEFFENTLICH
         ) {
             return false;
         }
-        $orientierung = $this->orientierung($pfad, $info[2]);
-        $bedarf = (int) ($info[0] * $info[1] * 5 * ($orientierung > 1 ? 2 : 1)) + 16 * 1048576 + (int) (@filesize($pfad) ?: 0);
+        $orientierung = $this->orientierung($quelle, $info[2]);
+        $bedarf = (int) ($info[0] * $info[1] * 5 * ($orientierung > 1 ? 2 : 1)) + 16 * 1048576 + (int) (@filesize($quelle) ?: 0);
         $frei = $this->verfuegbar();
         if ($frei !== null && $bedarf > $frei) {
             return false;
         }
-        $daten = @file_get_contents($pfad);
+        $daten = @file_get_contents($quelle);
         $bild = $daten === false ? false : @imagecreatefromstring($daten);
         unset($daten);
         if ($bild === false) {
             return false;
         }
-        $temp = $pfad . '.neu-' . bin2hex(random_bytes(4));
+        $temp = $ziel . '.neu-' . bin2hex(random_bytes(4));
         try {
             $bild = $this->richteAus($bild, $orientierung);
             if (!$this->schreibe($bild, self::MAX_SEITE_OEFFENTLICH, $temp, self::QUALITAET_OEFFENTLICH)
                 || @getimagesize($temp) === false
-                || !@rename($temp, $pfad)
+                || !@rename($temp, $ziel)
             ) {
                 @unlink($temp);
                 return false;
             }
-            @chmod($pfad, 0640);
-            clearstatcache(true, $pfad);
+            @chmod($ziel, 0640);
+            clearstatcache(true, $ziel);
             return true;
         } catch (\Throwable) {
             @unlink($temp);

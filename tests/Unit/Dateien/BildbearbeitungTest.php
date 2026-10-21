@@ -82,6 +82,37 @@ final class BildbearbeitungTest extends TestCase
         $this->assertFalse((new Bildbearbeitung())->ohneMetadaten('/gibt/es/nicht.jpg'));
     }
 
+    public function test_pixelgrenze_oeffentlich(): void
+    {
+        $bild = imagecreate(6000, 4100); // 24,6 MP (Palette: klein, wird vor dem Dekodieren abgelehnt)
+        imagecolorallocate($bild, 10, 10, 10);
+        $pfad = tempnam(sys_get_temp_dir(), 'bild');
+        $this->temp[] = $pfad;
+        imagepng($bild, $pfad, 9);
+        $this->assertFalse((new Bildbearbeitung(fn() => null))->ohneMetadaten($pfad));
+    }
+
+    /** Neu kodieren aus der Quelle (PHP-Temp-Datei) direkt ins Ziel; die Quelle bleibt unberührt, bei Fehlern entsteht kein Ziel. */
+    public function test_von_quelle_nach_ziel(): void
+    {
+        $quelle = $this->datei(ExifJpeg::erzeuge());
+        $inhalt = (string) file_get_contents($quelle);
+        $ordner = sys_get_temp_dir() . '/emc_ziel_' . bin2hex(random_bytes(4));
+        mkdir($ordner);
+        try {
+            $this->assertTrue((new Bildbearbeitung())->ohneMetadaten($quelle, $ordner . '/neu'));
+            $this->assertSame($inhalt, (string) file_get_contents($quelle), 'Quelle unverändert');
+            $this->assertStringNotContainsString(ExifJpeg::KAMERA, (string) file_get_contents($ordner . '/neu'));
+            unlink($ordner . '/neu');
+            $heic = $this->datei("\0\0\0\x18ftypheic" . str_repeat("\0", 64));
+            $this->assertFalse((new Bildbearbeitung())->ohneMetadaten($heic, $ordner . '/neu'));
+            $this->assertSame([], array_values(array_diff((array) scandir($ordner), ['.', '..'])), 'nichts im Zielordner');
+        } finally {
+            array_map('unlink', glob($ordner . '/*') ?: []);
+            rmdir($ordner);
+        }
+    }
+
     public function test_speichergrenze(): void
     {
         $pfad = $this->datei(ExifJpeg::erzeuge());

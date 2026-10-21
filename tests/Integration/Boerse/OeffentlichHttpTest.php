@@ -95,9 +95,10 @@ final class OeffentlichHttpTest extends DbTestCase
         return $this->app($config)->handle(new Request('POST', $pfad, [], $daten, $dateien, ['REMOTE_ADDR' => $ip, 'HTTP_HOST' => 'verein.example']));
     }
 
-    private function zeitmarke(string $vor = '-5 seconds'): string
+    /** Zeitmarke wie im Formular, gebunden an das CSRF-Token der Test-Sitzung. */
+    private function zeitmarke(string $vor = '-5 seconds', string $token = ''): string
     {
-        return $this->app()->container()->get(Spamschutz::class)->zeitmarke(new \DateTimeImmutable($vor));
+        return $this->app()->container()->get(Spamschutz::class)->zeitmarke(new \DateTimeImmutable($vor), $token !== '' ? $token : str_repeat('a', 64));
     }
 
     /** @return array<string,string> */
@@ -288,6 +289,73 @@ final class OeffentlichHttpTest extends DbTestCase
         $this->sitzung['_meldungen'] = [['typ' => 'erfolg', 'text' => 'Interne Meldung']];
         $this->assertStringNotContainsString('Interne Meldung', $this->get('/boerse')->body);
         $this->assertSame('Interne Meldung', $this->sitzung['_meldungen'][0]['text']);
+    }
+
+    /** Fehlerseiten unter /boerse (404, 405, 419, 500) im öffentlichen Layout – auch angemeldet ohne Name, Menü und Meldungen. */
+    public function test_fehlerseiten_im_oeffentlichen_layout(): void
+    {
+        $nr = $this->nummer($this->carlasAngebot());
+        $this->sitzungAnmelden($this->sitzung, $this->wart->id);
+        $this->sitzung['_meldungen'] = [['typ' => 'erfolg', 'text' => 'Interne Meldung']];
+        $kaputt = $this->app();
+        $kaputt->container()->set(AngebotRepository::class, fn() => throw new \RuntimeException('Datenbank weg'));
+        $antworten = [
+            [404, $this->get('/boerse/gibt-es-nicht')],
+            [404, $this->get("/boerse/foto/$nr/999/anzeige")],
+            [405, $this->post('/boerse/danke', ['_csrf' => str_repeat('a', 64)])],
+            [419, $this->post('/boerse/sammlung-anbieten', $this->anfrage(['_csrf' => 'falsch']))],
+            [500, $kaputt->handle(new Request('GET', '/boerse', [], [], [], ['REMOTE_ADDR' => self::IP]))],
+        ];
+        foreach ($antworten as [$status, $r]) {
+            $this->assertSame($status, $r->status);
+            foreach (['Greta', 'Wartmann', 'Abmelden', 'hauptmenue', 'Interne Meldung', 'Datenbank weg'] as $verboten) {
+                $this->assertStringNotContainsString($verboten, $r->body, $status . ' ' . $verboten);
+            }
+            $this->assertStringContainsString('<meta name="robots" content="noindex">', $r->body, (string) $status);
+            $this->assertStringContainsString('Modellbahnbörse', $r->body);
+            $this->assertSame('no-store', $r->headers['Cache-Control'] ?? null, (string) $status);
+            $this->assertSame('same-origin', $r->headers['Referrer-Policy'] ?? null);
+        }
+        $this->assertSame('GET', $antworten[2][1]->headers['Allow'] ?? null);
+        $this->assertStringContainsString('Bitte lade sie neu', $antworten[3][1]->body);
+        $this->assertSame('Interne Meldung', $this->sitzung['_meldungen'][0]['text'] ?? null, 'Meldung bleibt liegen');
+        // Abgeschaltet bleibt es die gewöhnliche 404 der App.
+        $this->assertStringNotContainsString('Modellbahnbörse', $this->get('/boerse/gibt-es-nicht', [], [])->body);
+    }
+
+    /** Fotos und die Liste starten keine Sitzung (kein Set-Cookie, keine Sitzungsdatei je Abruf); Formulare schon (CSRF). */
+    public function test_keine_sitzung_ohne_formular(): void
+    {
+        $a = $this->carlasAngebot();
+        $dok = $this->fotoAmAngebot($a);
+        $nr = $this->nummer($a);
+        $gestartet = 0;
+        $app = function () use (&$gestartet): App {
+            $app = $this->app();
+            $app->container()->set('session', function () use (&$gestartet) {
+                $gestartet++;
+                return new Session($this->sitzung);
+            });
+            return $app;
+        };
+        $r = $app()->handle(new Request('GET', "/boerse/foto/$nr/$dok/vorschau", [], [], [], ['REMOTE_ADDR' => self::IP]));
+        $this->assertSame(200, $r->status);
+        $this->assertSame('public, max-age=3600', $r->headers['Cache-Control']);
+        $this->assertSame(200, $app()->handle(new Request('GET', '/boerse', [], [], [], ['REMOTE_ADDR' => self::IP]))->status);
+        $this->assertSame(404, $app()->handle(new Request('GET', "/boerse/foto/$nr/999/anzeige", [], [], [], ['REMOTE_ADDR' => self::IP]))->status);
+        $this->assertSame(0, $gestartet, 'keine Sitzung');
+        $seite = $app()->handle(new Request('GET', "/boerse/angebot/$nr", [], [], [], ['REMOTE_ADDR' => self::IP]));
+        $this->assertStringContainsString('name="_csrf"', $seite->body);
+        $this->assertSame(1, $gestartet, 'Formular braucht die Sitzung');
+    }
+
+    public function test_zeitmarke_aus_anderer_sitzung(): void
+    {
+        $nr = $this->nummer($this->carlasAngebot());
+        $r = $this->post("/boerse/angebot/$nr/anfrage", $this->anfrage(['zeitmarke' => $this->zeitmarke('-10 seconds', str_repeat('b', 64))]));
+        $this->assertSame(303, $r->status);
+        $this->assertSame(url('/boerse/danke'), $r->headers['Location']);
+        $this->assertSame(0, $this->zahl('SELECT COUNT(*) FROM boerse_anfrage'), 'wiederverwendete Marke einer anderen Sitzung wird verworfen');
     }
 
     public function test_naechste_boerse(): void
@@ -484,6 +552,8 @@ final class OeffentlichHttpTest extends DbTestCase
         $this->sitzung = ['_csrf' => str_repeat('a', 64)];
         $this->sitzungAnmelden($this->sitzung, $this->carla->id);
         $this->assertSame(404, $this->get('/dateien/' . $doks[0]['id'] . '/anzeige')->status);
+        $this->assertSame(404, $this->post('/dateien/' . $doks[0]['id'] . '/loeschen', ['_csrf' => str_repeat('a', 64)])->status, 'Löschversuch wie unbekannt');
+        $this->assertSame(1, $this->zahl('SELECT COUNT(*) FROM dokument WHERE id = ' . (int) $doks[0]['id']));
         $this->sitzungAnmelden($this->sitzung, $this->wart->id);
         $this->assertSame(200, $this->get('/dateien/' . $doks[0]['id'] . '/anzeige')->status);
     }

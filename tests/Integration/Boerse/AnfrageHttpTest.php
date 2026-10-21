@@ -372,9 +372,9 @@ final class AnfrageHttpTest extends DbTestCase
 
         $this->anmelden($this->mitgliedId);
         $this->assertSame(404, $this->get('/dateien/' . $fotos[0] . '/anzeige')->status);
-        $this->assertSame(403, $this->post('/dateien/' . $fotos[0] . '/loeschen')->status);
+        $this->assertSame(404, $this->post('/dateien/' . $fotos[0] . '/loeschen')->status, 'wie unbekannt');
         $this->anmelden($this->fahrzeugwartId);
-        $this->assertSame(403, $this->post('/dateien/' . $fotos[0] . '/loeschen')->status);
+        $this->assertSame(404, $this->post('/dateien/' . $fotos[0] . '/loeschen')->status);
         $this->assertSame(2, $this->zahl("SELECT COUNT(*) FROM dokument_zuordnung WHERE objekt_typ = 'boerse_anfrage' AND objekt_id = $id"));
 
         $this->anmelden($this->wartId);

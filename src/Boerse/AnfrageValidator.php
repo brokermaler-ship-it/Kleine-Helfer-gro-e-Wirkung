@@ -10,6 +10,7 @@ final class AnfrageValidator
     public const MAX_FOTOS = 5;
     public const ARTEN = ['kaufanfrage', 'sammlung'];
     public const WUENSCHE = ['verkaufen', 'spenden'];
+    public const EMAIL_MUSTER = '/^[A-Za-z0-9._+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/';
 
     /**
      * @param array<string,mixed> $eingabe Rohdaten aus dem Formular
@@ -30,7 +31,9 @@ final class AnfrageValidator
         } elseif (mb_strlen($name) > 100) {
             $f['name'] = 'Bitte höchstens 100 Zeichen eingeben.';
         }
-        if ($email !== '' && (mb_strlen($email) > 190 || filter_var($email, FILTER_VALIDATE_EMAIL) === false)) {
+        // Zusätzlich zu FILTER_VALIDATE_EMAIL nur schlichte Zeichen: „a?cc=x&bcc=…@…“ ist laut RFC gültig, baute aber den
+        // mailto:-Link des Börsenwarts um (cc, bcc, body).
+        if ($email !== '' && (mb_strlen($email) > 190 || preg_match(self::EMAIL_MUSTER, $email) !== 1 || filter_var($email, FILTER_VALIDATE_EMAIL) === false)) {
             $f['email'] = 'Bitte gib eine gültige E-Mail-Adresse an.';
         }
         if ($telefon !== '' && preg_match('~^[0-9 +()/-]{5,40}$~', $telefon) !== 1) {

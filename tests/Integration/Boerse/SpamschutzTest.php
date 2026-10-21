@@ -63,10 +63,11 @@ final class SpamschutzTest extends DbTestCase
         $this->assertStringNotContainsString('203.0.113.7', $hash);
         $this->assertSame($hash, $this->spam->ipHash('203.0.113.7'), 'gleiches Salz beim zweiten Mal');
         $this->assertNotSame($hash, $this->spam->ipHash('203.0.113.8'));
-        // IPv6: ein Anschluss hat meist ein ganzes /64-Netz – gezählt wird je Netz.
-        $this->assertSame('2001:db8:1:2::/64', Spamschutz::netz('2001:db8:1:2:aaaa:bbbb:cccc:dddd'));
-        $this->assertSame($this->spam->ipHash('2001:db8:1:2::1'), $this->spam->ipHash('2001:0db8:0001:0002:ffff::9'));
-        $this->assertNotSame($this->spam->ipHash('2001:db8:1:2::1'), $this->spam->ipHash('2001:db8:1:3::1'));
+        // IPv6: ein Anschluss hat meist ein /56-Netz (oder größer) – gezählt wird je /56.
+        $this->assertSame('2001:db8:1::/56', Spamschutz::netz('2001:db8:1:2:aaaa:bbbb:cccc:dddd'));
+        $this->assertSame('2001:db8:1:ff00::/56', Spamschutz::netz('2001:db8:1:ffab::1'));
+        $this->assertSame($this->spam->ipHash('2001:db8:1:2::1'), $this->spam->ipHash('2001:0db8:0001:00ff:ffff::9'), 'gleiches /56');
+        $this->assertNotSame($this->spam->ipHash('2001:db8:1:2::1'), $this->spam->ipHash('2001:db8:1:100::1'), 'anderes /56');
         $this->assertSame($hash, $this->spam->ipHash('::ffff:203.0.113.7'), 'IPv4 in IPv6-Schreibweise');
         $this->assertSame('', Spamschutz::netz(''));
         // Eigenes Salz, nicht das von „Kennwort vergessen“.
@@ -85,6 +86,29 @@ final class SpamschutzTest extends DbTestCase
         $this->assertFalse($this->spam->begrenzt($ip, $this->jetzt->modify('+61 minutes')));
         $this->assertFalse($this->spam->begrenzt($this->spam->ipHash('203.0.113.8'), $this->jetzt), 'andere IP');
         $this->assertSame(0, (int) $this->pdo->query("SELECT COUNT(*) FROM boerse_anfrage_sperre WHERE ip_hash LIKE '%203.0%'")->fetchColumn());
+    }
+
+    /** Obergrenze für die ganze Instanz: auch viele verschiedene IPs zusammen höchstens MAX_GESAMT_JE_STUNDE je Stunde. */
+    public function test_globale_obergrenze(): void
+    {
+        $this->assertSame(60, Spamschutz::MAX_GESAMT_JE_STUNDE);
+        for ($i = 0; $i < Spamschutz::MAX_GESAMT_JE_STUNDE; $i++) {
+            $this->spam->zaehle($this->spam->ipHash('198.51.100.' . $i), $this->jetzt->modify('-' . ($i % 50) . ' minutes'));
+        }
+        $neu = $this->spam->ipHash('203.0.113.200');
+        $this->assertTrue($this->spam->begrenzt($neu, $this->jetzt), 'neue IP, aber Instanz voll');
+        $this->assertFalse($this->spam->begrenzt($neu, $this->jetzt->modify('+51 minutes')), 'eine Stunde später wieder frei');
+    }
+
+    /** Die Zeitmarke gilt nur in der Sitzung, für die sie ausgegeben wurde (Bindung an das CSRF-Token). */
+    public function test_zeitmarke_an_sitzung_gebunden(): void
+    {
+        $a = str_repeat('a', 64);
+        $b = str_repeat('b', 64);
+        $marke = $this->spam->zeitmarke($this->jetzt->modify('-10 seconds'), $a);
+        $this->assertTrue($this->spam->istMensch(['zeitmarke' => $marke], $this->jetzt, $a));
+        $this->assertFalse($this->spam->istMensch(['zeitmarke' => $marke], $this->jetzt, $b), 'andere Sitzung');
+        $this->assertFalse($this->spam->istMensch(['zeitmarke' => $marke], $this->jetzt, ''), 'ohne Sitzung');
     }
 
     public function test_aufraeumen_nach_24_stunden(): void

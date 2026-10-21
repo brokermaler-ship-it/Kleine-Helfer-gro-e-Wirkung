@@ -111,6 +111,8 @@ final class App
     private int|false|null $neueDefekte = false;
     /** Anzahl offener Börsenanfragen für Börsenwarte, je Anfrage einmal ermittelt (false = noch nicht). */
     private int|false|null $neueAnfragen = false;
+    /** Die laufende Anfrage gehört zum aktiven öffentlichen Bereich: Fehlerseiten im öffentlichen Layout. */
+    private bool $oeffentlicheFehler = false;
 
     /** @param array<string,mixed> $config */
     private function __construct(private array $config, ?Session $session, private string $migrationsVerzeichnis)
@@ -139,7 +141,8 @@ final class App
             cookiePfad: Instanz::cookiePfad($this->config),
             lebensdauer: Instanz::sitzungSekunden($this->config),
         ));
-        $this->container->set(Csrf::class, fn(Container $c) => new Csrf($c->get('session')));
+        // Die Sitzung startet erst, wenn ein Token gebraucht wird (öffentliche Fotos und Listen kommen ohne Sitzung aus).
+        $this->container->set(Csrf::class, fn(Container $c) => new Csrf(fn() => $c->get('session')));
         $this->container->set(Auth::class, fn(Container $c) => new Auth($c->get('pdo'), $c->get('session'), Instanz::fingerabdruck($this->config)));
         $this->container->set(AuthController::class, fn(Container $c) => new AuthController(
             $this->view,
@@ -464,8 +467,9 @@ final class App
             $c->get(SpurweiteRepository::class),
             $c->get(AnfrageDienst::class),
             $c->get(Spamschutz::class),
-            $c->get('session'),
-            $c->get(DokumentRepository::class)
+            fn() => $c->get('session'),
+            $c->get(DokumentRepository::class),
+            $c->get(Csrf::class)
         ));
         $this->container->set(MagazinController::class, fn(Container $c) => new MagazinController(
             $this->view,
@@ -641,6 +645,7 @@ final class App
         $this->ausstehend = null;
         $this->neueDefekte = false;
         $this->neueAnfragen = false;
+        $this->oeffentlicheFehler = false;
         try {
             $this->richteViewEin();
             $antwort = $this->durchMiddleware($request);
@@ -724,6 +729,8 @@ final class App
         if ($boerse && !OeffentlicherBereich::aktiv($this->config)) {
             return $this->fehlerSeite(404);
         }
+        // Ab hier (aktiv): alle Fehlerseiten (404, 405, 419, 500 …) ohne Benutzerdaten, Menü und Meldungen.
+        $this->oeffentlicheFehler = $boerse;
 
         // 2a. Zu große Uploads: PHP verwirft dann $_POST, was sonst wie ein CSRF-Fehler aussähe.
         if ($request->isPost() && $boerse) {
@@ -861,6 +868,32 @@ final class App
             'text' => 'Die Fotos sind zusammen zu groß (höchstens ' . Uploadgrenzen::mb($max) . ' MB). Bitte weniger oder kleinere Fotos auswählen und das Formular noch einmal ausfüllen.',
             'zurueck' => true,
         ], 413, true);
+    }
+
+    /**
+     * Fehlerseite im öffentlichen Layout (kein Name, kein Menü, keine Meldungen verbraucht, no-store, noindex, ohne
+     * technische Details – auch nicht mit debug).
+     *
+     * @param array<string,string> $header
+     */
+    private function oeffentlicheFehlerSeite(int $status, array $header): Response
+    {
+        try {
+            if ($status === 404) {
+                return OeffentlichController::oeffentlicheSeite($this->view, $this->config, 'nicht_gefunden', ['titel' => 'Nicht gefunden'], 404, true, $header);
+            }
+            [$ueberschrift, $text] = match ($status) {
+                419 => ['Bitte neu laden', 'Die Seite war zu lange offen. Bitte lade sie neu und sende das Formular noch einmal.'],
+                405 => ['Nicht möglich', 'Diese Aktion gibt es hier nicht.'],
+                503 => ['Wartung', 'Die Modellbahnbörse ist gerade nicht erreichbar. Bitte versuche es in ein paar Minuten noch einmal.'],
+                default => ['Fehler', 'Es ist ein technischer Fehler aufgetreten. Bitte versuche es später noch einmal.'],
+            };
+            return OeffentlichController::oeffentlicheSeite($this->view, $this->config, 'hinweis', [
+                'titel' => $ueberschrift, 'ueberschrift' => $ueberschrift, 'text' => $text,
+            ], $status, true, $header);
+        } catch (\Throwable) {
+            return new Response('Es ist ein technischer Fehler aufgetreten.', $status, $header + ['Content-Type' => 'text/plain; charset=utf-8', 'Cache-Control' => 'no-store']);
+        }
     }
 
     /** Pfade, die vor dem Datenbank-Update zu /admin/update führen (siehe 3c in handle()). */
@@ -1082,6 +1115,9 @@ final class App
     /** @param array<string,string> $header */
     private function fehlerSeite(int $status, ?string $detail = null, array $header = []): Response
     {
+        if ($this->oeffentlicheFehler) {
+            return $this->oeffentlicheFehlerSeite($status, $header);
+        }
         try {
             $html = $this->view->render('fehler/' . $status, [
                 'titel' => 'Fehler',
