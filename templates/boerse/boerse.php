@@ -35,6 +35,7 @@ $offene = array_values(array_filter($angebote, fn(array $a): bool => in_array($a
             <?php endif; ?>
             <?php if ($b['status'] !== 'in_vorbereitung'): ?>
                 <a class="btn btn-outline-secondary" href="<?= e(url('/boersen/' . $id . '/verkaeufe')) ?>">Verkäufe</a>
+                <a class="btn btn-outline-secondary" href="<?= e(url('/boersen/' . $id . '/abrechnung')) ?>"><?= $b['status'] === 'laeuft' ? 'Abrechnung und Abschluss' : 'Abrechnung' ?></a>
             <?php endif; ?>
             <?php if ($b['status'] !== 'abgeschlossen'): ?>
                 <a class="btn btn-primary" href="<?= e(url('/boersen/' . $id . '/bearbeiten')) ?>">Bearbeiten</a>

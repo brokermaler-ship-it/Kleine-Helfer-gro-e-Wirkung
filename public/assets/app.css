@@ -226,3 +226,15 @@ body.druckseite { display: block; min-height: 0; background: #e9ecef; }
 .kasse-check .form-check-input { width: 1.5rem; height: 1.5rem; margin: 0; flex-shrink: 0; }
 .kasse-abschluss { min-height: 56px; font-weight: 600; }
 .kasse details > summary { padding: .75rem 0; cursor: pointer; }
+
+/* Abrechnung einer Börse: Haken-Formular kompakt, Druckansicht schlicht auf A4. */
+.abrechnung-haken input[type="date"] { width: auto; max-width: 10.5rem; }
+.abrechnung-mitglieder td, .abrechnung-mitglieder th { vertical-align: middle; }
+@media print {
+    body.abrechnung-druck { background: #fff; font-size: 10pt; }
+    .abrechnung-druck .container { max-width: none; padding: 0; }
+    .abrechnung-druck .table-responsive { overflow: visible; }
+    .abrechnung-druck table { page-break-inside: auto; }
+    .abrechnung-druck tr { page-break-inside: avoid; }
+    .abrechnung-druck .text-success { color: #000 !important; }
+}

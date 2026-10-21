@@ -158,6 +158,12 @@ return function (Router $router, App $app): void {
     $router->add('POST', '/boersen/{id}/starten', $app->erfordert('lesen', $brs('starten')));
     $router->add('GET', '/boersen/{id}/preisschilder', $app->erfordert('lesen', $brs('preisschilder')));
     $router->add('GET', '/boersen/{id}/liste', $app->erfordert('lesen', $brs('gesamtliste')));
+    // Abrechnung, Auszahlungen und Abschluss (Börsenwart im Controller); wieder öffnen nur Admin (Route).
+    $router->add('GET', '/boersen/{id}/abrechnung', $app->erfordert('lesen', $brs('abrechnung')));
+    $router->add('POST', '/boersen/{id}/abschliessen', $app->erfordert('lesen', $brs('abschliessen')));
+    $router->add('POST', '/boersen/{id}/wieder-oeffnen', $app->erfordert('boerse_wieder_oeffnen', $brs('wiederOeffnen')));
+    $router->add('POST', '/boersen/{id}/auszahlungen', $app->erfordert('lesen', $brs('auszahlung')));
+    $router->add('POST', '/boersen/{id}/auszahlungen/{personId}/loeschen', $app->erfordert('lesen', $brs('auszahlungLoeschen')));
 
     // Kasse am Handy (lesen + Börsenwart im Controller, 403): Warenkorb in der Sitzung, Verkauf, Verkaufsliste, Storno.
     $kas = fn(string $m) => fn(Request $r, array $p = []) => $c->get(KasseController::class)->$m($r, $p);

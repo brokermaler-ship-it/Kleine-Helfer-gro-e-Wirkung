@@ -229,6 +229,19 @@ final class AngebotRepository
         }
     }
 
+    /**
+     * Ids der offenen Angebote (angeboten/reserviert) dieser Börse, aufsteigend – ohne Sperre (der Abschluss sperrt sie
+     * danach einzeln in dieser Reihenfolge und prüft den Status erneut). Dauerhafte Angebote gehören zu keiner Börse.
+     *
+     * @return list<int>
+     */
+    public function offeneIdsDerBoerse(int $boerseId): array
+    {
+        $st = $this->pdo->prepare("SELECT id FROM boerse_angebot WHERE boerse_id = ? AND status IN ('angeboten', 'reserviert') ORDER BY id");
+        $st->execute([$boerseId]);
+        return array_map('intval', $st->fetchAll(\PDO::FETCH_COLUMN));
+    }
+
     /** Ist die Sammlung in einem offenen Angebot (angeboten/reserviert)? Vor Migration 017 false. */
     public function offenFuerSammlung(int $sammlungId, ?int $ohneAngebot = null): bool
     {

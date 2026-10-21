@@ -16,6 +16,7 @@ use Emc\Betrieb\DemoDaten;
 use Emc\Boerse\AngebotController;
 use Emc\Boerse\AngebotDienst;
 use Emc\Boerse\AngebotRepository;
+use Emc\Boerse\AbrechnungRepository;
 use Emc\Boerse\BoerseController;
 use Emc\Boerse\KasseController;
 use Emc\Boerse\KasseDienst;
@@ -377,8 +378,10 @@ final class App
             $c->get('pdo'),
             $c->get(BoerseRepository::class),
             $c->get(AngebotRepository::class),
-            $c->get(Aenderungsprotokoll::class)
+            $c->get(Aenderungsprotokoll::class),
+            $c->get(AbrechnungRepository::class)
         ));
+        $this->container->set(AbrechnungRepository::class, fn(Container $c) => new AbrechnungRepository($c->get('pdo')));
         $this->container->set(VerkaufRepository::class, fn(Container $c) => new VerkaufRepository($c->get('pdo')));
         $this->container->set(KasseDienst::class, fn(Container $c) => new KasseDienst(
             $c->get('pdo'),
@@ -420,7 +423,8 @@ final class App
             $c->get(Aenderungsprotokoll::class),
             $c->get(Auth::class),
             $c->get('session'),
-            $this->config
+            $this->config,
+            $c->get(AbrechnungRepository::class)
         ));
         $this->container->set(MagazinController::class, fn(Container $c) => new MagazinController(
             $this->view,

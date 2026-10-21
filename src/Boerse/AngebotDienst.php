@@ -400,9 +400,10 @@ final class AngebotDienst
     private function verlangeOffeneBoerse(int $id, bool $mitHinweis = false): void
     {
         $z = $this->gesperrteBoersen[$id] ?? throw new DomainFehler(self::BOERSE_FEHLT);
-        if ($z['status'] === 'abgeschlossen') {
-            throw new DomainFehler($mitHinweis ? 'Die Börse ist abgeschlossen. Bitte eine offene Börse wählen oder „dauerhaft“.' : self::BOERSE_ABGESCHLOSSEN);
+        if ($mitHinweis && $z['status'] === 'abgeschlossen') {
+            throw new DomainFehler('Die Börse ist abgeschlossen. Bitte eine offene Börse wählen oder „dauerhaft“.');
         }
+        BoerseDienst::verlangeOffen($z);
     }
 
     /** @param array<string,mixed> $a Angebot (mit boerse_status) */
@@ -411,9 +412,7 @@ final class AngebotDienst
         if ($a['status'] === 'verkauft') {
             throw new DomainFehler(self::VERKAUFT);
         }
-        if (($a['boerse_status'] ?? null) === 'abgeschlossen') {
-            throw new DomainFehler(self::BOERSE_ABGESCHLOSSEN);
-        }
+        BoerseDienst::verlangeOffen(['status' => $a['boerse_status'] ?? null]);
     }
 
     /**

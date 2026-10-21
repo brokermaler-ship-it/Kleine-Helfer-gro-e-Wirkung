@@ -21,8 +21,9 @@ use Emc\Protokoll\Aenderungsprotokoll;
 use Emc\Reparatur\ReparaturValidator;
 
 /**
- * Börsen (Veranstaltungen): Liste und Seite lesen alle Angemeldeten; anlegen, bearbeiten, starten, Preisschilder und
- * Gesamtliste nur der Börsenwart (Berechtigung::verlangeBoersenwart, sonst 403).
+ * Börsen (Veranstaltungen): Liste und Seite lesen alle Angemeldeten; anlegen, bearbeiten, starten, Preisschilder,
+ * Gesamtliste, Abrechnung (auch Druckansicht), Auszahlungen und Abschluss nur der Börsenwart
+ * (Berechtigung::verlangeBoersenwart, sonst 403); wieder öffnen nur der Administrator (Route boerse_wieder_oeffnen).
  */
 final class BoerseController
 {
@@ -38,6 +39,7 @@ final class BoerseController
         private Auth $auth,
         private Session $session,
         private array $config,
+        private AbrechnungRepository $abrechnung,
     ) {
     }
 
@@ -93,8 +95,10 @@ final class BoerseController
     {
         $this->verlangeBoersenwart();
         $b = $this->lade($p);
-        if ($b['status'] === 'abgeschlossen') {
-            $this->session->meldung('fehler', AngebotDienst::BOERSE_ABGESCHLOSSEN);
+        try {
+            BoerseDienst::verlangeOffen($b);
+        } catch (DomainFehler $e) {
+            $this->session->meldung('fehler', $e->getMessage());
             return Response::redirect(url('/boersen/' . (int) $b['id']));
         }
         $werte = [
@@ -202,6 +206,107 @@ final class BoerseController
             'dauerhafte' => $this->angebote->suche(new AngebotFilter(dauerhaft: true)),
         ], null);
         return new Response($html, 200, ['Content-Type' => 'text/html; charset=utf-8']);
+    }
+
+    /** GET /boersen/{id}/abrechnung (?druck=1: Druckansicht ohne Menü und ohne Formulare) */
+    public function abrechnung(Request $r, array $p): Response
+    {
+        $this->verlangeBoersenwart();
+        $b = $this->lade($p);
+        $id = (int) $b['id'];
+        $daten = [
+            'titel' => 'Abrechnung ' . $b['name'],
+            'boerse' => $b,
+            'abrechnung' => Abrechnung::berechne($this->abrechnung->positionen($id)),
+            'auszahlungen' => $this->abrechnung->auszahlungen($id),
+            'darfWiederOeffnen' => Berechtigung::darf($this->auth->benutzer(), Berechtigung::BOERSE_WIEDER_OEFFNEN),
+            'heute' => (new \DateTimeImmutable())->format('Y-m-d'),
+        ];
+        if ($r->text('druck') === '1') {
+            $html = $this->view->render('boerse/abrechnung_druck', $daten, null);
+            return new Response($html, 200, ['Content-Type' => 'text/html; charset=utf-8']);
+        }
+        return $this->seite('boerse/abrechnung', $daten);
+    }
+
+    /** POST /boersen/{id}/abschliessen: laeuft → abgeschlossen, offene Stücke gehen zurück. */
+    public function abschliessen(Request $r, array $p): Response
+    {
+        $this->verlangeBoersenwart();
+        $b = $this->lade($p);
+        try {
+            $n = $this->dienst->abschliessen((int) $b['id'], $this->auth->benutzer()?->id, new \DateTimeImmutable());
+            $this->session->meldung('erfolg', 'Die Börse ist abgeschlossen. ' . ($n === 1 ? '1 Stück geht zurück.' : $n . ' Stücke gehen zurück.'));
+        } catch (DomainFehler $e) {
+            $this->session->meldung('fehler', $e->getMessage());
+        }
+        return Response::redirect(url('/boersen/' . (int) $b['id'] . '/abrechnung'));
+    }
+
+    /** POST /boersen/{id}/wieder-oeffnen (nur Admin, prüft die Route): abgeschlossen → laeuft. */
+    public function wiederOeffnen(Request $r, array $p): Response
+    {
+        $b = $this->lade($p);
+        try {
+            $this->dienst->wiederOeffnen((int) $b['id'], $this->auth->benutzer()?->id);
+            $this->session->meldung('erfolg', 'Die Börse ist wieder geöffnet.');
+        } catch (DomainFehler $e) {
+            $this->session->meldung('fehler', $e->getMessage());
+        }
+        return Response::redirect(url('/boersen/' . (int) $b['id'] . '/abrechnung'));
+    }
+
+    /** POST /boersen/{id}/auszahlungen (person_id, ausgezahlt_am – Standard heute): Haken „ausgezahlt“. */
+    public function auszahlung(Request $r, array $p): Response
+    {
+        $this->verlangeBoersenwart();
+        $b = $this->lade($p);
+        $person = self::id($r->text('person_id'));
+        $datum = trim($r->text('ausgezahlt_am'));
+        $datum = $datum === '' ? (new \DateTimeImmutable())->format('Y-m-d') : $datum;
+        try {
+            $this->dienst->vermerkeAuszahlung((int) $b['id'], $person, $datum, $this->auth->benutzer()?->id);
+            $this->session->meldung('erfolg', 'Auszahlung an ' . $this->name((int) $b['id'], $person) . ' vermerkt.');
+        } catch (DomainFehler $e) {
+            $this->session->meldung('fehler', $e->getMessage());
+        }
+        return Response::redirect(url('/boersen/' . (int) $b['id'] . '/abrechnung'));
+    }
+
+    /** POST /boersen/{id}/auszahlungen/{personId}/loeschen: Haken „ausgezahlt“ entfernen. */
+    public function auszahlungLoeschen(Request $r, array $p): Response
+    {
+        $this->verlangeBoersenwart();
+        $b = $this->lade($p);
+        $person = self::id((string) ($p['personId'] ?? ''));
+        try {
+            $this->dienst->entferneAuszahlung((int) $b['id'], $person, $this->auth->benutzer()?->id);
+            $this->session->meldung('erfolg', 'Die Auszahlung an ' . $this->name((int) $b['id'], $person) . ' ist nicht mehr vermerkt.');
+        } catch (DomainFehler $e) {
+            $this->session->meldung('fehler', $e->getMessage());
+        }
+        return Response::redirect(url('/boersen/' . (int) $b['id'] . '/abrechnung'));
+    }
+
+    /** Name der Person aus der Abrechnung (wie in der Tabelle). */
+    private function name(int $boerseId, int $personId): string
+    {
+        foreach (Abrechnung::berechne($this->abrechnung->positionen($boerseId))['mitglieder'] as $m) {
+            if ($m['person_id'] === $personId) {
+                return $m['name'];
+            }
+        }
+        return Aenderungsprotokoll::EHEMALIGES_MITGLIED;
+    }
+
+    /** Positive id aus Formular oder Pfad, sonst 404. */
+    private static function id(string $roh): int
+    {
+        $roh = trim($roh);
+        if (preg_match('/^\d{1,10}$/', $roh) !== 1 || (int) $roh < 1 || (int) $roh > 4294967295) {
+            throw new HttpFehler(404);
+        }
+        return (int) $roh;
     }
 
     // ---- Hilfen -----------------------------------------------------------------------------------------------------

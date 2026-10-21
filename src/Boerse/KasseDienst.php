@@ -260,9 +260,7 @@ final class KasseDienst
             if ($v['storniert_am'] !== null) {
                 throw new DomainFehler(self::SCHON_STORNIERT);
             }
-            if ($boerse['status'] === 'abgeschlossen') {
-                throw new DomainFehler(AngebotDienst::BOERSE_ABGESCHLOSSEN);
-            }
+            BoerseDienst::verlangeOffen($boerse); // gemeinsamer Schreibschutz: abgeschlossen → BOERSE_ABGESCHLOSSEN
             if ($boerse['status'] !== 'laeuft') {
                 throw new DomainFehler(self::LAEUFT_NICHT);
             }
