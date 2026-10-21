@@ -185,7 +185,13 @@ final class DateiController
             // Zurück auf die Seite, von der gelöscht wurde.
             $objekte = ['boerse_angebot' => [$nurAngebot]] + $objekte;
         }
-        $this->dokumente->loeschen((int) $dok['id']);
+        try {
+            $this->dokumente->loeschen((int) $dok['id']);
+        } catch (DomainFehler $e) {
+            // Sperrkonflikt (z. B. eine Kasse schließt gerade ab): nichts gelöscht, Meldung statt 500.
+            $this->session->meldung('fehler', $e->getMessage());
+            return $this->zielNachLoeschen($objekte, $bezuege);
+        }
         $this->raeumeOneDriveAuf();
         foreach ($angebotIds as $angebotId) {
             if ($benutzer !== null && $this->angebote?->fotoGeaendert($angebotId, $benutzer) === true) {
@@ -204,6 +210,17 @@ final class DateiController
             ]);
         }
         $this->session->meldung('erfolg', 'Die Datei wurde gelöscht.');
+        return $this->zielNachLoeschen($objekte, $bezuege);
+    }
+
+    /**
+     * Zurück auf die Seite des ersten betroffenen Objekts bzw. der Wartung/Reparatur.
+     *
+     * @param array<string, list<int>> $objekte
+     * @param list<array{art:string, id:int, typ:string, objekt:array<string,mixed>, datum:string}> $bezuege
+     */
+    private function zielNachLoeschen(array $objekte, array $bezuege): Response
+    {
         foreach ($objekte as $typ => $ids) {
             if (isset($ids[0])) {
                 return $this->zurueck($typ, $ids[0]);

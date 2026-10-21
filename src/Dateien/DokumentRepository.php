@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Emc\Dateien;
 
+use Emc\Core\Transaktion;
 use Emc\OneDrive\Auftraege;
 
 final class DokumentRepository
@@ -85,8 +86,11 @@ final class DokumentRepository
             ->execute([$dokumentId, $fahrzeugId]);
     }
 
-    /** Objekttypen mit eigener Spalte titelbild_dokument_id, deren Titelbild über setzeTitelbildWennLeer gesetzt wird. */
-    private const TITELBILD_TABELLEN = ['magazin_artikel' => 'magazin_artikel', 'boerse_angebot' => 'boerse_angebot'];
+    /**
+     * Objekttypen mit eigener Spalte titelbild_dokument_id, deren Titelbild über setzeTitelbildWennLeer gesetzt wird.
+     * Reihenfolge = Sperrreihenfolge der App (boerse_angebot vor magazin_artikel, wie die Kasse).
+     */
+    private const TITELBILD_TABELLEN = ['boerse_angebot' => 'boerse_angebot', 'magazin_artikel' => 'magazin_artikel'];
 
     public static function hatTitelbild(string $objektTyp): bool
     {
@@ -122,14 +126,9 @@ final class DokumentRepository
         if ($this->finde($id) === null) {
             return; // wie bisher: ohne Datensatz keine Transaktion
         }
-        $this->pdo->beginTransaction();
-        try {
-            $pfad = $this->loescheDatensatz($id);
-            $this->pdo->commit();
-        } catch (\Throwable $t) {
-            $this->pdo->rollBack();
-            throw $t;
-        }
+        // READ COMMITTED: die UPDATEs der Titelbild-Verweise sperren nur passende Zeilen, nicht alle gelesenen
+        // (sonst wartete ein Foto-Löschen auf eine laufende Kasse). Sperrkonflikt → DomainFehler SPERRKONFLIKT.
+        $pfad = Transaktion::readCommitted($this->pdo, fn(): ?string => $this->loescheDatensatz($id));
         if ($pfad !== null) {
             $this->entferneDateien($pfad);
         }
@@ -151,6 +150,7 @@ final class DokumentRepository
             $drive = is_string($dok['onedrive_drive_id'] ?? null) ? $dok['onedrive_drive_id'] : null;
             $this->auftraege->neu('loeschen', null, $dok['onedrive_item_id'], null, $drive);
         }
+        // Reihenfolge wie die Sperrreihenfolge der App: fahrzeug → … → boerse_angebot → magazin_artikel.
         $this->pdo->prepare('UPDATE fahrzeug SET titelbild_dokument_id = NULL, geaendert_am = geaendert_am WHERE titelbild_dokument_id = ?')->execute([$id]);
         // anlage ab Migration 011, magazin_artikel ab 016, boerse_angebot ab 017: vor dem Datenbank-Update fehlt die Tabelle.
         $ohneTitelbild = [];

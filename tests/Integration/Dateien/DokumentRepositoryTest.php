@@ -152,4 +152,36 @@ final class DokumentRepositoryTest extends DbTestCase
             $this->assertFileExists($this->speicher . '/2026/10/a.jpg' . $endung);
         }
     }
+    /**
+     * Ein Foto löschen darf nicht an Zeilen warten, die eine Kasse gerade gesperrt hat (Angebote, Magazinartikel ohne
+     * dieses Foto): READ COMMITTED und Indizes auf titelbild_dokument_id sperren nur die passenden Zeilen.
+     */
+    public function test_loeschen_wartet_nicht_auf_fremd_gesperrte_zeilen(): void
+    {
+        $kat = (int) $this->pdo->query("SELECT id FROM magazin_kategorie WHERE schluessel = 'sonstiges'")->fetchColumn();
+        $this->pdo->exec("INSERT INTO magazin_artikel (bezeichnung, kategorie_id) VALUES ('Gleis', $kat), ('Weiche', $kat)");
+        $mitFoto = (int) $this->pdo->query("SELECT id FROM magazin_artikel WHERE bezeichnung = 'Gleis'")->fetchColumn();
+        $gesperrt = (int) $this->pdo->query("SELECT id FROM magazin_artikel WHERE bezeichnung = 'Weiche'")->fetchColumn();
+        $this->pdo->exec("INSERT INTO boerse_angebot (jahr, laufnummer, bezeichnung, kategorie_id, wunschpreis, herkunft) VALUES (2026, 1, 'Lok', $kat, '5.00', 'verein')");
+        $angebot = (int) $this->pdo->lastInsertId();
+        $fz = $this->fahrzeug('EMC-0001');
+        $id = $this->dokument('a.jpg');
+        $this->repo->zuordnen($id, 'magazin_artikel', $mitFoto);
+        $this->pdo->exec("UPDATE magazin_artikel SET titelbild_dokument_id = $id WHERE id = $mitFoto");
+
+        $kasse = self::verbindung();
+        $kasse->beginTransaction();
+        $kasse->query("SELECT id FROM boerse_angebot WHERE id = $angebot FOR UPDATE")->fetchAll();
+        $kasse->query("SELECT id FROM magazin_artikel WHERE id = $gesperrt FOR UPDATE")->fetchAll();
+        $kasse->query("SELECT id FROM fahrzeug WHERE id = $fz FOR UPDATE")->fetchAll();
+        $this->pdo->exec('SET SESSION innodb_lock_wait_timeout = 1');
+        try {
+            $this->repo->loeschen($id);
+        } finally {
+            $kasse->rollBack();
+            $this->pdo->exec('SET SESSION innodb_lock_wait_timeout = DEFAULT');
+        }
+        $this->assertNull($this->repo->finde($id));
+        $this->assertNull($this->pdo->query("SELECT titelbild_dokument_id FROM magazin_artikel WHERE id = $mitFoto")->fetchColumn());
+    }
 }
