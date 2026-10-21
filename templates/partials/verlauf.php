@@ -10,7 +10,7 @@ $zeige = function (mixed $w): string {
 };
 ?>
 <section class="mt-4" aria-labelledby="verlauf-titel">
-    <h2 class="h5" id="verlauf-titel">Verlauf</h2>
+    <h2 class="h5" id="verlauf-titel"><?= e($verlaufTitel ?? 'Verlauf') ?></h2>
     <?php if ($verlauf === []): ?>
         <p class="text-muted">Noch keine Einträge.</p>
     <?php else: ?>

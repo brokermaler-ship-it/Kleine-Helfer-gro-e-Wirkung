@@ -93,6 +93,32 @@ final class UebertragungTest extends OneDriveTestCase
         self::assertSame('Sonstiges/Anleitung (1).pdf', $this->dok($id)['onedrive_pfad']);
     }
 
+    public function test_magazinfoto_in_ordner_magazin(): void
+    {
+        $kategorie = (int) $this->pdo->query("SELECT id FROM magazin_kategorie WHERE schluessel = 'sonstiges'")->fetchColumn();
+        $this->pdo->prepare('INSERT INTO magazin_artikel (bezeichnung, kategorie_id) VALUES (?, ?)')->execute(['Märklin C-Gleis', $kategorie]);
+        $artikel = (int) $this->pdo->lastInsertId();
+        $id = $this->dokument();
+        $this->pdo->exec("INSERT INTO dokument_zuordnung (dokument_id, objekt_typ, objekt_id) VALUES ($id, 'magazin_artikel', $artikel)");
+        $this->verbinde();
+        $this->auftrag($id);
+        $this->http->antwort(201, ['id' => 'I', 'name' => 'Anleitung.pdf']);
+        $this->uebertragung()->verarbeite(5, $this->jetzt);
+        self::assertSame('Magazin/M' . $artikel . ' Märklin C-Gleis/Anleitung.pdf', $this->dok($id)['onedrive_pfad']);
+    }
+
+    public function test_fotos_aus_boersenanfragen_bleiben_lokal(): void
+    {
+        $id = $this->dokument();
+        $this->pdo->exec("INSERT INTO dokument_zuordnung (dokument_id, objekt_typ, objekt_id) VALUES ($id, 'boerse_anfrage', 1)");
+        $this->verbinde();
+        self::assertSame(0, $this->uebertragung()->umzug($this->jetzt));
+        $this->auftrag($id);
+        $this->uebertragung()->verarbeite(5, $this->jetzt);
+        self::assertSame([], $this->http->anfragen);
+        self::assertSame('lokal', $this->dok($id)['ablage']);
+    }
+
     public function testOriginalBehaltenKonfiguriert(): void
     {
         $id = $this->dokument();

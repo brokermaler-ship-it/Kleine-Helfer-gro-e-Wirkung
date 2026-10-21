@@ -237,7 +237,8 @@ final class Uebertragung
         $jetzt ??= new \DateTimeImmutable();
         $st = $this->pdo->prepare(
             "INSERT INTO onedrive_auftrag (art, dokument_id, naechster_versuch) SELECT 'hochladen', d.id, ? FROM dokument d "
-            . "WHERE d.ablage = 'lokal' AND NOT EXISTS (SELECT 1 FROM onedrive_auftrag a WHERE a.dokument_id = d.id AND a.art = 'hochladen' AND a.status = 'wartet')"
+            . "WHERE d.ablage = 'lokal' AND NOT EXISTS (SELECT 1 FROM onedrive_auftrag a WHERE a.dokument_id = d.id AND a.art = 'hochladen' AND a.status = 'wartet') "
+            . "AND NOT EXISTS (SELECT 1 FROM dokument_zuordnung z WHERE z.dokument_id = d.id AND z.objekt_typ = 'boerse_anfrage')"
         );
         $st->execute([$jetzt->format('Y-m-d H:i:s')]);
         return $st->rowCount();
@@ -275,6 +276,11 @@ final class Uebertragung
         if ($basis === null || !is_file($basis)) {
             throw new \RuntimeException('Die lokale Datei fehlt.');
         }
+        // Fotos aus öffentlichen Börsenanfragen gehen nie nach OneDrive (auch nicht, wenn sie inzwischen zusätzlich an
+        // einem Magazinartikel hängen); sie bleiben lokal und werden mit der Anfrage gelöscht.
+        if ($this->dokumente->objekte($dokumentId, 'boerse_anfrage') !== []) {
+            return;
+        }
         $fahrzeugIds = $this->dokumente->objekte($dokumentId, 'fahrzeug');
         $anlageIds = $this->dokumente->objekte($dokumentId, 'anlage');
         $unterordner = '';
@@ -293,6 +299,19 @@ final class Uebertragung
                 }
             }
         }
+        $pfad = null;
+        if ($fahrzeugIds === [] && $anlageIds === []) {
+            // Foto eines Magazinartikels: Ordner „Magazin/M<id> <Bezeichnung>“.
+            foreach ($this->dokumente->objekte($dokumentId, 'magazin_artikel') as $artikelId) {
+                $st = $this->pdo->prepare('SELECT id, bezeichnung FROM magazin_artikel WHERE id = ?');
+                $st->execute([$artikelId]);
+                $artikel = $st->fetch(\PDO::FETCH_ASSOC);
+                if ($artikel !== false) {
+                    $pfad = Pfadbildner::fuerMagazin($dok, $artikel);
+                }
+                break;
+            }
+        }
         $fahrzeug = null;
         foreach ($fahrzeugIds as $fzId) {
             $st = $this->pdo->prepare('SELECT inventarnummer, bezeichnung FROM fahrzeug WHERE id = ?');
@@ -309,7 +328,7 @@ final class Uebertragung
                 break;
             }
         }
-        $e = $this->graph->hochladen($ziel['drive_id'], $ziel['item_id'], Pfadbildner::fuerDokument($dok, $fahrzeug, $anlage, $unterordner), $basis);
+        $e = $this->graph->hochladen($ziel['drive_id'], $ziel['item_id'], $pfad ?? Pfadbildner::fuerDokument($dok, $fahrzeug, $anlage, $unterordner), $basis);
 
         // Erst vermerken, dann das Original entfernen: bricht etwas dazwischen ab, bleibt die Datei erreichbar.
         $st = $this->pdo->prepare("UPDATE dokument SET ablage = 'onedrive', onedrive_item_id = ?, onedrive_drive_id = ?, onedrive_pfad = ?, original_lokal = 1 WHERE id = ? AND ablage = 'lokal'");

@@ -223,3 +223,21 @@
         });
     });
 })();
+// Magazin: Felder für Literatur (Autor/Verlag, Jahr, ISBN) nur bei der Kategorie mit dem Schlüssel „literatur“ zeigen.
+// Ohne JavaScript bleiben sie sichtbar; der Server speichert sie bei anderen Kategorien nicht.
+(function () {
+    'use strict';
+    document.querySelectorAll('select[data-literatur-wahl]').forEach(function (wahl) {
+        var form = wahl.form;
+        var bereich = form ? form.querySelector('[data-nur-literatur]') : null;
+        if (!bereich) { return; }
+        var hinweis = bereich.querySelector('[data-nur-literatur-hinweis]');
+        function anpassen() {
+            var option = wahl.options[wahl.selectedIndex];
+            bereich.hidden = !(option && option.getAttribute('data-schluessel') === 'literatur');
+            if (hinweis) { hinweis.hidden = true; }
+        }
+        wahl.addEventListener('change', anpassen);
+        anpassen();
+    });
+})();

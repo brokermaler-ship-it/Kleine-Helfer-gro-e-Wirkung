@@ -20,6 +20,8 @@ use Emc\Digital\DecoderController;
 use Emc\Digital\FunktionController;
 use Emc\Etiketten\EtikettController;
 use Emc\Fahrzeuge\FahrzeugController;
+use Emc\Magazin\KategorieController;
+use Emc\Magazin\MagazinController;
 use Emc\OneDrive\OneDriveController;
 use Emc\Personen\BenutzerController;
 use Emc\Personen\KontoController;
@@ -109,6 +111,25 @@ return function (Router $router, App $app): void {
     $router->add('POST', '/reparaturen/{id}', $app->erfordert('lesen', $rep('aendern')));
     $router->add('POST', '/reparaturen/{id}/fotos', $app->erfordert('lesen', $rep('fotos')));
 
+    // Magazin: lesen alle; Schreibrouten prüfen Berechtigung::verlangeBoersenwart im Controller (403). Keine Löschroute –
+    // Artikel und Buchungen bleiben, Korrekturen laufen über Gegenbuchungen. Statische Pfade vor /magazin/{id}.
+    $mag = fn(string $m) => fn(Request $r, array $p = []) => $c->get(MagazinController::class)->$m($r, $p);
+    $router->add('GET', '/magazin', $app->erfordert('lesen', $mag('liste')));
+    $router->add('GET', '/magazin/neu', $app->erfordert('lesen', $mag('neu')));
+    $router->add('POST', '/magazin', $app->erfordert('lesen', $mag('anlegen')));
+    $router->add('GET', '/magazin/sammlungen', $app->erfordert('lesen', $mag('sammlungen')));
+    $router->add('GET', '/magazin/sammlungen/neu', $app->erfordert('lesen', $mag('sammlungNeu')));
+    $router->add('POST', '/magazin/sammlungen', $app->erfordert('lesen', $mag('sammlungAnlegen')));
+    $router->add('GET', '/magazin/sammlungen/{id}', $app->erfordert('lesen', $mag('sammlungAnzeigen')));
+    $router->add('POST', '/magazin/sammlungen/{id}', $app->erfordert('lesen', $mag('sammlungAendern')));
+    $router->add('POST', '/magazin/sammlungen/{id}/umlagern', $app->erfordert('lesen', $mag('sammlungUmlagern')));
+    $router->add('POST', '/magazin/buchungen/{id}/gegenbuchung', $app->erfordert('lesen', $mag('gegenbuchen')));
+    $router->add('GET', '/magazin/{id}', $app->erfordert('lesen', $mag('anzeigen')));
+    $router->add('GET', '/magazin/{id}/bearbeiten', $app->erfordert('lesen', $mag('bearbeiten')));
+    $router->add('POST', '/magazin/{id}', $app->erfordert('lesen', $mag('aendern')));
+    $router->add('POST', '/magazin/{id}/buchungen', $app->erfordert('lesen', $mag('buchen')));
+    $router->add('POST', '/magazin/{id}/fotos', $app->erfordert('lesen', $mag('fotos')));
+
     // Etiketten (ab Fahrzeugwart): nur der POST „Als gedruckt vermerken“ setzt etikett_gedruckt_am.
     $etk = fn(string $m) => fn(Request $r, array $p = []) => $c->get(EtikettController::class)->$m($r);
     $router->add('GET', '/etiketten', $app->erfordert('etiketten_drucken', $etk('formular')));
@@ -174,6 +195,10 @@ return function (Router $router, App $app): void {
     $router->add('GET', '/admin/spurweiten', $app->erfordert('stammdaten_verwalten', $spur('liste')));
     $router->add('POST', '/admin/spurweiten', $app->erfordert('stammdaten_verwalten', $spur('speichern')));
     $router->add('POST', '/admin/spurweiten/{id}/loeschen', $app->erfordert('stammdaten_verwalten', $spur('loeschen')));
+    $mkat = fn(string $m) => fn(Request $r, array $p = []) => $c->get(KategorieController::class)->$m($r, $p);
+    $router->add('GET', '/admin/magazin-kategorien', $app->erfordert('stammdaten_verwalten', $mkat('liste')));
+    $router->add('POST', '/admin/magazin-kategorien', $app->erfordert('stammdaten_verwalten', $mkat('speichern')));
+    $router->add('POST', '/admin/magazin-kategorien/{id}/loeschen', $app->erfordert('stammdaten_verwalten', $mkat('loeschen')));
     $wart = fn(string $m) => fn(Request $r, array $p = []) => $c->get(WartungsartController::class)->$m($r, $p);
     $router->add('GET', '/admin/wartungsarten', $app->erfordert('wartungsart_verwalten', $wart('liste')));
     $router->add('POST', '/admin/wartungsarten', $app->erfordert('wartungsart_verwalten', $wart('speichern')));

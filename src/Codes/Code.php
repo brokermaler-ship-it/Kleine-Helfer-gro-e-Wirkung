@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Emc\Codes;
 
 /**
- * Kurze Codes für Fahrzeuge (F<n>, n = Zahl der Inventarnummer EMC-<n> ohne führende Nullen) und Anlagen (A<n>,
- * siehe AnlagenCode). Reine Logik ohne Datenbank.
+ * Kurze Codes für Fahrzeuge (F<n>, n = Zahl der Inventarnummer EMC-<n> ohne führende Nullen), Anlagen (A<n>,
+ * siehe AnlagenCode) und Magazinartikel (M<n>, n = ID des Artikels). Reine Logik ohne Datenbank.
  */
 final class Code
 {
@@ -14,6 +14,12 @@ final class Code
     public static function fahrzeug(string $inventarnummer): ?string
     {
         return preg_match('/^EMC-0*([1-9][0-9]*)$/', $inventarnummer, $m) === 1 ? 'F' . $m[1] : null;
+    }
+
+    /** Code eines Magazinartikels: „M“ und seine ID (37 → „M37“). */
+    public static function magazin(int $id): string
+    {
+        return 'M' . $id;
     }
 
     /** Entfernt alle Leerraumzeichen (auch geschützte Leerzeichen) und schreibt groß. */
@@ -25,13 +31,21 @@ final class Code
         return mb_strtoupper($ohne, 'UTF-8');
     }
 
-    /** @return ?array{typ:string, nummer:int} „F12“ → fahrzeug/12, „a3“ → anlage/3; sonst null (auch F0, F12a). */
+    /**
+     * @return ?array{typ:string, nummer:int} „F12“ → fahrzeug/12, „a3“ → anlage/3, „m 007“ → magazin/7; sonst null
+     *         (auch F0, M0, F12a)
+     */
     public static function zerlege(string $eingabe): ?array
     {
-        if (preg_match('/^([FA])0*([1-9][0-9]{0,8})$/', self::normalisiere($eingabe), $m) !== 1) {
+        if (preg_match('/^([FAM])0*([1-9][0-9]{0,8})$/', self::normalisiere($eingabe), $m) !== 1) {
             return null;
         }
-        return ['typ' => $m[1] === 'F' ? 'fahrzeug' : 'anlage', 'nummer' => (int) $m[2]];
+        $typ = match ($m[1]) {
+            'F' => 'fahrzeug',
+            'A' => 'anlage',
+            'M' => 'magazin',
+        };
+        return ['typ' => $typ, 'nummer' => (int) $m[2]];
     }
 
     /**

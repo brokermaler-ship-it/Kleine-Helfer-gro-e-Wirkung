@@ -155,6 +155,7 @@ final class DateiController
         $objekte = [
             'fahrzeug' => $this->dokumente->objekte((int) $dok['id'], 'fahrzeug'),
             'anlage' => $this->dokumente->objekte((int) $dok['id'], 'anlage'),
+            'magazin_artikel' => $this->dokumente->objekte((int) $dok['id'], 'magazin_artikel'),
         ];
         $this->dokumente->loeschen((int) $dok['id']);
         $this->raeumeOneDriveAuf();
@@ -214,8 +215,9 @@ final class DateiController
     /**
      * Löschregel für Dateien (die Route kennt keinen Fahrzeugkontext, daher wird er aus den Zuordnungen abgeleitet):
      * Bearbeiter und Admin (Dateien bearbeiten) dürfen jede Datei löschen. Alle anderen nur eine Datei mit genau einer
-     * Zuordnung: an einem Fahrzeug, das sie bearbeiten dürfen, oder als Foto einer Wartung bzw. Reparatur mit demselben
-     * Recht wie beim Eintragen der Wartung bzw. Bearbeiten der Reparatur. Geteilte Dokumente bleiben damit Bearbeitern
+     * Zuordnung: an einem Fahrzeug, das sie bearbeiten dürfen, als Foto einer Wartung bzw. Reparatur mit demselben
+     * Recht wie beim Eintragen der Wartung bzw. Bearbeiten der Reparatur, oder als Foto eines Magazinartikels als
+     * Börsenwart. Geteilte Dokumente bleiben damit Bearbeitern
      * vorbehalten.
      *
      * @param array<string,mixed> $dok
@@ -237,6 +239,11 @@ final class DateiController
             if (!$erlaubt) {
                 throw new HttpFehler(403);
             }
+            return;
+        }
+        if ($art === 'magazin_artikel') {
+            // Fotos eines Magazinartikels pflegt der Börsenwart (wie das Hochladen).
+            Berechtigung::verlangeBoersenwart($benutzer);
             return;
         }
         if ($art !== 'fahrzeug') {
@@ -361,6 +368,9 @@ final class DateiController
 
     private function zurueck(string $typ, int $objektId): Response
     {
+        if ($typ === 'magazin_artikel') {
+            return Response::redirect(url('/magazin/' . $objektId) . '#fotos');
+        }
         return Response::redirect(url(($typ === 'anlage' ? '/anlagen/' : '/fahrzeuge/') . $objektId) . '#dateien');
     }
 

@@ -7,6 +7,7 @@ namespace Emc\Tests\Integration\Codes;
 use Emc\Anlagen\AnlageRepository;
 use Emc\Codes\CodeAufloesung;
 use Emc\Fahrzeuge\FahrzeugRepository;
+use Emc\Magazin\MagazinRepository;
 use Emc\Tests\Integration\DbTestCase;
 
 final class CodeAufloesungTest extends DbTestCase
@@ -18,7 +19,7 @@ final class CodeAufloesungTest extends DbTestCase
     {
         parent::setUp();
         $this->h0 = (int) $this->pdo->query("SELECT id FROM spurweite WHERE name = 'H0'")->fetchColumn();
-        $this->aufloesung = new CodeAufloesung(new FahrzeugRepository($this->pdo), new AnlageRepository($this->pdo));
+        $this->aufloesung = new CodeAufloesung(new FahrzeugRepository($this->pdo), new AnlageRepository($this->pdo), new MagazinRepository($this->pdo));
     }
 
     private function fahrzeug(string $nummer, string $bezeichnung, string $status = 'einsatzbereit'): int
@@ -169,5 +170,35 @@ final class CodeAufloesungTest extends DbTestCase
         $fz = $this->fahrzeug('EMC-0012', 'V 200');
         $this->assertSame('leer', $this->aufloesung->loese('   ')->art);
         $this->assertSame('/fahrzeuge/' . $fz . '/defekt', $this->aufloesung->loese('F12', '/defekt')->ziel);
+    }
+
+    public function test_magazin_code(): void
+    {
+        $kategorie = (int) $this->pdo->query("SELECT id FROM magazin_kategorie WHERE schluessel = 'sonstiges'")->fetchColumn();
+        $this->pdo->prepare('INSERT INTO magazin_artikel (bezeichnung, kategorie_id) VALUES (?, ?)')->execute(['Märklin C-Gleis', $kategorie]);
+        $id = (int) $this->pdo->lastInsertId();
+        $e = $this->aufloesung->loese('M' . $id);
+        $this->assertSame('direkt', $e->art);
+        $this->assertSame('/magazin/' . $id, $e->ziel);
+        $e = $this->aufloesung->loese(' m 00' . $id . ' ');
+        $this->assertSame('/magazin/' . $id, $e->ziel);
+
+        $e = $this->aufloesung->loese('M99999');
+        $this->assertSame('suche', $e->art);
+        $this->assertNull($e->ziel);
+        $this->assertSame('Kein Magazinartikel mit diesem Code.', $e->meldung);
+        $this->assertSame(CodeAufloesung::NICHT_GEFUNDEN_MAGAZIN, $e->meldung);
+
+        // „Defekt melden“ gibt es für Magazinartikel nicht: der Code geht in die Suche.
+        $e = $this->aufloesung->loese('M' . $id, '/defekt');
+        $this->assertSame('suche', $e->art);
+        $this->assertNull($e->ziel);
+    }
+
+    public function test_magazin_ohne_repository(): void
+    {
+        $e = (new CodeAufloesung(new FahrzeugRepository($this->pdo), new AnlageRepository($this->pdo)))->loese('M1');
+        $this->assertSame('suche', $e->art);
+        $this->assertSame('Kein Magazinartikel mit diesem Code.', $e->meldung);
     }
 }

@@ -85,7 +85,26 @@ final class DokumentRepository
             ->execute([$dokumentId, $fahrzeugId]);
     }
 
-    /** Entfernt Datensatz, Zuordnungen, Datei und Varianten; löst Titelbild-Verweise (Fahrzeuge und Anlagen). */
+    /** Objekttypen mit eigener Spalte titelbild_dokument_id, deren Titelbild über setzeTitelbildWennLeer gesetzt wird. */
+    private const TITELBILD_TABELLEN = ['magazin_artikel' => 'magazin_artikel', 'boerse_angebot' => 'boerse_angebot'];
+
+    public static function hatTitelbild(string $objektTyp): bool
+    {
+        return isset(self::TITELBILD_TABELLEN[$objektTyp]);
+    }
+
+    /**
+     * Setzt das Titelbild eines Magazinartikels bzw. Börsenangebots, solange keins gesetzt ist. Ändert bewusst nicht
+     * geaendert_am (kein Bearbeitungskonflikt durch ein Foto).
+     */
+    public function setzeTitelbildWennLeer(string $objektTyp, int $objektId, int $dokumentId): void
+    {
+        $tabelle = self::TITELBILD_TABELLEN[$objektTyp] ?? throw new \InvalidArgumentException('Objekttyp ohne Titelbild: ' . $objektTyp);
+        $this->pdo->prepare("UPDATE $tabelle SET titelbild_dokument_id = ?, geaendert_am = geaendert_am WHERE id = ? AND titelbild_dokument_id IS NULL")
+            ->execute([$dokumentId, $objektId]);
+    }
+
+    /** Entfernt Datensatz, Zuordnungen, Datei und Varianten; löst Titelbild-Verweise (Fahrzeuge, Anlagen, Magazinartikel, Angebote). */
     public function loeschen(int $id): void
     {
         if ($this->finde($id) === null) {
@@ -121,13 +140,15 @@ final class DokumentRepository
             $this->auftraege->neu('loeschen', null, $dok['onedrive_item_id'], null, $drive);
         }
         $this->pdo->prepare('UPDATE fahrzeug SET titelbild_dokument_id = NULL, geaendert_am = geaendert_am WHERE titelbild_dokument_id = ?')->execute([$id]);
-        try {
-            $this->pdo->prepare('UPDATE anlage SET titelbild_dokument_id = NULL, geaendert_am = geaendert_am WHERE titelbild_dokument_id = ?')->execute([$id]);
-        } catch (\PDOException $e) {
-            if ((string) $e->getCode() !== '42S02') {
-                throw $e;
+        // anlage ab Migration 011, magazin_artikel ab 016, boerse_angebot ab 017: vor dem Datenbank-Update fehlt die Tabelle.
+        foreach (['anlage', ...array_values(self::TITELBILD_TABELLEN)] as $tabelle) {
+            try {
+                $this->pdo->prepare("UPDATE $tabelle SET titelbild_dokument_id = NULL, geaendert_am = geaendert_am WHERE titelbild_dokument_id = ?")->execute([$id]);
+            } catch (\PDOException $e) {
+                if ((string) $e->getCode() !== '42S02') {
+                    throw $e;
+                }
             }
-            // Datenbank-Update (Migration 011) noch nicht ausgeführt: es gibt noch keine Anlagen.
         }
         $this->pdo->prepare('DELETE FROM dokument_zuordnung WHERE dokument_id = ?')->execute([$id]);
         $this->pdo->prepare('DELETE FROM dokument WHERE id = ?')->execute([$id]);

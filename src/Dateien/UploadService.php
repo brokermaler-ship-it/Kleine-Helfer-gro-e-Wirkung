@@ -48,9 +48,11 @@ final class UploadService
 
     /**
      * @param array<string,mixed> $phpDatei Eintrag aus $_FILES (name, tmp_name, error, size)
+     * @param ?string $objektTyp weiteres Objekt für den OneDrive-Ordner (z. B. magazin_artikel) samt $objektId;
+     *                           Dateien zu 'boerse_anfrage' werden nie nach OneDrive übertragen
      * @throws UploadFehler
      */
-    public function speichere(array $phpDatei, string $titel, string $kategorie, ?int $benutzerId, ?int $fahrzeugId = null, ?int $anlageId = null, ?int $wartungId = null, ?int $reparaturId = null): int
+    public function speichere(array $phpDatei, string $titel, string $kategorie, ?int $benutzerId, ?int $fahrzeugId = null, ?int $anlageId = null, ?int $wartungId = null, ?int $reparaturId = null, ?string $objektTyp = null, ?int $objektId = null): int
     {
         $tmp = $this->pruefeUpload($phpDatei);
         $groesse = (int) filesize($tmp);
@@ -104,7 +106,14 @@ final class UploadService
             throw $t;
         }
         $id = (int) $this->pdo->lastInsertId();
-        $this->uebertrageNachOneDrive($id, ['fahrzeug' => $fahrzeugId, 'anlage' => $anlageId, 'wartung' => $wartungId, 'reparatur' => $reparaturId]);
+        if ($objektTyp === 'boerse_anfrage') {
+            return $id; // Fotos aus öffentlichen Anfragen bleiben lokal.
+        }
+        $objekte = ['fahrzeug' => $fahrzeugId, 'anlage' => $anlageId, 'wartung' => $wartungId, 'reparatur' => $reparaturId];
+        if ($objektTyp !== null && $objektId !== null && !isset($objekte[$objektTyp])) {
+            $objekte[$objektTyp] = $objektId;
+        }
+        $this->uebertrageNachOneDrive($id, $objekte);
         return $id;
     }
 
@@ -112,7 +121,7 @@ final class UploadService
      * Legt den Übertragungsauftrag an und versucht ihn sofort. Die Datei ist lokal bereits vollständig
      * gespeichert; jeder Fehler hier bleibt unsichtbar (nur Log ohne Geheimnisse) und wird später wiederholt.
      */
-    /** @param array<string,?int> $objekte Objekt-ID je Typ (fahrzeug, anlage, wartung, reparatur) */
+    /** @param array<string,?int> $objekte Objekt-ID je Typ (fahrzeug, anlage, wartung, reparatur, magazin_artikel …) */
     private function uebertrageNachOneDrive(int $dokumentId, array $objekte): void
     {
         if ($this->uebertragung === null) {

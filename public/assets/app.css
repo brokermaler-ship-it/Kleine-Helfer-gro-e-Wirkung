@@ -86,8 +86,10 @@ main { padding-bottom: 2rem; flex: 1 0 auto; }
 /* Badge „neue Defektmeldungen“ am Menüpunkt „Reparaturen“: klein, damit die Kopfzeile ab xl einzeilig bleibt. */
 .emc-navbar .nav-link .badge { font-size: .7em; padding: .3em .5em; vertical-align: .15em; }
 @media (min-width: 1200px) and (max-width: 1399.98px) {
-    .emc-codefeld .form-control { width: 8.25rem; }
-    .emc-benutzername { max-width: 7.5rem; }
+    /* Mit dem Menüpunkt „Magazin“ (0.8.0) etwas enger, damit die Kopfzeile auch für Administratoren einzeilig bleibt. */
+    .emc-navbar .navbar-nav { --bs-navbar-nav-link-padding-x: .3rem; }
+    .emc-codefeld .form-control { width: 7rem; }
+    .emc-benutzername { max-width: 6.5rem; }
 }
 /* „Defekt melden“: eine Spalte, große Ziele für den Daumen */
 .emc-meldung { max-width: 36rem; }
@@ -179,4 +181,12 @@ body.druckseite { display: block; min-height: 0; background: #e9ecef; }
     .druckseite .boegen { overflow: visible; padding: 0; }
     .druckseite .bogen { margin: 0; box-shadow: none; }
     .druckseite .feld-leer, .druckseite .etikett { outline: none; }
+}
+
+/* Magazin */
+.min-w-0 { min-width: 0; }
+.magazin-foto { width: 128px; height: 96px; object-fit: cover; }
+/* Markentext „Lokschuppen“ neben dem Logo erst ab 1600 px wieder (mit „Magazin“ ist das Menü dazwischen zu breit). */
+@media (min-width: 1600px) {
+    .emc-navbar .emc-markentext { display: inline !important; }
 }

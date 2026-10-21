@@ -13,7 +13,7 @@ use Emc\Auth\Berechtigung;
     <div class="container">
         <a class="navbar-brand d-flex align-items-center gap-2" href="<?= e(url('/')) ?>" aria-label="<?= e($app_name ?? '') ?>">
             <span class="navbar-logo"><img src="<?= e(url('assets/marke/logo-128.png')) ?>" alt="" width="36" height="36"></span>
-            <span<?= $benutzer !== null ? ' class="d-none d-sm-inline d-xl-none d-xxl-inline"' : '' ?>>Lokschuppen</span>
+            <span<?= $benutzer !== null ? ' class="d-none d-sm-inline d-xl-none emc-markentext"' : '' ?>>Lokschuppen</span>
         </a>
         <?php if ($benutzer !== null): ?>
         <form method="get" action="<?= e(url('/code')) ?>" role="search" class="emc-codefeld d-flex ms-auto me-2 order-xl-last ms-xl-3 me-xl-0">
@@ -35,6 +35,7 @@ use Emc\Auth\Berechtigung;
                     </ul>
                 </li>
                 <li class="nav-item"><a class="nav-link" href="<?= e(url('/anlagen')) ?>">Anlagen</a></li>
+                <li class="nav-item"><a class="nav-link" href="<?= e(url('/magazin')) ?>">Magazin</a></li>
                 <li class="nav-item"><a class="nav-link" href="<?= e(url('/wartung')) ?>">Wartung</a></li>
                 <?php $neu = $neueDefekte !== null ? $neueDefekte() : null; ?>
                 <li class="nav-item"><a class="nav-link" href="<?= e(url('/reparaturen')) ?>">Reparaturen<?php if ($neu !== null && $neu > 0): ?> <span class="badge rounded-pill text-bg-warning" data-neue-defekte="<?= (int) $neu ?>" title="<?= e($neu === 1 ? '1 neue Defektmeldung' : $neu . ' neue Defektmeldungen') ?>"><?= $neu > 99 ? '99+' : (int) $neu ?> <span class="visually-hidden">neue Meldungen</span></span><?php endif; ?></a></li>
@@ -50,6 +51,7 @@ use Emc\Auth\Berechtigung;
                 }
                 if ($darf(Berechtigung::STAMMDATEN_VERWALTEN)) {
                     $verwaltung['/admin/spurweiten'] = 'Spurweiten';
+                    $verwaltung['/admin/magazin-kategorien'] = 'Magazin-Kategorien';
                 }
                 if ($darf(Berechtigung::WARTUNGSART_VERWALTEN)) {
                     $verwaltung['/admin/wartungsarten'] = 'Wartungsarten';

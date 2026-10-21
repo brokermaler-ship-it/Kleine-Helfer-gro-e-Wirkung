@@ -41,6 +41,16 @@ final class CodeTest extends TestCase
         $this->assertNull(Code::zerlege('EMC-0012'));
     }
 
+    public function test_magazin_code(): void
+    {
+        $this->assertSame('M37', Code::magazin(37));
+        $this->assertSame(['typ' => 'magazin', 'nummer' => 7], Code::zerlege('m 007'));
+        $this->assertSame(['typ' => 'magazin', 'nummer' => 37], Code::zerlege('M37'));
+        $this->assertNull(Code::zerlege('M0'));
+        $this->assertNull(Code::zerlege('M12a'));
+        $this->assertNull(Code::zerlege('M'));
+    }
+
     public function test_ist_adresse(): void
     {
         $this->assertSame(3, Code::istAdresse('0003'));

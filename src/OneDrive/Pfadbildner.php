@@ -17,16 +17,7 @@ final class Pfadbildner
      */
     public static function fuerDokument(array $dokument, ?array $fahrzeug, ?array $anlage = null, string $unterordner = ''): string
     {
-        $endung = self::bereinige((string) ($dokument['endung'] ?? ''));
-        $endung = $endung === '_' ? '' : $endung;
-        $titel = trim((string) ($dokument['titel'] ?? ''));
-        if ($endung !== '' && strtolower(mb_substr($titel, -(mb_strlen($endung) + 1))) === '.' . strtolower($endung)) {
-            $titel = mb_substr($titel, 0, -(mb_strlen($endung) + 1));
-            $schluss = '.' . mb_substr((string) ($dokument['titel'] ?? ''), -mb_strlen($endung));
-        } else {
-            $schluss = $endung === '' ? '' : '.' . $endung;
-        }
-        $name = self::bereinige($titel, self::MAX_SEGMENT - mb_strlen($schluss)) . $schluss;
+        $name = self::dateiname($dokument);
         $unterordner = trim($unterordner) === '' ? '' : self::bereinige($unterordner) . '/';
 
         if ($fahrzeug === null && $anlage !== null) {
@@ -38,6 +29,37 @@ final class Pfadbildner
         }
         $ordner = self::bereinige(trim((string) ($fahrzeug['inventarnummer'] ?? '') . ' ' . (string) ($fahrzeug['bezeichnung'] ?? '')));
         return 'Fahrzeuge/' . $ordner . '/' . $unterordner . $name;
+    }
+
+    /**
+     * Foto eines Magazinartikels: „Magazin/M<id> <Bezeichnung>/<Datei>“.
+     *
+     * @param array<string,mixed> $dokument titel, endung
+     * @param array<string,mixed> $artikel id, bezeichnung
+     */
+    public static function fuerMagazin(array $dokument, array $artikel): string
+    {
+        $ordner = self::bereinige(trim('M' . (int) ($artikel['id'] ?? 0) . ' ' . (string) ($artikel['bezeichnung'] ?? '')));
+        return 'Magazin/' . $ordner . '/' . self::dateiname($dokument);
+    }
+
+    /**
+     * Dateiname aus Titel und Endung (die Endung wird nicht verdoppelt, wenn der Titel schon darauf endet).
+     *
+     * @param array<string,mixed> $dokument titel, endung
+     */
+    private static function dateiname(array $dokument): string
+    {
+        $endung = self::bereinige((string) ($dokument['endung'] ?? ''));
+        $endung = $endung === '_' ? '' : $endung;
+        $titel = trim((string) ($dokument['titel'] ?? ''));
+        if ($endung !== '' && strtolower(mb_substr($titel, -(mb_strlen($endung) + 1))) === '.' . strtolower($endung)) {
+            $titel = mb_substr($titel, 0, -(mb_strlen($endung) + 1));
+            $schluss = '.' . mb_substr((string) ($dokument['titel'] ?? ''), -mb_strlen($endung));
+        } else {
+            $schluss = $endung === '' ? '' : '.' . $endung;
+        }
+        return self::bereinige($titel, self::MAX_SEGMENT - mb_strlen($schluss)) . $schluss;
     }
 
     /** Ersetzt unzulässige Zeichen durch „_“, kürzt auf $max Zeichen und entfernt Leerzeichen/Punkte am Ende. */

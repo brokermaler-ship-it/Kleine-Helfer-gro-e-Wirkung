@@ -7,17 +7,22 @@ namespace Emc\Codes;
 use Emc\Anlagen\AnlageRepository;
 use Emc\Fahrzeuge\FahrzeugFilter;
 use Emc\Fahrzeuge\FahrzeugRepository;
+use Emc\Magazin\MagazinRepository;
 
-/** Löst eine Eingabe im Feld „Code“ auf: F<n>/A<n> direkt, reine Zahl als Digitaladresse, sonst Textsuche. */
+/** Löst eine Eingabe im Feld „Code“ auf: F<n>/A<n>/M<n> direkt, reine Zahl als Digitaladresse, sonst Textsuche. */
 final class CodeAufloesung
 {
     public const NICHT_GEFUNDEN = 'Kein Fahrzeug und keine Anlage mit diesem Code.';
+    public const NICHT_GEFUNDEN_MAGAZIN = 'Kein Magazinartikel mit diesem Code.';
     public const NICHTS = 'Nichts gefunden.';
     /** Höchstens so viele Fahrzeuge bzw. Anlagen zeigt die Suche; den Rest findet die Fahrzeug- bzw. Anlagenliste. */
     public const MAX_TREFFER = 50;
 
-    public function __construct(private FahrzeugRepository $fahrzeuge, private AnlageRepository $anlagen)
-    {
+    public function __construct(
+        private FahrzeugRepository $fahrzeuge,
+        private AnlageRepository $anlagen,
+        private ?MagazinRepository $magazin = null,
+    ) {
     }
 
     /** @param string $zusatz wird an jedes Ziel gehängt (z. B. „/defekt“) */
@@ -30,6 +35,17 @@ final class CodeAufloesung
         }
 
         $code = Code::zerlege($roh);
+        if ($code !== null && $code['typ'] === 'magazin') {
+            // Für Magazinartikel gibt es kein „Defekt melden“: mit Zusatz geht der Code in die normale Suche.
+            if ($zusatz !== '') {
+                return $this->suche($roh, null);
+            }
+            $artikel = $this->magazin?->finde($code['nummer']);
+            if ($artikel !== null) {
+                return new CodeErgebnis(CodeErgebnis::DIREKT, '/magazin/' . (int) $artikel['id']);
+            }
+            return $this->suche($roh, self::NICHT_GEFUNDEN_MAGAZIN);
+        }
         if ($code !== null) {
             $objekt = $code['typ'] === 'fahrzeug'
                 ? $this->fahrzeuge->findeNachCodeNummer($code['nummer'])

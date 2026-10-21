@@ -38,6 +38,12 @@ final class PfadbildnerTest extends TestCase
         self::assertSame('Fahrzeuge/EMC-0012 V 200/a_b/Foto.jpg', Pfadbildner::fuerDokument(['titel' => 'Foto', 'endung' => 'jpg'], ['inventarnummer' => 'EMC-0012', 'bezeichnung' => 'V 200'], null, 'a/b'));
     }
 
+    public function test_magazin_ordner(): void
+    {
+        self::assertSame('Magazin/M37 Märklin C-Gleis/Foto.jpg', Pfadbildner::fuerMagazin(['titel' => 'Foto', 'endung' => 'jpg'], ['id' => 37, 'bezeichnung' => 'Märklin C-Gleis']));
+        self::assertSame('Magazin/M5 Buch_ Teil 2/Seite.jpg', Pfadbildner::fuerMagazin(['titel' => 'Seite.jpg', 'endung' => 'jpg'], ['id' => '5', 'bezeichnung' => 'Buch: Teil 2']));
+    }
+
     public function testOhneFahrzeugSonstiges(): void
     {
         self::assertSame('Sonstiges/Anleitung.pdf', Pfadbildner::fuerDokument(['titel' => 'Anleitung', 'endung' => 'pdf'], null));

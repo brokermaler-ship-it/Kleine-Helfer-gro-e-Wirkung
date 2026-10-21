@@ -40,6 +40,10 @@ use Emc\Etiketten\EtikettAuswahl;
 use Emc\Etiketten\EtikettController;
 use Emc\Fahrzeuge\FahrzeugController;
 use Emc\Fahrzeuge\FahrzeugRepository;
+use Emc\Magazin\KategorieController;
+use Emc\Magazin\MagazinController;
+use Emc\Magazin\MagazinDienst;
+use Emc\Magazin\MagazinRepository;
 use Emc\Mail\Mailer;
 use Emc\Mail\SmtpMailer;
 use Emc\Mail\StreamVerbindung;
@@ -338,7 +342,30 @@ final class App
         ));
         $this->container->set(CodeAufloesung::class, fn(Container $c) => new CodeAufloesung(
             $c->get(FahrzeugRepository::class),
-            $c->get(AnlageRepository::class)
+            $c->get(AnlageRepository::class),
+            $c->get(MagazinRepository::class)
+        ));
+        $this->container->set(MagazinRepository::class, fn(Container $c) => new MagazinRepository($c->get('pdo')));
+        $this->container->set(MagazinDienst::class, fn(Container $c) => new MagazinDienst(
+            $c->get('pdo'),
+            $c->get(MagazinRepository::class),
+            $c->get(Aenderungsprotokoll::class)
+        ));
+        $this->container->set(MagazinController::class, fn(Container $c) => new MagazinController(
+            $this->view,
+            $c->get(MagazinRepository::class),
+            $c->get(MagazinDienst::class),
+            $c->get(SpurweiteRepository::class),
+            $c->get(DokumentRepository::class),
+            $c->get(UploadService::class),
+            $c->get(Aenderungsprotokoll::class),
+            $c->get(Auth::class),
+            $c->get('session')
+        ));
+        $this->container->set(KategorieController::class, fn(Container $c) => new KategorieController(
+            $this->view,
+            $c->get(MagazinRepository::class),
+            $c->get('session')
         ));
         $this->container->set(CodeController::class, fn(Container $c) => new CodeController(
             $this->view,
@@ -625,7 +652,7 @@ final class App
                 return Response::redirect(url('/admin/update'));
             }
             // 3c. Anlagen, Wartungsarten, die Übersicht „Wartung“, das Feld „Code“ (sucht auch Anlagen) sowie Defekt
-            //     melden, Reparaturen und Etiketten brauchen die Tabellen aus Migration 011–015.
+            //     melden, Reparaturen, Etiketten und das Magazin brauchen die Tabellen aus Migration 011–016.
             //     Geprüft wird bewusst „irgendeine Migration steht aus“ (nicht einzeln 011 … 015): Administratoren
             //     sollen ohnehin zuerst das Update ausführen. Nicht-Administratoren sehen schon die Wartungsseite (3a).
             if (self::brauchtNeuesSchema($pfad) && $this->ausstehend() !== []) {
@@ -644,7 +671,7 @@ final class App
     /** Pfade, die vor dem Datenbank-Update zu /admin/update führen (siehe 3c in handle()). */
     private static function brauchtNeuesSchema(string $pfad): bool
     {
-        foreach (['/anlagen', '/wartung', '/admin/wartungsarten', '/code', '/defekt', '/meine-meldungen', '/reparaturen', '/etiketten'] as $p) {
+        foreach (['/anlagen', '/wartung', '/admin/wartungsarten', '/code', '/defekt', '/meine-meldungen', '/reparaturen', '/etiketten', '/magazin', '/admin/magazin-kategorien'] as $p) {
             if ($pfad === $p || str_starts_with($pfad, $p . '/')) {
                 return true;
             }
@@ -779,11 +806,15 @@ final class App
         // Fotoformulare (Defekt melden, Fotos an einer Reparatur): PHP hat alle Felder verworfen, also zurück zum
         // Formular mit einem Hinweis, was zu tun ist. Ziel nur aus den Ziffern der ID gebaut.
         if (preg_match('~^/(fahrzeuge|anlagen)/(\d{1,10})/defekt$~', $request->path(), $m) === 1
-            || preg_match('~^/(reparaturen)/(\d{1,10})/fotos$~', $request->path(), $m) === 1
+            || preg_match('~^/(reparaturen|magazin)/(\d{1,10})/fotos$~', $request->path(), $m) === 1
         ) {
             $this->container->get('session')->meldung('fehler', 'Die Fotos sind zusammen zu groß (höchstens ' . Uploadgrenzen::mb($max)
                 . ' MB). Bitte weniger oder kleinere Fotos auswählen und den Text noch einmal eingeben.');
-            return Response::redirect(url('/' . $m[1] . '/' . $m[2] . ($m[1] === 'reparaturen' ? '' : '/defekt')));
+            return Response::redirect(url('/' . $m[1] . '/' . $m[2] . match ($m[1]) {
+                'reparaturen' => '',
+                'magazin' => '#fotos',
+                default => '/defekt',
+            }));
         }
         $mb = min(max(1, (int) ($this->config['upload_max_mb'] ?? 64)), max(1, intdiv($max, 1048576)));
         $this->container->get('session')->meldung('fehler', 'Die Datei ist zu groß (höchstens ' . $mb . ' MB).');
