@@ -209,8 +209,33 @@ final class FunktionPdfErkennungTest extends TestCase
 
     public function test_starke_anfaenge_nach_wort_aufzaehlung_und_bindestrich_mit_leerraum(): void
     {
-        $e = FunktionPdfErkennung::erkenne("Taste F1 = Licht\nFkt. F2 Horn\nFunktionstaste F3: Glocke\n• F4 Kuppeln\nF5 - Pfiff\nF6 Pfiff wie F7 lang");
-        $this->assertSame([1 => 'Licht', 2 => 'Horn', 3 => 'Glocke', 4 => 'Kuppeln', 5 => 'Pfiff', 6 => 'Pfiff wie F7 lang'], $this->tasten($e));
+        $e = FunktionPdfErkennung::erkenne("Taste F1 = Licht\nFkt. F2 Horn\nFunktionstaste F3: Glocke\n• F4 Kuppeln\nF5 - Pfiff\nPfiff wie F7 lang");
+        $this->assertSame([1 => 'Licht', 2 => 'Horn', 3 => 'Glocke', 4 => 'Kuppeln', 5 => 'Pfiff'], $this->tasten($e));
+    }
+
+    // --- Spalten mit einfachem Leerzeichen (Re-Review I2), nummerierte Listen (M14) ---
+
+    public function test_spalten_mit_einfachem_leerzeichen_in_tastenzeilen(): void
+    {
+        $this->assertSame([0 => 'Licht vorne', 8 => 'Rangiergang'], $this->tasten(FunktionPdfErkennung::erkenne('F0 Licht vorne F8 Rangiergang')));
+        $this->assertSame([0 => 'Licht', 1 => 'Sound', 2 => 'Horn'], $this->tasten(FunktionPdfErkennung::erkenne('F0 Licht F1 Sound F2 Horn')));
+        $this->assertSame([1 => 'Licht', 2 => 'Horn'], $this->tasten(FunktionPdfErkennung::erkenne('Taste F1 Licht F2 Horn')));
+        $this->assertSame([4 => 'Licht Rangiergang'], $this->tasten(FunktionPdfErkennung::erkenne('F4 Licht    Rangiergang F5')));
+    }
+
+    public function test_fliesstext_bleibt_ignoriert(): void
+    {
+        foreach (['Mit F1 schalten Sie das Licht.', 'Mit F1 schalten Sie das Fahrgeräusch ein, mit F2 das Horn.'] as $satz) {
+            $e = FunktionPdfErkennung::erkenne($satz);
+            $this->assertSame([], $e->zeilen, $satz);
+            $this->assertSame([], $e->hinweise, $satz);
+        }
+    }
+
+    public function test_nummerierte_listen(): void
+    {
+        $e = FunktionPdfErkennung::erkenne("1. F1 Licht\n2) F2 Horn\na) F3 Glocke\n10. F4 Kuppeln");
+        $this->assertSame([1 => 'Licht', 2 => 'Horn', 3 => 'Glocke', 4 => 'Kuppeln'], $this->tasten($e));
     }
 
     // --- Kleinigkeiten (Review M1–M7, M9) ---

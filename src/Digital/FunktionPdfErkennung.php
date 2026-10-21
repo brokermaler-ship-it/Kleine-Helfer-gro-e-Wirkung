@@ -19,15 +19,22 @@ final class FunktionPdfErkennung
     private const MAX_HINWEISE = 20;
 
     /**
-     * Sicherer Tasten-Anfang: am Zeilenanfang (auch nach einem Aufzählungszeichen), nach einer Spaltenlücke
-     * (Tab, mindestens zwei Leerzeichen, „|“) oder nach einem Wort wie „Taste“/„Funktion“ an einer dieser Stellen.
-     * Tasten mitten im Satz zählen nicht. Danach Taste, optional Bereich, Trenner; es muss Text oder das
-     * Zeilenende folgen. Gruppe 1 = Taste, Gruppe 2 = Ende eines Bereichs.
+     * Sichere Stelle für einen Tasten-Anfang: am Zeilenanfang (auch nach einem Aufzählungszeichen oder „1.“/„a)“),
+     * nach einer Spaltenlücke (Tab, mindestens zwei Leerzeichen, „|“) oder nach einem Wort wie „Taste“/„Funktion“
+     * an einer dieser Stellen.
      */
-    private const ANFANG = '/(?:^|\t|\h{2}|\|)\h*+(?:[•·*\-–]\h++)?(?:(?:Funktionstaste|Funktion|Taste|Fkt\.)\h++)?'
-        . 'F\h?([0-9]{1,3})(?![0-9\p{L}])'
+    private const STELLE = '(?:^|\t|\h{2}|\|)\h*+(?:(?:[•·*\-–]|[0-9]{1,3}[.)]|[a-z]\))\h++)?(?:(?:Funktionstaste|Funktion|Taste|Fkt\.)\h++)?';
+
+    /** Taste, optional Bereich, Trenner; es muss Text oder das Zeilenende folgen. Gruppe 1 = Taste, Gruppe 2 = Bereichsende. */
+    private const TASTE = 'F\h?([0-9]{1,3})(?![0-9\p{L}])'
         . '(?:\h*+(?:–|—|-|…|\.\.\.?|bis)\h*+F?\h?([0-9]{1,3})(?![0-9\p{L}]))?'
-        . '\h*+(?:[:=|.–—]|-(?=\h))?\h*+(?!F\h?[0-9])(?=[\p{L}0-9"„“”\'‚‘’»«(]|$)/iu';
+        . '\h*+(?:[:=|.–—]|-(?=\h))?\h*+(?!F\h?[0-9])(?=[\p{L}0-9"„“”\'‚‘’»«(]|$)';
+
+    /** Tasten mitten im Satz zählen nicht … */
+    private const ANFANG = '/' . self::STELLE . self::TASTE . '/iu';
+
+    /** … außer in einer Tastenzeile (erste Taste am Zeilenanfang): dort trennt auch ein einzelnes Leerzeichen Spalten. */
+    private const ANFANG_IN_TASTENZEILE = '/(?:' . self::STELLE . '|(?<=[\h|]))' . self::TASTE . '/iu';
 
     private const MOMENT = '/\h*+(?:\((?:M|Moment|Taster|Impuls)\)|\[M\])$/iu';
     private const PUNKTREIHE = '/(?:\h?\.){3,}+\h*+[0-9]*+$/u';
@@ -155,6 +162,7 @@ final class FunktionPdfErkennung
 
     /**
      * Teilt eine Zeile an jedem sicheren Tasten-Anfang (höchstens MAX_ANFAENGE_JE_ZEILE); Text davor entfällt.
+     * Beginnt die Zeile mit einer Taste, zählen weitere Tasten auch nach einem einzelnen Leerzeichen.
      *
      * @return list<array{0:int,1:?int,2:string}> Taste, Bereichsende oder null, Rohtext
      */
@@ -166,10 +174,14 @@ final class FunktionPdfErkennung
         $anfaenge = [];
         $offset = 0;
         $laenge = strlen($zeile);
+        $muster = self::ANFANG;
         while ($offset <= $laenge && count($anfaenge) < self::MAX_ANFAENGE_JE_ZEILE
-            && preg_match(self::ANFANG, $zeile, $m, PREG_OFFSET_CAPTURE | PREG_UNMATCHED_AS_NULL, $offset) === 1
+            && preg_match($muster, $zeile, $m, PREG_OFFSET_CAPTURE | PREG_UNMATCHED_AS_NULL, $offset) === 1
         ) {
             $ende = $m[0][1] + strlen($m[0][0]);
+            if ($anfaenge === [] && $m[0][1] === 0) {
+                $muster = self::ANFANG_IN_TASTENZEILE; // Tabellenzeile: Spalten auch mit einfachem Leerzeichen
+            }
             $anfaenge[] = [$m[0][1], $ende, (int) $m[1][0], $m[2][0] !== null ? (int) $m[2][0] : null];
             $offset = max($ende, $m[0][1] + 1);
         }
