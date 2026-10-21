@@ -54,6 +54,14 @@ return [
     // Zeitbudget je Seitenaufruf in Sekunden (Standard 25): danach beginnt die Anwendung keine neuen Übertragungen
     // mehr, der Rest bleibt in der Warteschlange (Cronjob oder „Jetzt übertragen“). Der Cronjob hat kein Zeitbudget.
     'onedrive_zeitbudget_s' => 25,
+    // ---- Öffentlicher Bereich der Modellbahnbörse (optional) ----
+    // true schaltet den öffentlichen Bereich <oeffentliche_url><basis_url>/boerse ein – Entscheidung des Vorstands.
+    // Ohne datenschutz_url bleibt er aus. Nur genau true schaltet ein (nicht 'true' oder 1).
+    // Dort sieht jeder ohne Anmeldung die freigegebenen Angebote und kann Kauf- und Sammlungsanfragen senden.
+    'boerse_oeffentlich' => false,
+    // Adresse der Datenschutzerklärung, z. B. https://www.emc78.de/datenschutz (nur https). Sie wird im Formular und
+    // in der Fußzeile verlinkt; ohne sie ist der öffentliche Bereich abgeschaltet.
+    'datenschutz_url' => '',
     // ---- E-Mail-Versand (optional) ----
     // Für „Kennwort vergessen?“ auf der Anmeldeseite. Ohne Postfach funktioniert das trotzdem: Es entsteht eine Anfrage,
     // die Administratoren oben als Hinweis und unter Verwaltung › Benutzer sehen; sie setzen dann ein Startpasswort.

@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace Emc\Dateien;
 
-/** Erzeugt aufrechte, verkleinerte JPEG-Varianten (Anzeige 1600 px, Vorschau 400 px). */
+/** Erzeugt aufrechte, verkleinerte JPEG-Varianten (Anzeige 1600 px, Vorschau 400 px) und kodiert öffentliche Uploads ohne Metadaten neu. */
 final class Bildbearbeitung
 {
     private const MAX_PIXEL = 40000000;
     private const QUALITAET = 82;
+    /** Öffentliche Uploads: längste Seite und JPEG-Qualität der neu kodierten Datei (statt des Originals). */
+    private const MAX_SEITE_OEFFENTLICH = 2000;
+    private const QUALITAET_OEFFENTLICH = 85;
 
     private ?\Closure $budget;
 
@@ -67,6 +70,57 @@ final class Bildbearbeitung
         }
     }
 
+    /**
+     * Kodiert ein JPEG, PNG oder WebP mit GD neu und überschreibt die Datei: aufgerichtet (EXIF-Ausrichtung), längste
+     * Seite höchstens 2000 px, JPEG Qualität 85. GD schreibt keine EXIF-, GPS-, XMP- oder IPTC-Daten, das Ergebnis
+     * enthält also keinen Aufnahmeort und keine Kamera. Gleiche Pixel- und Speichergrenzen wie erzeugeVarianten().
+     *
+     * @return bool false bei jedem Fehler (anderes Format, unlesbar, zu groß); die Datei bleibt dann unverändert
+     */
+    public function ohneMetadaten(string $pfad): bool
+    {
+        if (!function_exists('imagecreatefromstring') || !function_exists('imagejpeg') || !is_file($pfad)) {
+            return false;
+        }
+        $info = @getimagesize($pfad);
+        if ($info === false || !in_array($info[2], [IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_WEBP], true)
+            || $info[0] < 1 || $info[1] < 1 || $info[0] * $info[1] > self::MAX_PIXEL
+        ) {
+            return false;
+        }
+        $orientierung = $this->orientierung($pfad, $info[2]);
+        $bedarf = (int) ($info[0] * $info[1] * 5 * ($orientierung > 1 ? 2 : 1)) + 16 * 1048576 + (int) (@filesize($pfad) ?: 0);
+        $frei = $this->verfuegbar();
+        if ($frei !== null && $bedarf > $frei) {
+            return false;
+        }
+        $daten = @file_get_contents($pfad);
+        $bild = $daten === false ? false : @imagecreatefromstring($daten);
+        unset($daten);
+        if ($bild === false) {
+            return false;
+        }
+        $temp = $pfad . '.neu-' . bin2hex(random_bytes(4));
+        try {
+            $bild = $this->richteAus($bild, $orientierung);
+            if (!$this->schreibe($bild, self::MAX_SEITE_OEFFENTLICH, $temp, self::QUALITAET_OEFFENTLICH)
+                || @getimagesize($temp) === false
+                || !@rename($temp, $pfad)
+            ) {
+                @unlink($temp);
+                return false;
+            }
+            @chmod($pfad, 0640);
+            clearstatcache(true, $pfad);
+            return true;
+        } catch (\Throwable) {
+            @unlink($temp);
+            return false;
+        } finally {
+            unset($bild);
+        }
+    }
+
     private function orientierung(string $quelle, int $typ): int
     {
         if ($typ !== IMAGETYPE_JPEG || !function_exists('exif_read_data')) {
@@ -96,7 +150,7 @@ final class Bildbearbeitung
         return $gedreht === false ? $bild : $gedreht;
     }
 
-    private function schreibe(\GdImage $bild, int $maxSeite, string $ziel): bool
+    private function schreibe(\GdImage $bild, int $maxSeite, string $ziel, int $qualitaet = self::QUALITAET): bool
     {
         $b = imagesx($bild);
         $h = imagesy($bild);
@@ -109,7 +163,7 @@ final class Bildbearbeitung
         }
         imagefill($neu, 0, 0, (int) imagecolorallocate($neu, 255, 255, 255)); // transparente PNG/WebP auf Weiß
         imagecopyresampled($neu, $bild, 0, 0, 0, 0, $nb, $nh, $b, $h);
-        $ok = imagejpeg($neu, $ziel, self::QUALITAET);
+        $ok = imagejpeg($neu, $ziel, $qualitaet);
         if ($ok) {
             @chmod($ziel, 0640);
         }

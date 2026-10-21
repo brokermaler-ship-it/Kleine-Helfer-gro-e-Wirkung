@@ -15,6 +15,7 @@ use Emc\Betrieb\UpdateController;
 use Emc\Boerse\AngebotController;
 use Emc\Boerse\BoerseController;
 use Emc\Boerse\KasseController;
+use Emc\Boerse\OeffentlichController;
 use Emc\Codes\CodeController;
 use Emc\Dateien\DateiController;
 use Emc\Digital\AdressenController;
@@ -61,6 +62,17 @@ return function (Router $router, App $app): void {
 
     $router->add('GET', '/install', fn(Request $r) => $c->get(InstallController::class)->formular($r));
     $router->add('POST', '/install', fn(Request $r) => $c->get(InstallController::class)->installiere($r));
+
+    // Öffentlicher Bereich der Börse ohne Anmeldung (nicht /boersen…). Die App lässt /boerse… nur durch, wenn
+    // boerse_oeffentlich und datenschutz_url gesetzt sind (sonst 404); der Controller prüft das zusätzlich.
+    $oef = fn(string $m) => fn(Request $r, array $p = []) => $c->get(OeffentlichController::class)->$m($r, $p);
+    $router->add('GET', '/boerse', $oef('liste'));
+    $router->add('GET', '/boerse/angebot/{nummer}', $oef('angebot'));
+    $router->add('POST', '/boerse/angebot/{nummer}/anfrage', $oef('anfrage'));
+    $router->add('GET', '/boerse/sammlung-anbieten', $oef('sammlungFormular'));
+    $router->add('POST', '/boerse/sammlung-anbieten', $oef('sammlung'));
+    $router->add('GET', '/boerse/danke', $oef('danke'));
+    $router->add('GET', '/boerse/foto/{nummer}/{dokumentId}/{variante}', $oef('foto'));
 
     // Feld „Code“ in der Kopfzeile und Kurzlink (z. B. aus dem QR-Code an der Anlage); ohne Anmeldung zuerst Login.
     $router->add('GET', '/code', $app->erfordert('lesen', fn(Request $r) => $c->get(CodeController::class)->suche($r)));

@@ -117,6 +117,79 @@ final class UploadService
         return $id;
     }
 
+    public const NICHT_VERARBEITBAR = 'Dieses Foto können wir nicht verarbeiten. Bitte als JPEG senden.';
+    /** Endungen, die öffentliche Uploads haben dürfen (HEIC, PDF usw. werden abgelehnt). */
+    private const OEFFENTLICH_ENDUNGEN = ['jpg', 'jpeg', 'png', 'webp'];
+
+    /**
+     * Foto aus dem öffentlichen Bereich (Anfrage „Sammlung anbieten“): Prüfungen wie speichere(), nur JPEG/PNG/WebP.
+     * Die Datei wird serverseitig mit GD neu kodiert (Bildbearbeitung::ohneMetadaten) – auch ohne JavaScript im Browser
+     * kommt nie ein Original mit EXIF/GPS auf den Webspace. Gespeichert als foto-<n>.jpg (ohne den Originalnamen), ohne
+     * Benutzer, nur der Anfrage zugeordnet und nie nach OneDrive.
+     *
+     * @param array<string,mixed> $phpDatei Eintrag aus $_FILES (name, tmp_name, error, size)
+     * @throws UploadFehler
+     */
+    public function speichereOeffentlich(array $phpDatei, int $anfrageId): int
+    {
+        $tmp = $this->pruefeUpload($phpDatei);
+        $groesse = (int) filesize($tmp);
+        if ($groesse > $this->maxBytes) {
+            throw new UploadFehler($this->zuGross($this->maxBytes));
+        }
+        if ($groesse === 0) {
+            throw new UploadFehler('Die Datei ist leer.');
+        }
+        $name = $this->bereinigeName((string) ($phpDatei['name'] ?? ''));
+        $punkt = strrpos($name, '.');
+        $endung = $punkt === false ? '' : strtolower(substr($name, $punkt + 1));
+        $typ = DateiTyp::fuerEndung($endung);
+        $mime = $this->erkenneMime($tmp);
+        if (!in_array($endung, self::OEFFENTLICH_ENDUNGEN, true) || $typ === null || $mime === null || !in_array($mime, $typ['mimes'], true)) {
+            throw new UploadFehler(self::NICHT_VERARBEITBAR);
+        }
+
+        $relativ = 'dateien/' . date('Y') . '/' . date('m') . '/' . bin2hex(random_bytes(16));
+        $ziel = rtrim($this->speicherPfad, '/') . '/' . $relativ;
+        $ordner = dirname($ziel);
+        if (!is_dir($ordner) && !@mkdir($ordner, 0750, true) && !is_dir($ordner)) {
+            throw new UploadFehler('Die Datei konnte nicht gespeichert werden.');
+        }
+        if (!($this->verschiebe)($tmp, $ziel)) {
+            throw new UploadFehler('Die Datei konnte nicht gespeichert werden.');
+        }
+        @chmod($ziel, 0640);
+        // Das Original (mit Aufnahmeort, Kamera …) wird sofort überschrieben; was GD nicht lesen kann, wird gelöscht.
+        if (!$this->bild->ohneMetadaten($ziel)) {
+            @unlink($ziel);
+            throw new UploadFehler(self::NICHT_VERARBEITBAR);
+        }
+        clearstatcache(true, $ziel);
+        $groesse = (int) filesize($ziel);
+        $hatAnzeige = $this->bild->erzeugeVarianten($ziel, $ziel);
+        try {
+            $st = $this->pdo->prepare("SELECT COUNT(*) FROM dokument_zuordnung WHERE objekt_typ = 'boerse_anfrage' AND objekt_id = ?");
+            $st->execute([$anfrageId]);
+            $titel = 'foto-' . ((int) $st->fetchColumn() + 1) . '.jpg';
+            $this->pdo->prepare(
+                'INSERT INTO dokument (titel, kategorie, original_name, endung, mime, groesse, pfad, hat_anzeige, hochgeladen_von, hochgeladen_am) '
+                . "VALUES (?, 'foto', ?, 'jpg', 'image/jpeg', ?, ?, ?, NULL, NOW())"
+            )->execute([$titel, $titel, $groesse, $relativ, $hatAnzeige ? 1 : 0]);
+            $id = (int) $this->pdo->lastInsertId();
+            $this->pdo->prepare("INSERT INTO dokument_zuordnung (dokument_id, objekt_typ, objekt_id) VALUES (?, 'boerse_anfrage', ?)")
+                ->execute([$id, $anfrageId]);
+        } catch (\Throwable $t) {
+            if (isset($id)) {
+                $this->pdo->prepare('DELETE FROM dokument WHERE id = ?')->execute([$id]);
+            }
+            foreach ([$ziel, $ziel . '.anzeige.jpg', $ziel . '.vorschau.jpg'] as $f) {
+                @unlink($f);
+            }
+            throw $t;
+        }
+        return $id;
+    }
+
     /**
      * Legt den Übertragungsauftrag an und versucht ihn sofort. Die Datei ist lokal bereits vollständig
      * gespeichert; jeder Fehler hier bleibt unsichtbar (nur Log ohne Geheimnisse) und wird später wiederholt.

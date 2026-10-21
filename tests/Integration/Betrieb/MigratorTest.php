@@ -19,14 +19,14 @@ final class MigratorTest extends DbTestCase
         self::alleTabellenLoeschen($this->pdo);
         $migrator = new Migrator($this->pdo, $this->migrationen());
         $this->assertFalse($migrator->istInstalliert());
-        $this->assertSame(['001_grundgeruest', '002_spurweiten_start', '003_fahrzeug_angelegt_von', '004_onedrive', '005_onedrive_auftrag_sperre', '006_onedrive_sperr_token_index', '007_onedrive_laufwerk', '008_rolle_fahrzeugwart', '009_abstellgleis', '010_kennwort_vergessen', '011_anlage', '012_wartungsart', '013_wartung', '014_reparatur', '015_etikett', '016_magazin', '017_boerse', '018_titelbild_index'], $migrator->ausstehend());
+        $this->assertSame(['001_grundgeruest', '002_spurweiten_start', '003_fahrzeug_angelegt_von', '004_onedrive', '005_onedrive_auftrag_sperre', '006_onedrive_sperr_token_index', '007_onedrive_laufwerk', '008_rolle_fahrzeugwart', '009_abstellgleis', '010_kennwort_vergessen', '011_anlage', '012_wartungsart', '013_wartung', '014_reparatur', '015_etikett', '016_magazin', '017_boerse', '018_titelbild_index', '019_boerse_anfrage'], $migrator->ausstehend());
     }
 
     public function test_ausfuehren_legt_tabellen_an_und_ist_idempotent(): void
     {
         self::alleTabellenLoeschen($this->pdo);
         $migrator = new Migrator($this->pdo, $this->migrationen());
-        $this->assertSame(['001_grundgeruest', '002_spurweiten_start', '003_fahrzeug_angelegt_von', '004_onedrive', '005_onedrive_auftrag_sperre', '006_onedrive_sperr_token_index', '007_onedrive_laufwerk', '008_rolle_fahrzeugwart', '009_abstellgleis', '010_kennwort_vergessen', '011_anlage', '012_wartungsart', '013_wartung', '014_reparatur', '015_etikett', '016_magazin', '017_boerse', '018_titelbild_index'], $migrator->ausfuehren());
+        $this->assertSame(['001_grundgeruest', '002_spurweiten_start', '003_fahrzeug_angelegt_von', '004_onedrive', '005_onedrive_auftrag_sperre', '006_onedrive_sperr_token_index', '007_onedrive_laufwerk', '008_rolle_fahrzeugwart', '009_abstellgleis', '010_kennwort_vergessen', '011_anlage', '012_wartungsart', '013_wartung', '014_reparatur', '015_etikett', '016_magazin', '017_boerse', '018_titelbild_index', '019_boerse_anfrage'], $migrator->ausfuehren());
         $this->assertTrue($migrator->istInstalliert());
         $this->assertSame([], $migrator->ausstehend());
         $this->assertSame([], $migrator->ausfuehren());
@@ -304,6 +304,21 @@ final class MigratorTest extends DbTestCase
             $st->execute([$tabelle]);
             $this->assertSame(1, (int) $st->fetchColumn(), $tabelle);
         }
+    }
+
+    /** Migration 019: Anfragen aus dem öffentlichen Bereich und gehashte Sperrzeilen. */
+    public function test_migration_019_boerse_anfrage(): void
+    {
+        $spalten = $this->pdo->query("SELECT column_name, is_nullable FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'boerse_anfrage' ORDER BY ordinal_position")->fetchAll(\PDO::FETCH_KEY_PAIR);
+        $this->assertSame(['id', 'art', 'angebot_id', 'name', 'email', 'telefon', 'nachricht', 'wunsch', 'einwilligung_am', 'eingegangen_am', 'status', 'bearbeitet_von_benutzer_id', 'magazin_artikel_id', 'geaendert_am'], array_keys($spalten));
+        $this->assertSame('YES', $spalten['angebot_id']);
+        $this->assertSame('NO', $spalten['einwilligung_am']);
+        $regeln = $this->pdo->query("SELECT referenced_table_name, delete_rule FROM information_schema.referential_constraints WHERE constraint_schema = DATABASE() AND table_name = 'boerse_anfrage' ORDER BY referenced_table_name")->fetchAll(\PDO::FETCH_KEY_PAIR);
+        $this->assertSame(['benutzer' => 'SET NULL', 'boerse_angebot' => 'SET NULL', 'magazin_artikel' => 'SET NULL'], $regeln);
+        $this->pdo->exec("INSERT INTO boerse_anfrage (art, name, nachricht, einwilligung_am, eingegangen_am) VALUES ('sammlung', 'X', 'Y', NOW(), NOW())");
+        $this->assertSame('offen', $this->pdo->query('SELECT status FROM boerse_anfrage')->fetchColumn());
+        $index = $this->pdo->query("SELECT GROUP_CONCAT(column_name ORDER BY seq_in_index) FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'boerse_anfrage_sperre' AND index_name = 'idx_boerse_sperre_ip'")->fetchColumn();
+        $this->assertSame('ip_hash,zeitpunkt', $index);
     }
 
     private function assertDoppelt(callable $aktion, string $grund): void

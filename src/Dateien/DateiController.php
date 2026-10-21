@@ -335,6 +335,13 @@ final class DateiController
     public function ausliefern(Request $r, array $p): Response
     {
         $dok = $this->ladeDokument($p);
+        // Fotos aus öffentlichen Anfragen (nur dort zugeordnet) sieht intern nur der Börsenwart; alle anderen wie unbekannt.
+        $zuordnungen = $this->dokumente->zuordnungen((int) $dok['id']);
+        if ($zuordnungen !== [] && array_diff(array_column($zuordnungen, 'objekt_typ'), ['boerse_anfrage']) === []
+            && !Berechtigung::istBoersenwart($this->auth->benutzer())
+        ) {
+            throw new HttpFehler(404);
+        }
         $variante = $p['variante'] ?? null;
         if ($variante !== null && $variante !== 'anzeige' && $variante !== 'vorschau') {
             throw new HttpFehler(404);

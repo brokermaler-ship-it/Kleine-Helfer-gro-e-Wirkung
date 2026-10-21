@@ -238,3 +238,11 @@ body.druckseite { display: block; min-height: 0; background: #e9ecef; }
     .abrechnung-druck tr { page-break-inside: avoid; }
     .abrechnung-druck .text-success { color: #000 !important; }
 }
+
+/* Öffentlicher Bereich /boerse: Fangfeld für Bots außerhalb des sichtbaren Bereichs (nicht type="hidden", nicht
+   display:none – manche Bots überspringen solche Felder), Karten mit Vorschaufoto. */
+.boerse-fang { position: absolute !important; left: -10000px !important; top: auto; width: 1px; height: 1px; overflow: hidden; }
+.boerse-oeffentlich .boerse-marke { line-height: 1.15; }
+.boerse-oeffentlich .boerse-marke .small { opacity: .9; }
+.boerse-karte .boerse-vorschau { aspect-ratio: 4 / 3; object-fit: cover; background: var(--emc-grau-hell); }
+.boerse-oeffentlich .boerse-foto { max-height: 80vh; width: auto; max-width: 100%; }

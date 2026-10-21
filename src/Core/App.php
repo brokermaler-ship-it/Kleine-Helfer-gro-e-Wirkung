@@ -17,6 +17,12 @@ use Emc\Boerse\AngebotController;
 use Emc\Boerse\AngebotDienst;
 use Emc\Boerse\AngebotRepository;
 use Emc\Boerse\AbrechnungRepository;
+use Emc\Boerse\AnfrageDienst;
+use Emc\Boerse\AnfrageRepository;
+use Emc\Boerse\Angebotsnummer;
+use Emc\Boerse\OeffentlichController;
+use Emc\Boerse\OeffentlicherBereich;
+use Emc\Boerse\Spamschutz;
 use Emc\Boerse\BoerseController;
 use Emc\Boerse\KasseController;
 use Emc\Boerse\KasseDienst;
@@ -426,6 +432,28 @@ final class App
             $this->config,
             $c->get(AbrechnungRepository::class)
         ));
+        $this->container->set(AnfrageRepository::class, fn(Container $c) => new AnfrageRepository($c->get('pdo')));
+        $this->container->set(Spamschutz::class, fn(Container $c) => new Spamschutz($c->get('pdo'), $c->get(Einstellungen::class)));
+        $this->container->set(AnfrageDienst::class, fn(Container $c) => new AnfrageDienst(
+            $c->get('pdo'),
+            $c->get(AnfrageRepository::class),
+            $c->get(Spamschutz::class),
+            $c->get(UploadService::class),
+            $c->get(DokumentRepository::class),
+            $c->get(Aenderungsprotokoll::class)
+        ));
+        $this->container->set(OeffentlichController::class, fn(Container $c) => new OeffentlichController(
+            $this->view,
+            $this->config,
+            $c->get(AngebotRepository::class),
+            $c->get(BoerseRepository::class),
+            $c->get(MagazinRepository::class),
+            $c->get(SpurweiteRepository::class),
+            $c->get(AnfrageDienst::class),
+            $c->get(Spamschutz::class),
+            $c->get('session'),
+            $c->get(DokumentRepository::class)
+        ));
         $this->container->set(MagazinController::class, fn(Container $c) => new MagazinController(
             $this->view,
             $c->get(MagazinRepository::class),
@@ -674,8 +702,20 @@ final class App
             return Response::redirect(url('/install'));
         }
 
+        // 1b. Öffentlicher Bereich /boerse (ohne Anmeldung, nicht /boersen…): ohne Schalter boerse_oeffentlich und
+        //     Datenschutzerklärung antwortet jeder Pfad dort mit 404 – auch POST ohne Token, vor jeder Datenbankarbeit.
+        $boerse = OeffentlicherBereich::istPfad($pfad);
+        if ($boerse && !OeffentlicherBereich::aktiv($this->config)) {
+            return $this->fehlerSeite(404);
+        }
+
         // 2a. Zu große Uploads: PHP verwirft dann $_POST, was sonst wie ein CSRF-Fehler aussähe.
-        if ($request->isPost()) {
+        if ($request->isPost() && $boerse) {
+            $zuGross = $this->pruefePostGroesseOeffentlich($request);
+            if ($zuGross !== null) {
+                return $zuGross;
+            }
+        } elseif ($request->isPost()) {
             $zuGross = $this->pruefePostGroesse($request);
             if ($zuGross !== null) {
                 return $zuGross;
@@ -690,6 +730,18 @@ final class App
             }
         }
 
+        // 2c. Öffentlicher Bereich: keine Anmeldung, vor dem Datenbank-Update (Migration 019) die Wartungsseite.
+        if ($boerse) {
+            if ($this->ausstehend() !== []) {
+                return OeffentlichController::oeffentlicheSeite($this->view, $this->config, 'hinweis', [
+                    'titel' => 'Wartung',
+                    'ueberschrift' => 'Wartung',
+                    'text' => 'Die Modellbahnbörse wird gerade aktualisiert. Bitte versuche es in ein paar Minuten noch einmal.',
+                ], 503, true, ['Retry-After' => '300']);
+            }
+            return $this->router->dispatchOderWirf($request);
+        }
+
         $oeffentlich = in_array($pfad, ['/login', '/install', '/kennwort/vergessen', '/kennwort/neu'], true);
         // 2b. „Kennwort vergessen“ braucht die Tabellen aus Migration 010.
         if (str_starts_with($pfad, '/kennwort/') && $this->ausstehend() !== []) {
@@ -699,6 +751,12 @@ final class App
             // 3. Anmeldung erforderlich.
             $benutzer = $this->container->get(Auth::class)->benutzer();
             if ($benutzer === null) {
+                // Kurzlink aus dem QR-Code eines Preisschilds: ohne Anmeldung zur öffentlichen Angebotsseite, wenn das
+                // Angebot dort sichtbar ist; sonst wie bisher zur Anmeldung.
+                $angebotsseite = $this->oeffentlicherKurzlink($request, $pfad);
+                if ($angebotsseite !== null) {
+                    return Response::redirect($angebotsseite);
+                }
                 $ziel = $request->method() === 'GET' && $pfad !== '/' ? ['ziel' => $pfad] : [];
                 return Response::redirect(url('/login', $ziel));
             }
@@ -744,10 +802,55 @@ final class App
         return $this->router->dispatchOderWirf($request);
     }
 
+    /**
+     * Ziel für /c/<Angebotsnummer> ohne Anmeldung: die öffentliche Angebotsseite, nur wenn der öffentliche Bereich aktiv,
+     * die Datenbank aktuell und das Angebot dort sichtbar ist; sonst null (weiter zur Anmeldung).
+     */
+    private function oeffentlicherKurzlink(Request $request, string $pfad): ?string
+    {
+        if ($request->method() !== 'GET' || !str_starts_with($pfad, '/c/') || !OeffentlicherBereich::aktiv($this->config)) {
+            return null;
+        }
+        $nr = Angebotsnummer::zerlege(substr($pfad, 3));
+        if ($nr === null) {
+            return null;
+        }
+        try {
+            if ($this->ausstehend() !== []) {
+                return null;
+            }
+            $angebot = $this->container->get(AngebotRepository::class)->oeffentlichNachNummer($nr['jahr'], $nr['lauf']);
+        } catch (\Throwable) {
+            return null;
+        }
+        return $angebot === null ? null : url('/boerse/angebot/' . $angebot['nummer']);
+    }
+
+    /** Zu große Anfrage an den öffentlichen Bereich (Fotos): Hinweisseite im öffentlichen Layout statt Weiterleitung. */
+    private function pruefePostGroesseOeffentlich(Request $request): ?Response
+    {
+        $laenge = $request->server('CONTENT_LENGTH');
+        if (!is_string($laenge) && !is_int($laenge)) {
+            return null;
+        }
+        $max = isset($this->config['post_max_bytes'])
+            ? (int) $this->config['post_max_bytes']
+            : UploadService::iniBytes((string) ini_get('post_max_size'));
+        if ($max <= 0 || (int) $laenge <= $max) {
+            return null;
+        }
+        return OeffentlichController::oeffentlicheSeite($this->view, $this->config, 'hinweis', [
+            'titel' => 'Zu groß',
+            'ueberschrift' => 'Die Fotos sind zu groß',
+            'text' => 'Die Fotos sind zusammen zu groß (höchstens ' . Uploadgrenzen::mb($max) . ' MB). Bitte weniger oder kleinere Fotos auswählen und das Formular noch einmal ausfüllen.',
+            'zurueck' => true,
+        ], 413, true);
+    }
+
     /** Pfade, die vor dem Datenbank-Update zu /admin/update führen (siehe 3c in handle()). */
     private static function brauchtNeuesSchema(string $pfad): bool
     {
-        foreach (['/anlagen', '/wartung', '/admin/wartungsarten', '/code', '/defekt', '/meine-meldungen', '/reparaturen', '/etiketten', '/magazin', '/admin/magazin-kategorien', '/angebote', '/boersen', '/kasse', '/verkaeufe', '/c'] as $p) {
+        foreach (['/anlagen', '/wartung', '/admin/wartungsarten', '/code', '/defekt', '/meine-meldungen', '/reparaturen', '/etiketten', '/magazin', '/admin/magazin-kategorien', '/angebote', '/boersen', '/kasse', '/verkaeufe', '/anfragen', '/c'] as $p) {
             if ($pfad === $p || str_starts_with($pfad, $p . '/')) {
                 return true;
             }

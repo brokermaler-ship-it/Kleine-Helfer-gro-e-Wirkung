@@ -211,6 +211,105 @@ final class AngebotRepository
     }
 
     /**
+     * Bedingung „öffentlich sichtbar“: vom Börsenwart freigegeben, angeboten oder reserviert, dauerhaft oder in einer
+     * nicht abgeschlossenen Börse.
+     */
+    private const OEFFENTLICH_WO = "a.oeffentlich = 'freigegeben' AND a.status IN ('angeboten', 'reserviert') AND (a.boerse_id IS NULL OR b.status <> 'abgeschlossen')";
+
+    /**
+     * Öffentliche Angaben – bewusst eine eigene, kurze Spaltenliste (nie a.*): keine Person, keine Herkunft, keine Notiz,
+     * kein Magazinbezug, kein Lagerort. Titelbild nur, wenn es ein Foto mit Anzeige-Variante dieses Angebots ist.
+     */
+    private const OEFFENTLICH_SELECT = 'SELECT a.id, a.jahr, a.laufnummer, a.bezeichnung, a.beschreibung, a.zustand, a.wunschpreis, a.status, '
+        . 'k.name AS kategorie_name, s.name AS spurweite_name, '
+        . "(SELECT d.id FROM dokument_zuordnung z JOIN dokument d ON d.id = z.dokument_id WHERE z.objekt_typ = 'boerse_angebot' AND z.objekt_id = a.id "
+        . "AND d.kategorie = 'foto' AND d.hat_anzeige = 1 ORDER BY (d.id = a.titelbild_dokument_id) DESC, d.hochgeladen_am, d.id LIMIT 1) AS titelbild_dokument_id "
+        . 'FROM boerse_angebot a JOIN magazin_kategorie k ON k.id = a.kategorie_id '
+        . 'LEFT JOIN boerse b ON b.id = a.boerse_id '
+        . 'LEFT JOIN spurweite s ON s.id = a.spurweite_id ';
+
+    /**
+     * Angebote für den öffentlichen Bereich, neueste zuerst. Die Suche durchsucht nur öffentliche Felder (Bezeichnung,
+     * Beschreibung, Nummer) – nie die Notiz.
+     *
+     * @return list<array{id:int, nummer:string, bezeichnung:string, beschreibung:?string, kategorie_name:string, spurweite_name:?string, zustand:string, wunschpreis:string, status:string, titelbild_dokument_id:?int}>
+     */
+    public function oeffentliche(?int $kategorieId, ?int $spurweiteId, ?string $text): array
+    {
+        $wo = [self::OEFFENTLICH_WO];
+        $p = [];
+        if ($kategorieId !== null) {
+            $wo[] = 'a.kategorie_id = ?';
+            $p[] = $kategorieId;
+        }
+        if ($spurweiteId !== null) {
+            $wo[] = 'a.spurweite_id = ?';
+            $p[] = $spurweiteId;
+        }
+        if ($text !== null && trim($text) !== '') {
+            $text = trim($text);
+            $muster = '%' . str_replace(['|', '%', '_'], ['||', '|%', '|_'], $text) . '%';
+            $teile = ["a.bezeichnung LIKE ? ESCAPE '|'", "a.beschreibung LIKE ? ESCAPE '|'"];
+            $p[] = $muster;
+            $p[] = $muster;
+            $nr = Angebotsnummer::zerlege($text);
+            if ($nr !== null) {
+                $teile[] = '(a.jahr = ? AND a.laufnummer = ?)';
+                $p[] = $nr['jahr'];
+                $p[] = $nr['lauf'];
+            }
+            $wo[] = '(' . implode(' OR ', $teile) . ')';
+        }
+        $st = $this->pdo->prepare(self::OEFFENTLICH_SELECT . 'WHERE ' . implode(' AND ', $wo) . ' ORDER BY a.jahr DESC, a.laufnummer DESC LIMIT 500');
+        $st->execute($p);
+        return array_map(self::oeffentlichAufbereitet(...), $st->fetchAll(\PDO::FETCH_ASSOC));
+    }
+
+    /**
+     * Ein öffentlich sichtbares Angebot nach Nummer, mit den Fotos (Anzeige-Variante vorhanden), Titelbild zuerst;
+     * null für unbekannte und nicht sichtbare Angebote gleichermaßen.
+     *
+     * @return ?array{id:int, nummer:string, bezeichnung:string, beschreibung:?string, kategorie_name:string, spurweite_name:?string, zustand:string, wunschpreis:string, status:string, titelbild_dokument_id:?int, foto_ids:list<int>}
+     */
+    public function oeffentlichNachNummer(int $jahr, int $lauf): ?array
+    {
+        $st = $this->pdo->prepare(self::OEFFENTLICH_SELECT . 'WHERE ' . self::OEFFENTLICH_WO . ' AND a.jahr = ? AND a.laufnummer = ?');
+        $st->execute([$jahr, $lauf]);
+        $z = $st->fetch(\PDO::FETCH_ASSOC);
+        if ($z === false) {
+            return null;
+        }
+        $a = self::oeffentlichAufbereitet($z);
+        $st = $this->pdo->prepare(
+            "SELECT d.id FROM dokument_zuordnung z JOIN dokument d ON d.id = z.dokument_id WHERE z.objekt_typ = 'boerse_angebot' AND z.objekt_id = ? "
+            . "AND d.kategorie = 'foto' AND d.hat_anzeige = 1 ORDER BY (d.id = ?) DESC, d.hochgeladen_am, d.id LIMIT 20"
+        );
+        $st->execute([$a['id'], $a['titelbild_dokument_id'] ?? 0]);
+        $a['foto_ids'] = array_map('intval', $st->fetchAll(\PDO::FETCH_COLUMN));
+        return $a;
+    }
+
+    /**
+     * @param array<string,mixed> $z
+     * @return array<string,mixed>
+     */
+    private static function oeffentlichAufbereitet(array $z): array
+    {
+        return [
+            'id' => (int) $z['id'],
+            'nummer' => Angebotsnummer::formatiere((int) $z['jahr'], (int) $z['laufnummer']),
+            'bezeichnung' => (string) $z['bezeichnung'],
+            'beschreibung' => $z['beschreibung'] === null ? null : (string) $z['beschreibung'],
+            'kategorie_name' => (string) $z['kategorie_name'],
+            'spurweite_name' => $z['spurweite_name'] === null ? null : (string) $z['spurweite_name'],
+            'zustand' => (string) $z['zustand'],
+            'wunschpreis' => (string) $z['wunschpreis'],
+            'status' => (string) $z['status'],
+            'titelbild_dokument_id' => $z['titelbild_dokument_id'] === null ? null : (int) $z['titelbild_dokument_id'],
+        ];
+    }
+
+    /**
      * Menge, die offene Einzelangebote (angeboten/reserviert) vom Artikel binden. Vor Migration 017 (Tabelle fehlt) 0.
      *
      * @param ?int $ohneAngebot dieses Angebot nicht mitzählen (beim Ändern der eigenen Menge)
