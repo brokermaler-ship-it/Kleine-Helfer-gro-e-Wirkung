@@ -240,4 +240,30 @@
         wahl.addEventListener('change', anpassen);
         anpassen();
     });
+    // Kasse: Summe beim Tippen der Verkaufspreise mitrechnen (nur Anzeige, in ganzen Cent; verbindlich rechnet der Server)
+    document.querySelectorAll('[data-kasse-korb]').forEach(function (form) {
+        var summe = form.querySelector('[data-kasse-summe]');
+        var felder = form.querySelectorAll('[data-kasse-preis]');
+        if (!summe || !felder.length) { return; }
+        function cent(text) {
+            var m = /^(\d{1,6})(?:[.,](\d{1,2}))?$/.exec(text.trim());
+            if (!m) { return null; }
+            return parseInt(m[1], 10) * 100 + parseInt(((m[2] || '') + '00').slice(0, 2), 10);
+        }
+        function anzeige(c) {
+            var euro = String(Math.floor(c / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+            return euro + ',' + String(c % 100 + 100).slice(1) + ' \u20ac';
+        }
+        function rechne() {
+            var gesamt = 0;
+            for (var i = 0; i < felder.length; i++) {
+                var c = cent(felder[i].value);
+                felder[i].classList.toggle('is-invalid', c === null);
+                if (c === null) { summe.textContent = '–'; return; }
+                gesamt += c;
+            }
+            summe.textContent = anzeige(gesamt);
+        }
+        felder.forEach(function (f) { f.addEventListener('input', rechne); });
+    });
 })();

@@ -42,6 +42,9 @@ use Emc\Auth\Berechtigung;
                         <li><a class="dropdown-item" href="<?= e(url('/angebote')) ?>">Angebote</a></li>
                         <li><a class="dropdown-item" href="<?= e(url('/angebote', ['meine' => '1'])) ?>">Meine Angebote</a></li>
                         <li><a class="dropdown-item" href="<?= e(url('/boersen')) ?>">Börsen</a></li>
+                        <?php if (Berechtigung::istBoersenwart($benutzer)): ?>
+                            <li><a class="dropdown-item" href="<?= e(url('/kasse')) ?>">Kasse</a></li>
+                        <?php endif; ?>
                     </ul>
                 </li>
                 <li class="nav-item"><a class="nav-link" href="<?= e(url('/wartung')) ?>">Wartung</a></li>

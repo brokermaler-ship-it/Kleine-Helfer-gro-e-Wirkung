@@ -210,3 +210,16 @@ body.druckseite { display: block; min-height: 0; background: #e9ecef; }
 @media (min-width: 1600px) {
     .emc-navbar .emc-markentext { display: inline !important; }
 }
+
+/* Kasse am Handy: eine Spalte, Tippflächen mindestens 48 px, große Summe. */
+.kasse { max-width: 40rem; margin-inline: auto; }
+.kasse-knopf { min-height: 48px; }
+.kasse-feld { min-height: 48px; }
+.kasse-nummer { font-size: 1.5rem; font-weight: 600; letter-spacing: .05em; min-width: 0; }
+.kasse-preis { font-weight: 600; min-width: 0; }
+.kasse-karte-fehler { border-width: 2px; background: var(--bs-danger-bg-subtle); }
+.kasse-summe { font-size: 2rem; font-weight: 700; }
+.kasse-zahlart { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+.kasse-kachel { min-height: 56px; display: flex; align-items: center; justify-content: center; white-space: normal; }
+.kasse-abschluss { min-height: 56px; font-weight: 600; }
+.kasse details > summary { padding: .75rem 0; cursor: pointer; }

@@ -14,6 +14,7 @@ use Emc\Betrieb\TestdatenController;
 use Emc\Betrieb\UpdateController;
 use Emc\Boerse\AngebotController;
 use Emc\Boerse\BoerseController;
+use Emc\Boerse\KasseController;
 use Emc\Codes\CodeController;
 use Emc\Dateien\DateiController;
 use Emc\Digital\AdressenController;
@@ -157,6 +158,17 @@ return function (Router $router, App $app): void {
     $router->add('POST', '/boersen/{id}/starten', $app->erfordert('lesen', $brs('starten')));
     $router->add('GET', '/boersen/{id}/preisschilder', $app->erfordert('lesen', $brs('preisschilder')));
     $router->add('GET', '/boersen/{id}/liste', $app->erfordert('lesen', $brs('gesamtliste')));
+
+    // Kasse am Handy (lesen + Börsenwart im Controller, 403): Warenkorb in der Sitzung, Verkauf, Verkaufsliste, Storno.
+    $kas = fn(string $m) => fn(Request $r, array $p = []) => $c->get(KasseController::class)->$m($r, $p);
+    $router->add('GET', '/kasse', $app->erfordert('lesen', $kas('waehlen')));
+    $router->add('GET', '/boersen/{id}/kasse', $app->erfordert('lesen', $kas('anzeigen')));
+    $router->add('POST', '/boersen/{id}/kasse/hinzu', $app->erfordert('lesen', $kas('hinzu')));
+    $router->add('POST', '/boersen/{id}/kasse/preis', $app->erfordert('lesen', $kas('preis')));
+    $router->add('POST', '/boersen/{id}/kasse/entfernen', $app->erfordert('lesen', $kas('entfernen')));
+    $router->add('POST', '/boersen/{id}/kasse/abschliessen', $app->erfordert('lesen', $kas('abschliessen')));
+    $router->add('GET', '/boersen/{id}/verkaeufe', $app->erfordert('lesen', $kas('verkaeufe')));
+    $router->add('POST', '/verkaeufe/{id}/storno', $app->erfordert('lesen', $kas('storno')));
 
     // Etiketten (ab Fahrzeugwart): nur der POST „Als gedruckt vermerken“ setzt etikett_gedruckt_am.
     $etk = fn(string $m) => fn(Request $r, array $p = []) => $c->get(EtikettController::class)->$m($r);

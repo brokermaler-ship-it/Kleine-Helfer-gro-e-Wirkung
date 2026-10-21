@@ -17,6 +17,9 @@ use Emc\Boerse\AngebotController;
 use Emc\Boerse\AngebotDienst;
 use Emc\Boerse\AngebotRepository;
 use Emc\Boerse\BoerseController;
+use Emc\Boerse\KasseController;
+use Emc\Boerse\KasseDienst;
+use Emc\Boerse\VerkaufRepository;
 use Emc\Boerse\BoerseDienst;
 use Emc\Boerse\BoerseRepository;
 use Emc\Betrieb\Einstellungen;
@@ -376,6 +379,25 @@ final class App
             $c->get(AngebotRepository::class),
             $c->get(Aenderungsprotokoll::class)
         ));
+        $this->container->set(VerkaufRepository::class, fn(Container $c) => new VerkaufRepository($c->get('pdo')));
+        $this->container->set(KasseDienst::class, fn(Container $c) => new KasseDienst(
+            $c->get('pdo'),
+            $c->get(AngebotRepository::class),
+            $c->get(MagazinDienst::class),
+            $c->get(Aenderungsprotokoll::class),
+            $c->get(BoerseRepository::class),
+            $c->get(MagazinRepository::class),
+            $c->get(VerkaufRepository::class)
+        ));
+        $this->container->set(KasseController::class, fn(Container $c) => new KasseController(
+            $this->view,
+            $c->get(BoerseRepository::class),
+            $c->get(AngebotRepository::class),
+            $c->get(KasseDienst::class),
+            $c->get(VerkaufRepository::class),
+            $c->get(Auth::class),
+            $c->get('session')
+        ));
         $this->container->set(AngebotController::class, fn(Container $c) => new AngebotController(
             $this->view,
             $c->get(AngebotRepository::class),
@@ -721,7 +743,7 @@ final class App
     /** Pfade, die vor dem Datenbank-Update zu /admin/update führen (siehe 3c in handle()). */
     private static function brauchtNeuesSchema(string $pfad): bool
     {
-        foreach (['/anlagen', '/wartung', '/admin/wartungsarten', '/code', '/defekt', '/meine-meldungen', '/reparaturen', '/etiketten', '/magazin', '/admin/magazin-kategorien', '/angebote', '/boersen'] as $p) {
+        foreach (['/anlagen', '/wartung', '/admin/wartungsarten', '/code', '/defekt', '/meine-meldungen', '/reparaturen', '/etiketten', '/magazin', '/admin/magazin-kategorien', '/angebote', '/boersen', '/kasse', '/verkaeufe'] as $p) {
             if ($pfad === $p || str_starts_with($pfad, $p . '/')) {
                 return true;
             }

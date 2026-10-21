@@ -30,6 +30,12 @@ $offene = array_values(array_filter($angebote, fn(array $a): bool => in_array($a
                     <button type="submit" class="btn btn-success">Börse starten</button>
                 </form>
             <?php endif; ?>
+            <?php if ($b['status'] === 'laeuft'): ?>
+                <a class="btn btn-success" href="<?= e(url('/boersen/' . $id . '/kasse')) ?>">Kasse</a>
+            <?php endif; ?>
+            <?php if ($b['status'] !== 'in_vorbereitung'): ?>
+                <a class="btn btn-outline-secondary" href="<?= e(url('/boersen/' . $id . '/verkaeufe')) ?>">Verkäufe</a>
+            <?php endif; ?>
             <?php if ($b['status'] !== 'abgeschlossen'): ?>
                 <a class="btn btn-primary" href="<?= e(url('/boersen/' . $id . '/bearbeiten')) ?>">Bearbeiten</a>
             <?php endif; ?>
