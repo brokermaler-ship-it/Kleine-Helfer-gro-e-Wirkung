@@ -31,7 +31,11 @@ final readonly class Bogen
         return new self(25.4, 10.0, 7, 27, 13.5, 8.48, 2.54, 0.0);
     }
 
-    /** Anlagen-Etikett mit QR-Code: 70 × 37 mm, 3 × 8 = 24 je Bogen, randlos (oben 0,5 mm). */
+    /**
+     * Anlagen-Etikett mit QR-Code: 70 × 37 mm, 3 × 8 = 24 je Bogen, randlos (oben 0,5 mm) – Avery Zweckform 3474.
+     * Nicht verwechseln mit 3475 (70 × 36 mm, ebenfalls 24 je Bogen): dafür new self(70.0, 36.0, 3, 8, 4.5, 0.0, 0.0, 0.0)
+     * und zuerst einen Probedruck auf Normalpapier.
+     */
     public static function anlage(): self
     {
         return new self(70.0, 37.0, 3, 8, 0.5, 0.0, 0.0, 0.0);

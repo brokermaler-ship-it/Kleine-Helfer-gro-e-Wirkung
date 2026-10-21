@@ -10,6 +10,7 @@
  * @var string $typ fahrzeug oder anlage
  * @var list<string> $ohneCode Inventarnummern übersprungener Fahrzeuge
  * @var bool $urlFehlt
+ * @var string $qrBasis Basis der Kurzlinks im QR-Code (nur Anlagen)
  * @var int $start
  * @var array<string,mixed> $zurueck Parameter für den Link zurück zur Auswahl
  */
@@ -39,7 +40,7 @@ $anzahl = count($ids);
     <h1 class="h4"><?= e(EtikettController::ARTEN[$art] ?? 'Etiketten') ?>: <?= $anzahl === 1 ? '1 Etikett' : $anzahl . ' Etiketten' ?><?php if ($boegen !== []): ?> auf <?= count($boegen) === 1 ? '1 Bogen' : count($boegen) . ' Bögen' ?><?php endif; ?></h1>
     <div class="alert alert-info mb-2" role="note">Beim Drucken „Tatsächliche Größe“ bzw. 100&nbsp;% und Ränder „Keine“ wählen.</div>
     <?php if ($urlFehlt): ?>
-    <div class="alert alert-warning mb-2" role="alert"><?= e(EtikettController::URL_WARNUNG) ?></div>
+    <div class="alert alert-warning mb-2" role="alert"><?= e(EtikettController::URL_WARNUNG) ?> Die QR-Codes zeigen jetzt auf <strong><?= e($qrBasis) ?>/c/…</strong>.</div>
     <?php endif; ?>
     <?php if ($ohneCode !== []): ?>
     <div class="alert alert-warning mb-2" role="alert">Übersprungen (ohne Code, Inventarnummer nicht im Format EMC-&lt;Zahl&gt;): <?= e(implode(', ', $ohneCode)) ?></div>
@@ -47,7 +48,7 @@ $anzahl = count($ids);
     <?php if ($boegen === []): ?>
     <p class="mb-2">Keine Etiketten für diese Auswahl.</p>
     <?php else: ?>
-    <p class="text-muted small mb-2">Start auf Feld <?= (int) $start ?> des ersten Bogens. Erst nach dem Drucken „Als gedruckt vermerken“ – dann fallen die Etiketten aus der Auswahl „noch nicht gedruckt“.</p>
+    <p class="text-muted small mb-2">Start auf Feld <?= (int) $start ?> des ersten Bogens. Erst nach dem Drucken „Als gedruckt vermerken“ – dann fallen die Etiketten aus der Auswahl „noch nicht gedruckt“.<?php if ($typ === 'fahrzeug'): ?> Der Vermerk gilt für Klebchen und Verpackung gemeinsam.<?php endif; ?></p>
     <?php endif; ?>
     <div class="d-flex flex-wrap gap-2 align-items-center">
         <?php if ($boegen !== []): ?>

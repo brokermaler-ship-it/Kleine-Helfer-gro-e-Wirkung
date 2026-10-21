@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace Emc\Etiketten;
 
+use Emc\Codes\Code;
+
 /**
  * Welche Fahrzeuge bzw. Anlagen ein Etikett bekommen, und der Vermerk „gedruckt“ (Spalte etikett_gedruckt_am,
- * Migration 015). Ausgemusterte Fahrzeuge nur bei der Auswahl „einzeln“.
+ * Migration 015). Ausgemusterte Fahrzeuge nur bei der Auswahl „einzeln“. „Noch nicht gedruckt“ enthält nur Fahrzeuge mit
+ * Code (Code::fahrzeug) – die übrigen bekommen nie ein Klebchen und blieben sonst für immer „ungedruckt“.
  */
 final class EtikettAuswahl
 {
@@ -61,7 +64,25 @@ final class EtikettAuswahl
             . ' ORDER BY f.inventarnummer, f.id'
         );
         $st->execute($werte);
-        return $st->fetchAll(\PDO::FETCH_ASSOC);
+        $zeilen = $st->fetchAll(\PDO::FETCH_ASSOC);
+        if ($auswahl === 'ungedruckt') {
+            $zeilen = array_values(array_filter($zeilen, fn(array $f): bool => Code::fahrzeug((string) $f['inventarnummer']) !== null));
+        }
+        return $zeilen;
+    }
+
+    /**
+     * Inventarnummern der Fahrzeuge ohne Code, die sonst unter „noch nicht gedruckt“ stünden (nicht ausgemustert, nie
+     * vermerkt) – die Auswahlseite nennt sie getrennt.
+     *
+     * @return list<string>
+     */
+    public function ungedrucktOhneCode(): array
+    {
+        $alle = $this->pdo->query(
+            "SELECT inventarnummer FROM fahrzeug WHERE etikett_gedruckt_am IS NULL AND status <> 'ausgemustert' ORDER BY inventarnummer, id"
+        )->fetchAll(\PDO::FETCH_COLUMN);
+        return array_values(array_filter(array_map('strval', $alle), fn(string $nr): bool => Code::fahrzeug($nr) === null));
     }
 
     /**

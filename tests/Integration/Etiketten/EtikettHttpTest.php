@@ -271,4 +271,75 @@ final class EtikettHttpTest extends DbTestCase
         $this->anmelden('mitglied');
         $this->assertStringNotContainsString('/etiketten?', $this->get('/fahrzeuge/' . $fz)->body);
     }
+
+    /** I1: Der Bogen für Anlagen-Etiketten ist genannt (70 × 37 mm, 24 je Bogen = Zweckform 3474, nicht 3475 mit 70 × 36). */
+    public function test_auswahl_nennt_bogen_3474(): void
+    {
+        $this->anmelden();
+        $body = $this->get('/etiketten')->body;
+        $this->assertStringContainsString('Zweckform 3474', $body);
+        $this->assertStringContainsString('nicht 3475, der hat 70 × 36 mm', $body);
+        $this->assertStringContainsString('Der Vermerk „gedruckt“ gilt für Klebchen und Verpackung gemeinsam.', $body);
+        $this->assertStringContainsString('L4731', $body);
+    }
+
+    /** M1: Fahrzeuge ohne Code zählen nicht als „noch nicht gedruckt“, werden aber getrennt genannt. */
+    public function test_ungedruckt_ohne_codelose_fahrzeuge(): void
+    {
+        $this->fahrzeug('ALT-7', 'Museumslok');
+        $this->fahrzeug('emc-0004', 'Kleingeschrieben');
+        $this->fahrzeug('EMC-0003', 'Neue Lok');
+        $this->anmelden();
+        $auswahl = $this->get('/etiketten')->body;
+        $this->assertStringContainsString('Noch nicht gedruckt (1 Fahrzeug)', $auswahl);
+        $this->assertMatchesRegularExpression('~2 Fahrzeuge ohne Code[^<]*:\s*ALT-7, emc-0004~', $auswahl);
+
+        $r = $this->get('/etiketten/druck', ['art' => 'klebchen', 'auswahl' => 'ungedruckt']);
+        $this->assertSame(1, self::etikettenAnzahl($r->body));
+        $this->assertStringNotContainsString('Übersprungen', $r->body);
+        $this->assertSame(1, count((new EtikettAuswahl($this->pdo))->fahrzeuge('ungedruckt', [], null)));
+        // Andere Auswahlen nennen codelose weiterhin als übersprungen.
+        $this->assertStringContainsString('ALT-7', $this->get('/etiketten/druck', ['art' => 'klebchen', 'auswahl' => 'loks'])->body);
+    }
+
+    /** M3: „Zurück zur Auswahl“ behält Startposition und Spurweite, das Startfeld zeigt den Wert. */
+    public function test_zurueck_behaelt_start_und_spurweite(): void
+    {
+        $this->fahrzeug('EMC-0001', 'Lok N', spur: $this->n);
+        $this->anlage(1, 'Clubanlage H0');
+        $this->anmelden();
+        $r = $this->get('/etiketten/druck', ['art' => 'verpackung', 'auswahl' => 'spurweite', 'spurweite_id' => (string) $this->n, 'start' => '17']);
+        $this->assertMatchesRegularExpression('~<a class="btn btn-link" href="([^"]+)">Zurück zur Auswahl</a>~', $r->body);
+        preg_match('~<a class="btn btn-link" href="([^"]+)">Zurück zur Auswahl</a>~', $r->body, $m);
+        parse_str((string) parse_url(html_entity_decode($m[1]), PHP_URL_QUERY), $query);
+        $this->assertSame(['art' => 'verpackung', 'auswahl' => 'spurweite', 'start' => '17', 'spurweite_id' => (string) $this->n], $query);
+
+        $auswahl = $this->get('/etiketten', $query)->body;
+        $this->assertMatchesRegularExpression('~id="start-fz"[^>]*value="17"~', $auswahl);
+        $this->assertMatchesRegularExpression('~id="start-anl"[^>]*value="1"~', $auswahl);
+        $this->assertMatchesRegularExpression('~<option value="' . $this->n . '" selected~', $auswahl);
+        $this->assertMatchesRegularExpression('~id="fz-spurweite" value="spurweite" checked~', $auswahl);
+
+        // Anlagen: Start im Anlagenformular; außerhalb des Bogens → 1.
+        $r = $this->get('/etiketten/druck', ['art' => 'anlage', 'auswahl' => 'alle', 'start' => '5']);
+        preg_match('~<a class="btn btn-link" href="([^"]+)">Zurück zur Auswahl</a>~', $r->body, $m);
+        $auswahl = $this->get('/etiketten', ['art' => 'anlage', 'auswahl' => 'alle', 'start' => '5'])->body;
+        $this->assertStringContainsString('start=5', html_entity_decode($m[1]));
+        $this->assertMatchesRegularExpression('~id="start-anl"[^>]*value="5"~', $auswahl);
+        $this->assertMatchesRegularExpression('~id="start-fz"[^>]*value="1"~', $auswahl);
+        $this->assertMatchesRegularExpression('~id="start-anl"[^>]*value="1"~', $this->get('/etiketten', ['art' => 'anlage', 'start' => '99'])->body);
+    }
+
+    /** M4: Die Warnung nennt die Adresse, auf die die QR-Codes zeigen (escaped). */
+    public function test_warnung_nennt_qr_adresse(): void
+    {
+        $this->anlage(1, 'Clubanlage H0');
+        $this->anmelden();
+        $text = 'Die QR-Codes zeigen jetzt auf <strong>http://lokal.test:8080/c/…</strong>';
+        $this->assertStringContainsString($text, $this->get('/etiketten/druck', ['art' => 'anlage', 'auswahl' => 'alle'], [], ['HTTP_HOST' => 'lokal.test:8080'])->body);
+        $this->assertStringContainsString($text, $this->get('/etiketten', [], [], ['HTTP_HOST' => 'lokal.test:8080'])->body);
+        $this->assertStringContainsString('<strong>http://localhost/c/…</strong>', $this->get('/etiketten', [], [], ['HTTP_HOST' => 'x"><b>'])->body);
+        $mitUrl = $this->get('/etiketten', [], ['oeffentliche_url' => 'https://verein.example'])->body;
+        $this->assertStringNotContainsString('Die QR-Codes zeigen jetzt auf', $mitUrl);
+    }
 }

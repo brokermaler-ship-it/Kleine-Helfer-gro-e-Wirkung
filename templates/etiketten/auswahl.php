@@ -12,6 +12,10 @@
 /** @var int $anzahlAnlagen */
 /** @var int $anzahlAnlagenUngedruckt */
 /** @var bool $urlFehlt */
+/** @var string $qrBasis */
+/** @var list<string> $ohneCodeUngedruckt */
+/** @var int $startFahrzeug */
+/** @var int $startAnlage */
 /** @var \Emc\Etiketten\Bogen $klebchen */
 /** @var \Emc\Etiketten\Bogen $anlageBogen */
 use Emc\Codes\Code;
@@ -34,7 +38,7 @@ $anlAuswahl = $einzelAnlagen !== [] ? $auswahlAnlage : ($auswahlAnlage === 'einz
                     <legend class="form-label fs-6">Art</legend>
                     <div class="form-check">
                         <input class="form-check-input" type="radio" name="art" id="art-klebchen" value="klebchen"<?= $art !== 'verpackung' ? ' checked' : '' ?>>
-                        <label class="form-check-label" for="art-klebchen">Klebchen – nur der Code (z.&nbsp;B. F12), <?= e(str_replace('.', ',', (string) $klebchen->breite)) ?> × <?= e((string) $klebchen->hoehe) ?> mm, <?= $klebchen->proBogen() ?> je Bogen</label>
+                        <label class="form-check-label" for="art-klebchen">Klebchen – nur der Code (z.&nbsp;B. F12), <?= e(str_replace('.', ',', (string) $klebchen->breite)) ?> × <?= e((string) $klebchen->hoehe) ?> mm, <?= $klebchen->proBogen() ?> je Bogen (z.&nbsp;B. Avery Zweckform L4731)</label>
                     </div>
                     <div class="form-check">
                         <input class="form-check-input" type="radio" name="art" id="art-verpackung" value="verpackung"<?= $art === 'verpackung' ? ' checked' : '' ?>>
@@ -61,6 +65,10 @@ $anlAuswahl = $einzelAnlagen !== [] ? $auswahlAnlage : ($auswahlAnlage === 'einz
                     <div class="form-check">
                         <input class="form-check-input" type="radio" name="auswahl" id="fz-ungedruckt" value="ungedruckt"<?= $fzAuswahl === 'ungedruckt' ? ' checked' : '' ?>>
                         <label class="form-check-label" for="fz-ungedruckt">Noch nicht gedruckt (<?= e($anzahlText($anzahlFahrzeugeUngedruckt)) ?>)</label>
+                        <?php if ($ohneCodeUngedruckt !== []): ?>
+                        <div class="form-text"><?= e($anzahlText(count($ohneCodeUngedruckt))) ?> ohne Code (Inventarnummer nicht im Format EMC-&lt;Zahl&gt;, daher kein Klebchen): <?= e(implode(', ', array_slice($ohneCodeUngedruckt, 0, 30))) ?><?= count($ohneCodeUngedruckt) > 30 ? ' …' : '' ?></div>
+                        <?php endif; ?>
+                        <div class="form-text">Der Vermerk „gedruckt“ gilt für Klebchen und Verpackung gemeinsam.</div>
                     </div>
                     <div class="form-check">
                         <input class="form-check-input" type="radio" name="auswahl" id="fz-loks" value="loks"<?= $fzAuswahl === 'loks' ? ' checked' : '' ?>>
@@ -80,7 +88,7 @@ $anlAuswahl = $einzelAnlagen !== [] ? $auswahlAnlage : ($auswahlAnlage === 'einz
                 </fieldset>
                 <div class="mb-3">
                     <label class="form-label" for="start-fz">Startposition auf dem Bogen</label>
-                    <input class="form-control" type="number" name="start" id="start-fz" min="1" max="<?= $klebchen->proBogen() ?>" value="1" inputmode="numeric" style="max-width: 8rem">
+                    <input class="form-control" type="number" name="start" id="start-fz" min="1" max="<?= $klebchen->proBogen() ?>" value="<?= (int) $startFahrzeug ?>" inputmode="numeric" style="max-width: 8rem">
                     <div class="form-text">1–<?= $klebchen->proBogen() ?>, zeilenweise von links oben (<?= $klebchen->spalten ?> je Zeile) – so lässt sich ein angefangener Bogen weiterverwenden.</div>
                 </div>
                 <button type="submit" class="btn btn-primary">Druckseite öffnen</button>
@@ -92,9 +100,9 @@ $anlAuswahl = $einzelAnlagen !== [] ? $auswahlAnlage : ($auswahlAnlage === 'einz
             <input type="hidden" name="art" value="anlage">
             <div class="card-body">
                 <h2 class="h5 card-title">Anlagen</h2>
-                <p class="mb-3">Etikett <?= e((string) $anlageBogen->breite) ?> × <?= e((string) $anlageBogen->hoehe) ?> mm (<?= $anlageBogen->proBogen() ?> je Bogen) mit QR-Code (Kurzlink zur Anlage), Name und Code.</p>
+                <p class="mb-3">Etikett <?= e((string) $anlageBogen->breite) ?> × <?= e((string) $anlageBogen->hoehe) ?> mm (<?= $anlageBogen->proBogen() ?> je Bogen, z.&nbsp;B. Avery Zweckform 3474 – nicht 3475, der hat 70 × 36 mm) mit QR-Code (Kurzlink zur Anlage), Name und Code.</p>
                 <?php if ($urlFehlt): ?>
-                <div class="alert alert-warning" role="alert"><?= e(EtikettController::URL_WARNUNG) ?></div>
+                <div class="alert alert-warning" role="alert"><?= e(EtikettController::URL_WARNUNG) ?> Die QR-Codes zeigen jetzt auf <strong><?= e($qrBasis) ?>/c/…</strong>.</div>
                 <?php endif; ?>
                 <fieldset class="mb-3">
                     <legend class="form-label fs-6">Auswahl</legend>
@@ -123,7 +131,7 @@ $anlAuswahl = $einzelAnlagen !== [] ? $auswahlAnlage : ($auswahlAnlage === 'einz
                 </fieldset>
                 <div class="mb-3">
                     <label class="form-label" for="start-anl">Startposition auf dem Bogen</label>
-                    <input class="form-control" type="number" name="start" id="start-anl" min="1" max="<?= $anlageBogen->proBogen() ?>" value="1" inputmode="numeric" style="max-width: 8rem">
+                    <input class="form-control" type="number" name="start" id="start-anl" min="1" max="<?= $anlageBogen->proBogen() ?>" value="<?= (int) $startAnlage ?>" inputmode="numeric" style="max-width: 8rem">
                     <div class="form-text">1–<?= $anlageBogen->proBogen() ?>, zeilenweise von links oben (<?= $anlageBogen->spalten ?> je Zeile).</div>
                 </div>
                 <button type="submit" class="btn btn-primary">Druckseite öffnen</button>

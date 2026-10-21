@@ -40,6 +40,7 @@ final class EtikettController
             $ids = self::ids($r);
             $auswahl = $r->text('auswahl');
             $spurweiten = $this->spurweiten->alle();
+            [$qrBasis, $urlFehlt] = $this->basis($r);
             $html = $this->view->render('etiketten/auswahl', [
                 'titel' => 'Etiketten',
                 'art' => $art,
@@ -52,9 +53,14 @@ final class EtikettController
                 'anzahlJeSpurweite' => $this->auswahl->anzahlJeSpurweite(),
                 'anzahlLoks' => count($this->auswahl->fahrzeuge('loks', [], null)),
                 'anzahlFahrzeugeUngedruckt' => count($this->auswahl->fahrzeuge('ungedruckt', [], null)),
+                'ohneCodeUngedruckt' => $this->auswahl->ungedrucktOhneCode(),
+                // Startposition vorbelegen (z. B. nach „Zurück zur Auswahl“), nur im Formular der gewählten Art.
+                'startFahrzeug' => $art !== 'anlage' ? ($r->ganzzahl('start', 1, Bogen::klebchen()->proBogen()) ?? 1) : 1,
+                'startAnlage' => $art === 'anlage' ? ($r->ganzzahl('start', 1, Bogen::anlage()->proBogen()) ?? 1) : 1,
                 'anzahlAnlagen' => count($this->auswahl->anlagen('alle', [])),
                 'anzahlAnlagenUngedruckt' => count($this->auswahl->anlagen('ungedruckt', [])),
-                'urlFehlt' => $this->oeffentlicheUrl() === '',
+                'urlFehlt' => $urlFehlt,
+                'qrBasis' => $qrBasis,
                 'klebchen' => Bogen::klebchen(),
                 'anlageBogen' => Bogen::anlage(),
             ]);
@@ -73,6 +79,7 @@ final class EtikettController
             $etiketten = [];
             $ohneCode = [];
             $urlFehlt = false;
+            $basis = '';
             if ($art === 'anlage') {
                 [$basis, $urlFehlt] = $this->basis($r);
                 foreach ($this->auswahl->anlagen($auswahl, $ids) as $a) {
@@ -90,7 +97,12 @@ final class EtikettController
                     $etiketten[] = ['id' => (int) $f['id'], 'code' => $code, 'bezeichnung' => (string) $f['bezeichnung']];
                 }
             }
-            $zurueck = ['art' => $art, 'auswahl' => $auswahl];
+            // Zurück zur Auswahl mit denselben Angaben (Startposition, Spurweite, einzelne IDs).
+            $zurueck = ['art' => $art, 'auswahl' => $auswahl, 'start' => $start];
+            $spurweiteId = $r->ganzzahl('spurweite_id', 1, 4294967295);
+            if ($art !== 'anlage' && $spurweiteId !== null) {
+                $zurueck['spurweite_id'] = $spurweiteId;
+            }
             if ($ids !== [] && $auswahl === 'einzeln') {
                 $zurueck['ids'] = $ids;
             }
@@ -103,6 +115,7 @@ final class EtikettController
                 'typ' => $art === 'anlage' ? 'anlage' : 'fahrzeug',
                 'ohneCode' => $ohneCode,
                 'urlFehlt' => $urlFehlt,
+                'qrBasis' => $basis,
                 'start' => $start,
                 'zurueck' => $zurueck,
             ], null);
