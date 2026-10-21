@@ -33,6 +33,7 @@ final class FahrzeugImportController
 
     public function formular(Request $r, array $p = []): Response
     {
+        $this->raeumeAuf();
         return $this->ohneSchemaZumUpdate(fn() => $this->html('fahrzeuge/import', [
             'titel' => 'Fahrzeuge importieren',
             'letzte' => $this->import->letzte(),
@@ -56,7 +57,7 @@ final class FahrzeugImportController
                 return Response::redirect(url('/fahrzeuge/import'));
             }
             $name = FahrzeugCsvImport::dateiname((string) ($datei['name'] ?? ''));
-            $ergebnis = $this->import->pruefe($inhalt);
+            $ergebnis = $this->import->pruefe($inhalt, $name);
             if ($ergebnis->istImportierbar()) {
                 $this->raeumeAuf();
                 $token = bin2hex(random_bytes(16));
@@ -72,6 +73,7 @@ final class FahrzeugImportController
                 'titel' => 'Import-Vorschau',
                 'dateiname' => $name,
                 'ergebnis' => $ergebnis,
+                'hash' => FahrzeugImport::hash($inhalt),
             ]);
         });
     }
@@ -86,6 +88,13 @@ final class FahrzeugImportController
         if ($inhalt === false || !hash_equals((string) ($vorschau['hash'] ?? ''), FahrzeugImport::hash($inhalt))) {
             $this->verwirfVorschau();
             $this->session->meldung('fehler', 'Es liegt keine Vorschau vor. Bitte die Datei erneut hochladen.');
+            return Response::redirect(url('/fahrzeuge/import'));
+        }
+        // Zwei Tabs: das Formular nennt die Prüfsumme der angezeigten Datei. Passt sie nicht zur aktuellen Vorschau
+        // (inzwischen wurde eine andere Datei hochgeladen), wird nichts importiert; die neuere Vorschau bleibt.
+        $angezeigt = $r->text('hash');
+        if ($angezeigt === '' || !hash_equals((string) $vorschau['hash'], $angezeigt)) {
+            $this->session->meldung('fehler', 'Die Vorschau ist nicht mehr aktuell (inzwischen wurde eine andere Datei hochgeladen). Bitte erneut hochladen.');
             return Response::redirect(url('/fahrzeuge/import'));
         }
         // Ab hier ist die Vorschau verbraucht, ob der Import gelingt oder nicht (Doppelklick legt nichts doppelt an).

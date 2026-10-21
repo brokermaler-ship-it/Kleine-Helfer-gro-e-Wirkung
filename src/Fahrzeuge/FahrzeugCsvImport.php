@@ -17,6 +17,8 @@ final class FahrzeugCsvImport
 
     public const MAX_ZEILEN = 2000;
     public const MAX_BYTES = 2097152;
+    /** Spalte fahrzeug.notiz ist TEXT. */
+    public const MAX_NOTIZ_BYTES = 65535;
 
     /** Spaltenschlüssel (Kopf ohne Groß-/Kleinschreibung und Leerzeichen) => Anzeigename. */
     private const SPALTEN = [
@@ -42,8 +44,9 @@ final class FahrzeugCsvImport
     /**
      * @param array<string,int> $spurweiten Name der Spurweite => ID
      * @param list<string> $vorhandeneBezeichnungen Bezeichnungen schon vorhandener Fahrzeuge (für den Hinweis „doppelt“)
+     * @param string $dateiname bereinigter Dateiname (für die Größe der zusammengesetzten Notiz)
      */
-    public static function parse(string $inhalt, array $spurweiten, array $vorhandeneBezeichnungen = []): FahrzeugImportErgebnis
+    public static function parse(string $inhalt, array $spurweiten, array $vorhandeneBezeichnungen = [], string $dateiname = 'import.csv'): FahrzeugImportErgebnis
     {
         if (strlen($inhalt) > self::MAX_BYTES) {
             return new FahrzeugImportErgebnis([], ['Die Datei ist zu groß (höchstens ' . intdiv(self::MAX_BYTES, 1048576) . ' MB).']);
@@ -58,7 +61,8 @@ final class FahrzeugCsvImport
 
         $kopfIndex = null;
         foreach ($zeilen as $i => $z) {
-            if (trim($z) !== '') {
+            // Reine Trennerzeilen (z. B. „;;;“ aus Excel) vor der Kopfzeile zählen nicht.
+            if ((preg_replace('/[;,\t"\s]+/u', '', $z) ?? $z) !== '') {
                 $kopfIndex = $i;
                 break;
             }
@@ -104,7 +108,7 @@ final class FahrzeugCsvImport
                 return new FahrzeugImportErgebnis([], ['Die Datei hat mehr als ' . self::MAX_ZEILEN . ' Fahrzeugzeilen. Bitte aufteilen.']);
             }
             $wert = fn(string $s): string => isset($spalte[$s]) ? ($zellen[$spalte[$s]] ?? '') : '';
-            $ergebnis[] = self::zeile($index + 1, $wert, $spurweiten, $spurNachName);
+            $ergebnis[] = self::zeile($index + 1, $wert, $spurweiten, $spurNachName, $dateiname);
         }
         if ($ergebnis === []) {
             return new FahrzeugImportErgebnis([], ['Die Datei enthält keine Fahrzeuge.']);
@@ -153,7 +157,7 @@ final class FahrzeugCsvImport
      * @param array<string,int> $spurNachName
      * @return array<string,mixed>
      */
-    private static function zeile(int $nr, callable $wert, array $spurweiten, array $spurNachName): array
+    private static function zeile(int $nr, callable $wert, array $spurweiten, array $spurNachName, string $dateiname): array
     {
         $fehler = [];
         $gattungRoh = $wert('gattung');
@@ -205,10 +209,17 @@ final class FahrzeugCsvImport
         if ($strom !== '' && !in_array($strom, FahrzeugValidator::STROMSYSTEME, true)) {
             $fehler[] = 'Strom „' . $wert('strom') . '“ ist unbekannt (erlaubt 2L, 3L oder leer).';
         }
+        $zuLang = false;
         foreach (self::NOTIZFELDER as $csv => $max) {
             if (mb_strlen($wert($csv)) > $max) {
                 $fehler[] = self::SPALTEN[$csv] . ': höchstens ' . $max . ' Zeichen.';
+                $zuLang = true;
             }
+        }
+        // Die Spalte notiz ist TEXT (höchstens 65535 Byte, nicht Zeichen): sonst Fehler 1406 bzw. stilles Abschneiden.
+        $notiz = self::notiz(['alte_nummer' => $wert('altenummer'), 'besitzer' => $wert('besitzer'), 'quelle' => $wert('quelle'), 'notiz' => $wert('notiz')], $dateiname, new \DateTimeImmutable());
+        if (!$zuLang && strlen($notiz) > self::MAX_NOTIZ_BYTES) {
+            $fehler[] = 'Notiz ist zusammen mit der Herkunftsangabe zu lang (höchstens ' . self::MAX_NOTIZ_BYTES . ' Byte; Umlaute zählen doppelt).';
         }
 
         $daten = [

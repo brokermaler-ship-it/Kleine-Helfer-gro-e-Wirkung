@@ -82,6 +82,12 @@ final class FahrzeugImportHttpTest extends DbTestCase
             . "A-3;Sonderzug;Zugverband;;;;H0;;;;;;\r\n";
     }
 
+    /** Bestätigen wie das Formular der Vorschau: mit der Prüfsumme der angezeigten Datei. */
+    private function bestaetigen(?string $hash = null): Response
+    {
+        return $this->post('/fahrzeuge/import/bestaetigen', ['hash' => $hash ?? (string) ($this->sitzung['fahrzeug_import']['hash'] ?? '')]);
+    }
+
     /** @return list<string> */
     private function meldungen(): array
     {
@@ -149,7 +155,7 @@ final class FahrzeugImportHttpTest extends DbTestCase
         $this->assertArrayHasKey('fahrzeug_import', $this->sitzung);
         $this->assertArrayNotHasKey('inhalt', $this->sitzung['fahrzeug_import']);
 
-        $b = $this->post('/fahrzeuge/import/bestaetigen');
+        $b = $this->bestaetigen();
         $this->assertSame(303, $b->status);
         $this->assertSame('/fahrzeuge?ungeprueft=1', $b->headers['Location']);
         $this->assertSame(['2 Fahrzeuge importiert.'], $this->meldungen());
@@ -224,7 +230,7 @@ final class FahrzeugImportHttpTest extends DbTestCase
     {
         $this->als($this->wart);
         $this->post('/fahrzeuge/import', [], $this->upload($this->liste()));
-        $this->post('/fahrzeuge/import/bestaetigen');
+        $this->bestaetigen();
         $this->assertSame(2, (int) $this->pdo->query('SELECT COUNT(*) FROM fahrzeug')->fetchColumn());
 
         $r = $this->post('/fahrzeuge/import', [], $this->upload($this->liste(), 'anderer-name.csv'));
@@ -242,7 +248,7 @@ final class FahrzeugImportHttpTest extends DbTestCase
         $this->als($this->wart);
         $this->post('/fahrzeuge/import', [], $this->upload($this->liste()));
         $this->pdo->prepare("INSERT INTO fahrzeug_import (datei_sha256, dateiname, anzahl) VALUES (?, 'x.csv', 2)")->execute([hash('sha256', $this->liste())]);
-        $b = $this->post('/fahrzeuge/import/bestaetigen');
+        $b = $this->bestaetigen();
         $this->assertSame(303, $b->status);
         $this->assertSame('/fahrzeuge/import', $b->headers['Location']);
         $this->assertStringContainsString('bereits importiert', implode(' ', $this->meldungen()));
@@ -275,15 +281,72 @@ final class FahrzeugImportHttpTest extends DbTestCase
         $this->assertSame(0, (int) $this->pdo->query('SELECT COUNT(*) FROM fahrzeug')->fetchColumn());
     }
 
+    /** Zwei Tabs: Bestätigen aus dem alten Tab darf nicht die inzwischen hochgeladene neuere Datei importieren. */
     public function test_neue_vorschau_ersetzt_alte_datei(): void
     {
         $this->als($this->wart);
-        $this->post('/fahrzeuge/import', [], $this->upload($this->liste()));
-        $this->post('/fahrzeuge/import', [], $this->upload(self::KOPF . ";Lok C;Lok;;;;H0;;;;;;\r\n"));
+        $alt = $this->post('/fahrzeuge/import', [], $this->upload($this->liste()));
+        $altHash = hash('sha256', $this->liste());
+        $this->assertStringContainsString('name="hash" value="' . $altHash . '"', $alt->body);
+        $neuInhalt = self::KOPF . ";Lok C;Lok;;;;H0;;;;;;\r\n";
+        $this->post('/fahrzeuge/import', [], $this->upload($neuInhalt));
         $this->assertCount(1, $this->importDateien());
-        $this->post('/fahrzeuge/import/bestaetigen');
+
+        $r = $this->bestaetigen($altHash);
+        $this->assertSame(303, $r->status);
+        $this->assertSame('/fahrzeuge/import', $r->headers['Location']);
+        $this->assertSame(['Die Vorschau ist nicht mehr aktuell (inzwischen wurde eine andere Datei hochgeladen). Bitte erneut hochladen.'], $this->meldungen());
+        $this->assertSame(0, (int) $this->pdo->query('SELECT COUNT(*) FROM fahrzeug')->fetchColumn());
+        $this->assertCount(1, $this->importDateien(), 'die neuere Vorschau bleibt erhalten');
+        $this->assertArrayHasKey('fahrzeug_import', $this->sitzung);
+        $this->assertSame(303, $this->bestaetigen('')->status, 'ohne Prüfsumme ebenso');
+        $this->assertSame(0, (int) $this->pdo->query('SELECT COUNT(*) FROM fahrzeug')->fetchColumn());
+
+        $this->sitzung['_meldungen'] = [];
+        $this->bestaetigen(hash('sha256', $neuInhalt));
         $this->assertSame(['Lok C'], $this->pdo->query('SELECT bezeichnung FROM fahrzeug')->fetchAll(\PDO::FETCH_COLUMN));
         $this->assertSame(['1 Fahrzeug importiert.'], $this->meldungen());
+        $this->assertSame([], $this->importDateien());
+    }
+
+    public function test_vorschau_nennt_neue_inventarnummern(): void
+    {
+        $this->als($this->wart);
+        $r = $this->post('/fahrzeuge/import', [], $this->upload($this->liste()));
+        $this->assertStringContainsString('Die Fahrzeuge bekommen neue Inventarnummern; die alte Nummer aus der Liste steht in der Notiz.', $r->body);
+    }
+
+    public function test_formular_raeumt_alte_vorschau_dateien_weg(): void
+    {
+        mkdir($this->speicher . '/import', 0750, true);
+        $alt = $this->speicher . '/import/' . str_repeat('a', 32) . '.csv';
+        $frisch = $this->speicher . '/import/' . str_repeat('b', 32) . '.csv';
+        file_put_contents($alt, 'x');
+        file_put_contents($frisch, 'x');
+        touch($alt, time() - 86400 - 60);
+        $this->als($this->wart);
+        $this->assertSame(200, $this->get('/fahrzeuge/import')->status);
+        $this->assertFileDoesNotExist($alt);
+        $this->assertFileExists($frisch);
+    }
+
+    /** Hält eine andere Verbindung die Sperre, gibt es eine verständliche Meldung samt Hinweis auf erneutes Hochladen. */
+    public function test_sperrkonflikt_meldung(): void
+    {
+        $andere = self::verbindung();
+        $andere->beginTransaction();
+        $andere->prepare("INSERT INTO fahrzeug_import (datei_sha256, dateiname, anzahl) VALUES (?, 'x.csv', 1)")->execute([hash('sha256', $this->liste())]);
+        $this->pdo->exec('SET SESSION innodb_lock_wait_timeout = 1');
+        $dienst = new \Emc\Fahrzeuge\FahrzeugImport($this->pdo, new \Emc\Fahrzeuge\FahrzeugRepository($this->pdo), new \Emc\Stammdaten\SpurweiteRepository($this->pdo), new \Emc\Protokoll\Aenderungsprotokoll($this->pdo));
+        try {
+            $dienst->importiere($this->liste(), 'a.csv', $this->wart, new \DateTimeImmutable());
+            $this->fail('Sperrkonflikt erwartet');
+        } catch (\Emc\Core\DomainFehler $e) {
+            $this->assertSame(\Emc\Core\Transaktion::SPERRKONFLIKT . ' Bitte die Datei erneut hochladen.', $e->getMessage());
+        } finally {
+            $andere->rollBack();
+        }
+        $this->assertSame(0, (int) $this->pdo->query('SELECT COUNT(*) FROM fahrzeug')->fetchColumn());
     }
 
     public function test_csrf_und_dateifehler(): void
@@ -379,7 +442,7 @@ final class FahrzeugImportHttpTest extends DbTestCase
     {
         $this->als($this->wart);
         $this->post('/fahrzeuge/import', [], $this->upload($this->liste()));
-        $this->post('/fahrzeuge/import/bestaetigen');
+        $this->bestaetigen();
         $admin = $this->legeBenutzerAn('admin@verein.de', 'geheim-passwort-1', 'admin');
         $person = (int) $this->pdo->query("SELECT person_id FROM benutzer WHERE id = {$this->wart}")->fetchColumn();
         $this->app()->container()->get(DsgvoLoeschung::class)->loesche($person, [], $admin);
@@ -397,7 +460,7 @@ final class FahrzeugImportHttpTest extends DbTestCase
         $person = (int) $this->pdo->lastInsertId();
         $this->als($this->wart);
         $this->post('/fahrzeuge/import', [], $this->upload($this->liste()));
-        $this->post('/fahrzeuge/import/bestaetigen');
+        $this->bestaetigen();
         $fz = (int) $this->pdo->query("SELECT id FROM fahrzeug WHERE bezeichnung = 'V 100 rot'")->fetchColumn();
         $admin = $this->legeBenutzerAn('admin@verein.de', 'geheim-passwort-1', 'admin');
         $dienst = $this->app()->container()->get(DsgvoLoeschung::class);

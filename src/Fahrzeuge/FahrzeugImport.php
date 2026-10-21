@@ -31,13 +31,13 @@ final class FahrzeugImport
     }
 
     /** Prüft die Datei gegen die vorhandenen Spurweiten und Fahrzeuge und gegen frühere Importe. */
-    public function pruefe(string $inhalt): FahrzeugImportErgebnis
+    public function pruefe(string $inhalt, string $dateiname = 'import.csv'): FahrzeugImportErgebnis
     {
         $spur = [];
         foreach ($this->spurweiten->alle() as $s) {
             $spur[(string) $s['name']] = (int) $s['id'];
         }
-        $ergebnis = FahrzeugCsvImport::parse($inhalt, $spur, $this->fahrzeuge->alleBezeichnungen());
+        $ergebnis = FahrzeugCsvImport::parse($inhalt, $spur, $this->fahrzeuge->alleBezeichnungen(), FahrzeugCsvImport::dateiname($dateiname));
         $frueher = $this->frueherImport(self::hash($inhalt));
         if ($frueher !== null) {
             $ergebnis = $ergebnis->alsBereitsImportiert(self::schonImportiert($frueher));
@@ -56,7 +56,7 @@ final class FahrzeugImport
     public function importiere(string $inhalt, string $dateiname, ?int $benutzerId, \DateTimeImmutable $jetzt): int
     {
         $name = FahrzeugCsvImport::dateiname($dateiname);
-        $ergebnis = $this->pruefe($inhalt);
+        $ergebnis = $this->pruefe($inhalt, $name);
         if ($ergebnis->bereitsImportiert !== null) {
             throw new DomainFehler($ergebnis->bereitsImportiert);
         }
@@ -65,6 +65,20 @@ final class FahrzeugImport
         }
         $zeilen = $ergebnis->anzulegende();
         $hash = self::hash($inhalt);
+        try {
+            return $this->legeAn($zeilen, $hash, $name, $benutzerId, $jetzt);
+        } catch (DomainFehler $e) {
+            if ($e->getMessage() === Transaktion::SPERRKONFLIKT) {
+                // Die Vorschau ist mit dem Bestätigen verbraucht: neu hochladen.
+                throw new DomainFehler(Transaktion::SPERRKONFLIKT . ' Bitte die Datei erneut hochladen.', 0, $e);
+            }
+            throw $e;
+        }
+    }
+
+    /** @param list<array<string,mixed>> $zeilen */
+    private function legeAn(array $zeilen, string $hash, string $name, ?int $benutzerId, \DateTimeImmutable $jetzt): int
+    {
         return Transaktion::readCommitted($this->pdo, function () use ($zeilen, $hash, $name, $benutzerId, $jetzt): int {
             try {
                 $this->pdo->prepare('INSERT INTO fahrzeug_import (datei_sha256, dateiname, anzahl, benutzer_id, erstellt_am) VALUES (?, ?, ?, ?, ?)')

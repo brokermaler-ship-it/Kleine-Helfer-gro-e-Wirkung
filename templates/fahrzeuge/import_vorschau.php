@@ -2,6 +2,7 @@
 /**
  * @var string $dateiname
  * @var \Emc\Fahrzeuge\FahrzeugImportErgebnis $ergebnis
+ * @var string $hash Prüfsumme der angezeigten Datei (Bestätigen nur für genau diese Vorschau)
  */
 include __DIR__ . '/_labels.php';
 $importierbar = $ergebnis->istImportierbar();
@@ -33,7 +34,8 @@ $anlegen = $ergebnis->anzahl('anlegen');
         <strong><?= e(\Emc\Fahrzeuge\FahrzeugImport::KORRIGIEREN) ?></strong>
     </div>
 <?php else: ?>
-    <p class="alert alert-info">Es werden <?= $anlegen ?> Fahrzeug<?= $anlegen === 1 ? '' : 'e' ?> mit neuen Inventarnummern angelegt (Eigentum Verein, ungeprüft).</p>
+    <p class="alert alert-info">Es werden <?= $anlegen ?> Fahrzeug<?= $anlegen === 1 ? '' : 'e' ?> angelegt (Eigentum Verein, ungeprüft).
+        Die Fahrzeuge bekommen neue Inventarnummern; die alte Nummer aus der Liste steht in der Notiz.</p>
 <?php endif; ?>
 
 <?php if ($ergebnis->zeilen !== []): ?>
@@ -76,6 +78,7 @@ $anlegen = $ergebnis->anzahl('anlegen');
         <form method="post" action="<?= e(url('/fahrzeuge/import/bestaetigen')) ?>"
               onsubmit="this.querySelector('button').disabled = true;">
             <?php include dirname(__DIR__) . '/partials/csrf.php'; ?>
+            <input type="hidden" name="hash" value="<?= e($hash) ?>">
             <button type="submit" class="btn btn-primary">Import bestätigen</button>
         </form>
         <form method="post" action="<?= e(url('/fahrzeuge/import/abbrechen')) ?>">

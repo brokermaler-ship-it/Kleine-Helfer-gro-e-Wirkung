@@ -143,6 +143,28 @@ final class FahrzeugCsvImportTest extends TestCase
         $this->assertSame(['Alte Nummer: höchstens 50 Zeichen.', 'Besitzer: höchstens 150 Zeichen.', 'Quelle: höchstens 250 Zeichen.'], $e->zeilen[2]['fehler']);
     }
 
+    /** TEXT fasst 65535 Byte: die zusammengesetzte Notiz (mit Herkunftszeile) darf nicht größer werden. */
+    public function test_notiz_grenze_in_byte(): void
+    {
+        $e = FahrzeugCsvImport::parse(self::csv(
+            'A-1;Lok;Lok;;;;H0;;;;;;' . str_repeat('ä', 40000),
+            'A-2;Lok 2;Lok;;;;H0;;;;;;' . str_repeat('a', 40000),
+        ), self::SPUR, [], 'bestand.csv');
+        $this->assertSame(['Notiz ist zusammen mit der Herkunftsangabe zu lang (höchstens 65535 Byte; Umlaute zählen doppelt).'], $e->zeilen[0]['fehler']);
+        $this->assertSame('anlegen', $e->zeilen[1]['status']);
+        $this->assertFalse($e->istImportierbar());
+        $grenzfall = ['alte_nummer' => 'A-2', 'besitzer' => '', 'quelle' => '', 'notiz' => str_repeat('a', 40000)];
+        $this->assertLessThanOrEqual(65535, strlen(FahrzeugCsvImport::notiz($grenzfall, 'bestand.csv', new \DateTimeImmutable())));
+    }
+
+    public function test_reine_trennerzeilen_vor_dem_kopf_werden_uebersprungen(): void
+    {
+        $e = FahrzeugCsvImport::parse("\xEF\xBB\xBF;;;\r\n ; ;\r\n\"\";\"\"\r\nBezeichnung;Gattung;Spur\r\nLok;Lok;H0\r\n", self::SPUR);
+        $this->assertSame([], $e->fehler);
+        $this->assertSame('Lok', $e->zeilen[0]['daten']['bezeichnung']);
+        $this->assertSame(5, $e->zeilen[0]['nr']);
+    }
+
     public function test_doppelte_bezeichnungen_in_datei_und_vorhanden(): void
     {
         $e = FahrzeugCsvImport::parse(self::csv(
