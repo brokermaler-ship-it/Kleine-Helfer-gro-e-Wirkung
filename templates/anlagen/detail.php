@@ -52,5 +52,12 @@ $zeile = function (string $label, ?string $wert): void { ?>
 </section>
 <?php endif; ?>
 
+<?php if (($reparaturen ?? null) !== null): ?>
+<section id="reparaturen" class="mt-4" aria-labelledby="reparaturen-titel">
+    <h2 class="h4" id="reparaturen-titel">Reparaturen<?php if ($reparaturen['offene'] > 0): ?> <span class="badge rounded-pill text-bg-danger fs-6 align-middle" title="offene Reparaturen"><?= (int) $reparaturen['offene'] ?></span><?php endif; ?></h2>
+    <?php $block = $reparaturen; include dirname(__DIR__) . '/reparatur/_block.php'; ?>
+</section>
+<?php endif; ?>
+
 <?php include dirname(__DIR__) . '/partials/verlauf.php'; ?>
 <p class="mt-3"><a href="<?= e(url('/anlagen')) ?>">&larr; Zurück zur Liste</a></p>

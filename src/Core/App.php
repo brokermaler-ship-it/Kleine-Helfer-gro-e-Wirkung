@@ -55,6 +55,7 @@ use Emc\Personen\PersonController;
 use Emc\Personen\PersonRepository;
 use Emc\Protokoll\Aenderungsprotokoll;
 use Emc\Reparatur\MeldungController;
+use Emc\Reparatur\ReparaturController;
 use Emc\Reparatur\ReparaturDienst;
 use Emc\Reparatur\ReparaturRepository;
 use Emc\Stammdaten\SpurweiteController;
@@ -308,6 +309,19 @@ final class App
             $c->get(ReparaturDienst::class),
             $c->get(FahrzeugRepository::class),
             $c->get(AnlageRepository::class),
+            $c->get(DokumentRepository::class),
+            $c->get(UploadService::class),
+            $c->get(Aenderungsprotokoll::class),
+            $c->get(Auth::class),
+            $c->get('session')
+        ));
+        $this->container->set(ReparaturController::class, fn(Container $c) => new ReparaturController(
+            $this->view,
+            $c->get(ReparaturRepository::class),
+            $c->get(ReparaturDienst::class),
+            $c->get(FahrzeugRepository::class),
+            $c->get(AnlageRepository::class),
+            $c->get(PersonRepository::class),
             $c->get(DokumentRepository::class),
             $c->get(UploadService::class),
             $c->get(Aenderungsprotokoll::class),

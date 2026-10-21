@@ -7,14 +7,14 @@ $benutzer = $benutzer ?? null;
 $abstellgleisAnzahl = $abstellgleisAnzahl ?? null;
 use Emc\Auth\Berechtigung;
 ?>
-<nav class="navbar navbar-expand-lg emc-navbar navbar-dark">
+<nav class="navbar navbar-expand-xl emc-navbar navbar-dark">
     <div class="container">
         <a class="navbar-brand d-flex align-items-center gap-2" href="<?= e(url('/')) ?>" aria-label="<?= e($app_name ?? '') ?>">
             <span class="navbar-logo"><img src="<?= e(url('assets/marke/logo-128.png')) ?>" alt="" width="36" height="36"></span>
-            <span<?= $benutzer !== null ? ' class="d-none d-sm-inline"' : '' ?>>Lokschuppen</span>
+            <span<?= $benutzer !== null ? ' class="d-none d-sm-inline d-xl-none d-xxl-inline"' : '' ?>>Lokschuppen</span>
         </a>
         <?php if ($benutzer !== null): ?>
-        <form method="get" action="<?= e(url('/code')) ?>" role="search" class="emc-codefeld d-flex ms-auto me-2 order-lg-last ms-lg-3 me-lg-0">
+        <form method="get" action="<?= e(url('/code')) ?>" role="search" class="emc-codefeld d-flex ms-auto me-2 order-xl-last ms-xl-3 me-xl-0">
             <label for="code-q" class="visually-hidden">Code</label>
             <input type="search" class="form-control form-control-sm" id="code-q" name="q" autocapitalize="characters"
                    autocomplete="off" spellcheck="false" placeholder="Code, z. B. F12">
@@ -24,7 +24,7 @@ use Emc\Auth\Berechtigung;
             <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="hauptmenue">
-            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+            <ul class="navbar-nav me-auto mb-2 mb-xl-0">
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Fahrzeuge</a>
                     <ul class="dropdown-menu">
@@ -34,6 +34,7 @@ use Emc\Auth\Berechtigung;
                 </li>
                 <li class="nav-item"><a class="nav-link" href="<?= e(url('/anlagen')) ?>">Anlagen</a></li>
                 <li class="nav-item"><a class="nav-link" href="<?= e(url('/wartung')) ?>">Wartung</a></li>
+                <li class="nav-item"><a class="nav-link" href="<?= e(url('/reparaturen')) ?>">Reparaturen</a></li>
                 <li class="nav-item"><a class="nav-link" href="<?= e(url('/defekt')) ?>">Defekt melden</a></li>
                 <li class="nav-item"><a class="nav-link" href="<?= e(url('/adressen')) ?>">Adressen</a></li>
                 <?php if ($darf(Berechtigung::PERSON_BEARBEITEN)): ?>
@@ -71,7 +72,7 @@ use Emc\Auth\Berechtigung;
             </ul>
             <ul class="navbar-nav">
                 <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false"><?= e($benutzer->anzeigename) ?></a>
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false"><span class="emc-benutzername" title="<?= e($benutzer->anzeigename) ?>"><?= e($benutzer->anzeigename) ?></span></a>
                     <ul class="dropdown-menu dropdown-menu-end">
                         <li><span class="dropdown-item-text text-muted small"><?= e($benutzer->rolle->label()) ?></span></li>
                         <li><a class="dropdown-item" href="<?= e(url('/konto/passwort')) ?>">Passwort ändern</a></li>

@@ -21,9 +21,10 @@ use Emc\Digital\FunktionController;
 use Emc\Fahrzeuge\FahrzeugController;
 use Emc\OneDrive\OneDriveController;
 use Emc\Personen\BenutzerController;
-use Emc\Reparatur\MeldungController;
 use Emc\Personen\KontoController;
 use Emc\Personen\PersonController;
+use Emc\Reparatur\MeldungController;
+use Emc\Reparatur\ReparaturController;
 use Emc\Stammdaten\SpurweiteController;
 use Emc\Start\StartController;
 use Emc\Wartung\UebersichtController;
@@ -97,6 +98,15 @@ return function (Router $router, App $app): void {
     $router->add('GET', '/anlagen/{id}/defekt', $app->erfordert('lesen', $mld('formularAnlage')));
     $router->add('POST', '/anlagen/{id}/defekt', $app->erfordert('lesen', $mld('meldenAnlage')));
     $router->add('GET', '/meine-meldungen', $app->erfordert('lesen', $mld('meine')));
+
+    // Reparaturen: lesen alle; bearbeiten und Fotos nur mit Berechtigung::darfReparaturBearbeiten (prüft der Controller, 403).
+    // Keine Löschroute – Reparaturen werden verworfen.
+    $rep = fn(string $m) => fn(Request $r, array $p = []) => $c->get(ReparaturController::class)->$m($r, $p);
+    $router->add('GET', '/reparaturen', $app->erfordert('lesen', $rep('liste')));
+    $router->add('GET', '/reparaturen/{id}', $app->erfordert('lesen', $rep('anzeigen')));
+    $router->add('GET', '/reparaturen/{id}/bearbeiten', $app->erfordert('lesen', $rep('bearbeiten')));
+    $router->add('POST', '/reparaturen/{id}', $app->erfordert('lesen', $rep('aendern')));
+    $router->add('POST', '/reparaturen/{id}/fotos', $app->erfordert('lesen', $rep('fotos')));
 
     $dec = fn(string $m) => fn(Request $r, array $p = []) => $c->get(DecoderController::class)->$m($r, $p);
     $router->add('POST', '/fahrzeuge/{id}/decoder', $app->erfordert('lesen', $dec('anlegen')));

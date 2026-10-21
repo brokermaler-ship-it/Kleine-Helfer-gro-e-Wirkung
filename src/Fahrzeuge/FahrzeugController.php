@@ -127,6 +127,7 @@ final class FahrzeugController
             'dateien' => $this->dokumente->fuerObjekt('fahrzeug', (int) $fz['id']),
             'onedriveKonfiguriert' => $this->onedriveKonfiguriert,
             'wartung' => $this->wartung?->blockDaten('fahrzeug', $fz, $this->auth->benutzer(), heute: new \DateTimeImmutable('today')),
+            'reparaturen' => $this->reparatur?->blockDaten('fahrzeug', $fz, $this->auth->benutzer()),
         ]);
     }
 

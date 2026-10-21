@@ -230,9 +230,24 @@ final class VorMigrationTest extends DbTestCase
                 self::assertSame('/admin/update', $r->headers['Location'], $pfad);
             }
         }
-        $r = $post("/fahrzeuge/$fz/defekt");
-        self::assertSame(303, $r->status);
-        self::assertSame('/admin/update', $r->headers['Location']);
+        foreach (["/fahrzeuge/$fz/defekt", '/reparaturen/1', '/reparaturen/1/fotos'] as $pfad) {
+            $r = $post($pfad);
+            self::assertSame(303, $r->status, $pfad);
+            self::assertSame('/admin/update', $r->headers['Location'], $pfad);
+        }
+        foreach (['/reparaturen', '/reparaturen/1', '/reparaturen/1/bearbeiten'] as $pfad) {
+            $r = $app()->handle(new \Emc\Core\Request('GET', $pfad));
+            self::assertSame(303, $r->status, $pfad);
+            self::assertSame('/admin/update', $r->headers['Location'], $pfad);
+        }
+        // Fahrzeug- und Anlagenseite ohne Reparaturblock, aber ohne Fehler.
+        $seite = $app()->handle(new \Emc\Core\Request('GET', "/fahrzeuge/$fz"));
+        self::assertSame(200, $seite->status);
+        self::assertStringNotContainsString('id="tab-reparaturen"', $seite->body);
+        $this->pdo->exec("INSERT INTO anlage (nummer, name, spurweite_id) SELECT 1, 'Clubanlage', id FROM spurweite LIMIT 1");
+        $seite = $app()->handle(new \Emc\Core\Request('GET', '/anlagen/' . (int) $this->pdo->lastInsertId()));
+        self::assertSame(200, $seite->status);
+        self::assertStringNotContainsString('id="reparaturen"', $seite->body);
         $r = $app()->handle(new \Emc\Core\Request('GET', '/meine-meldungen'));
         self::assertSame(303, $r->status);
         self::assertSame('/admin/update', $r->headers['Location']);

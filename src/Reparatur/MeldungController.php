@@ -13,9 +13,7 @@ use Emc\Core\Response;
 use Emc\Core\Session;
 use Emc\Core\View;
 use Emc\Dateien\DateiController;
-use Emc\Dateien\DateiTyp;
 use Emc\Dateien\DokumentRepository;
-use Emc\Dateien\UploadFehler;
 use Emc\Dateien\UploadService;
 use Emc\Fahrzeuge\FahrzeugRepository;
 use Emc\Protokoll\Aenderungsprotokoll;
@@ -26,7 +24,6 @@ use Emc\Protokoll\Aenderungsprotokoll;
  */
 final class MeldungController
 {
-    private const MAX_FOTOS = 20;
     /** Länge der Beschreibung im Änderungsprotokoll des Objekts. */
     private const PROTOKOLL_KURZ = 80;
 
@@ -114,34 +111,10 @@ final class MeldungController
             return $reparaturId;
         }) ?? throw new HttpFehler(404);
 
-        $this->speichereFotos($r, $reparaturId, $benutzerId);
+        // Nur Fotos; andere Dateien und Upload-Fehler ergeben eine Warnung, die Meldung bleibt gespeichert.
+        (new ReparaturFotos($this->upload, $this->dokumente, $this->session))->speichere($r->file('fotos'), $reparaturId, $benutzerId, 'eine Meldung');
         $this->session->meldung('erfolg', 'Danke! Dein Defekt wurde gemeldet.', url('/meine-meldungen'), 'Meine Meldungen');
         return Response::redirect(url(self::objektPfad($typ, $objektId)));
-    }
-
-    /** Nur Fotos; andere Dateien und Upload-Fehler ergeben eine Warnung, die Meldung bleibt gespeichert. */
-    private function speichereFotos(Request $r, int $reparaturId, ?int $benutzerId): void
-    {
-        $dateien = DateiController::normalisiere($r->file('fotos'));
-        foreach (array_slice($dateien, 0, self::MAX_FOTOS) as $datei) {
-            $name = is_string($datei['name'] ?? null) ? basename(str_replace('\\', '/', $datei['name'])) : '';
-            $punkt = strrpos($name, '.');
-            $dateiTyp = $punkt === false ? null : DateiTyp::fuerEndung(substr($name, $punkt + 1));
-            if ($dateiTyp === null || !$dateiTyp['bild']) {
-                $this->session->meldung('warnung', ($name !== '' ? $name . ': ' : '') . 'Nur Fotos können an eine Meldung angehängt werden.');
-                continue;
-            }
-            try {
-                $id = $this->upload->speichere($datei, '', 'foto', $benutzerId, null, null, null, $reparaturId);
-            } catch (UploadFehler $f) {
-                $this->session->meldung('warnung', ($name !== '' ? $name . ': ' : '') . $f->getMessage());
-                continue;
-            }
-            $this->dokumente->zuordnen($id, 'reparatur', $reparaturId);
-        }
-        if (count($dateien) > self::MAX_FOTOS) {
-            $this->session->meldung('warnung', 'Es werden höchstens ' . self::MAX_FOTOS . ' Fotos auf einmal verarbeitet.');
-        }
     }
 
     /**

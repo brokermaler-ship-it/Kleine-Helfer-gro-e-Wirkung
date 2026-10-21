@@ -250,11 +250,11 @@ final class MeldungHttpTest extends DbTestCase
         $this->assertSame(403, $this->post("/dateien/$dok/loeschen")->status);
         $this->assertSame(1, $this->zahl('SELECT COUNT(*) FROM dokument'));
 
-        // Der Fahrzeugwart schon; Protokoll am Fahrzeug, zurück zum Abschnitt „Reparaturen“.
+        // Der Fahrzeugwart schon; Protokoll am Fahrzeug, zurück zur Seite der Reparatur.
         $this->anmelden('fahrzeugwart');
         $r = $this->post("/dateien/$dok/loeschen");
         $this->assertSame(303, $r->status);
-        $this->assertSame("/fahrzeuge/$fz#reparaturen", $r->headers['Location']);
+        $this->assertSame("/reparaturen/$rid", $r->headers['Location']);
         $this->assertSame(0, $this->zahl('SELECT COUNT(*) FROM dokument'));
         $this->assertSame(1, $this->zahl('SELECT COUNT(*) FROM reparatur'));
         $eintrag = json_decode((string) $this->wert("SELECT aenderungen FROM aenderungsprotokoll WHERE objekt_typ = 'fahrzeug' AND objekt_id = $fz ORDER BY id DESC LIMIT 1"), true);
@@ -271,7 +271,7 @@ final class MeldungHttpTest extends DbTestCase
         $this->anmelden('bearbeiter');
         $r = $this->post("/dateien/$dok/loeschen");
         $this->assertSame(303, $r->status);
-        $this->assertSame("/anlagen/$anl#reparaturen", $r->headers['Location']);
+        $this->assertSame('/reparaturen/' . $this->letzteReparatur()['id'], $r->headers['Location']);
     }
 
     public function test_leere_beschreibung_422(): void
@@ -367,8 +367,10 @@ final class MeldungHttpTest extends DbTestCase
         $this->assertStringContainsString('Clubanlage H0', $b);
         $this->assertStringContainsString('>gemeldet</span>', $b);
         $this->assertStringContainsString('>in Arbeit</span>', $b);
-        $this->assertStringContainsString('href="/fahrzeuge/' . $fz . '"', $b);
-        $this->assertStringContainsString('href="/anlagen/' . $anl . '"', $b);
+        // Jede Meldung führt zur Seite der Reparatur.
+        foreach ($this->pdo->query('SELECT id FROM reparatur WHERE beschreibung <> \'Fremde Meldung\'')->fetchAll(\PDO::FETCH_COLUMN) as $rid) {
+            $this->assertStringContainsString('href="/reparaturen/' . $rid . '"', $b);
+        }
         // Neueste zuerst.
         $this->assertLessThan(strpos($b, 'Licht vorne geht nicht'), strpos($b, 'Weiche schaltet nicht'));
     }

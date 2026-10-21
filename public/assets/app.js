@@ -15,6 +15,28 @@
         if (tab && tab.getAttribute('data-bs-toggle') === 'tab') { tab.click(); }
     }
 
+    // Reparatur: weitere Ersatzteilzeile aus der Vorlage (ohne JavaScript bleibt die eine leere Zeile)
+    document.querySelectorAll('[data-teil-hinzu]').forEach(function (knopf) {
+        var liste = knopf.parentNode.querySelector('[data-teile]');
+        var vorlage = document.getElementById('teil-vorlage');
+        if (!liste || !vorlage || !('content' in vorlage)) { return; }
+        knopf.hidden = false;
+        knopf.addEventListener('click', function () {
+            var n = String(parseInt(liste.getAttribute('data-naechster') || '0', 10));
+            liste.setAttribute('data-naechster', String(Number(n) + 1));
+            var zeile = vorlage.content.cloneNode(true);
+            zeile.querySelectorAll('[name], [id], [for]').forEach(function (el) {
+                ['name', 'id', 'for'].forEach(function (attr) {
+                    var wert = el.getAttribute(attr);
+                    if (wert) { el.setAttribute(attr, wert.split('__N__').join(n)); }
+                });
+            });
+            liste.appendChild(zeile);
+            var erstes = liste.lastElementChild && liste.lastElementChild.querySelector('input');
+            if (erstes) { erstes.focus(); }
+        });
+    });
+
     // Live-Prüfung der Decoder-Adresse (Debounce 300 ms)
     document.querySelectorAll('form[data-adress-pruefung]').forEach(function (form) {
         var feld = form.querySelector('[name="adresse"]');

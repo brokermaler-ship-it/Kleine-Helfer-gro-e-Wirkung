@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Emc\Reparatur;
 
 use Emc\Anlagen\AnlageRepository;
+use Emc\Auth\Benutzer;
+use Emc\Auth\Berechtigung;
 use Emc\Dateien\DokumentRepository;
 use Emc\Fahrzeuge\FahrzeugRepository;
 use Emc\Protokoll\Aenderungsprotokoll;
@@ -98,6 +100,34 @@ final class ReparaturDienst
                 'status' => ['alt' => $alt, 'neu' => $ziel['status'] . ' ' . self::AUTOMATISCH],
             ]);
         }
+    }
+
+    /**
+     * Daten für templates/reparatur/_block.php (Tab „Reparaturen“ am Fahrzeug, Abschnitt an der Anlage); null, solange
+     * das Datenbank-Update (Migration 014) aussteht – die Seite erscheint dann ohne Block.
+     *
+     * @param array<string,mixed> $objekt
+     * @param ?Benutzer $b für darfBearbeiten (ohne Benutzer: false)
+     * @return ?array{objektTyp:string, objekt:array<string,mixed>, reparaturen:list<array<string,mixed>>, offene:int, darfBearbeiten:bool}
+     */
+    public function blockDaten(string $objektTyp, array $objekt, ?Benutzer $b = null): ?array
+    {
+        try {
+            $reparaturen = $this->reparaturen->fuerObjekt($objektTyp, (int) $objekt['id']);
+        } catch (\PDOException $e) {
+            if (in_array((string) $e->getCode(), ['42S02', '42S22'], true)) {
+                return null;
+            }
+            throw $e;
+        }
+        $offene = count(array_filter($reparaturen, fn(array $r): bool => ReparaturStatus::tryFrom((string) $r['status'])?->istOffen() ?? false));
+        return [
+            'objektTyp' => $objektTyp,
+            'objekt' => $objekt,
+            'reparaturen' => $reparaturen,
+            'offene' => $offene,
+            'darfBearbeiten' => Berechtigung::darfReparaturBearbeiten($b, $objektTyp, $objekt),
+        ];
     }
 
     /**

@@ -177,9 +177,10 @@ final class DateiController
         }
         if (isset($bezuege[0])) {
             $b = $bezuege[0];
+            // Wartungsfotos stehen im Wartungsblock des Objekts, Reparaturfotos auf der Seite der Reparatur.
             return Response::redirect($b['art'] === 'wartung'
                 ? WartungController::objektUrl($b['typ'], (int) $b['objekt']['id'])
-                : url(($b['typ'] === 'anlage' ? '/anlagen/' : '/fahrzeuge/') . (int) $b['objekt']['id']) . '#reparaturen');
+                : url('/reparaturen/' . $b['id']));
         }
         return Response::redirect(url('/fahrzeuge'));
     }
@@ -188,7 +189,7 @@ final class DateiController
      * Wartungen und Reparaturen, denen das Dokument (als Foto) zugeordnet ist, samt Objekt und Datum (Wartungsdatum bzw.
      * Meldedatum).
      *
-     * @return list<array{art:string, typ:string, objekt:array<string,mixed>, datum:string}>
+     * @return list<array{art:string, id:int, typ:string, objekt:array<string,mixed>, datum:string}>
      */
     private function bezuege(int $dokumentId): array
     {
@@ -203,7 +204,7 @@ final class DateiController
                 $objekt = $typ === 'anlage' ? $this->anlagen->finde((int) $vorgang['objekt_id']) : $this->fahrzeuge->finde((int) $vorgang['objekt_id']);
                 if ($objekt !== null) {
                     $datum = (string) ($art === 'wartung' ? $vorgang['datum'] : $vorgang['gemeldet_am']);
-                    $ergebnis[] = ['art' => $art, 'typ' => $typ, 'objekt' => $objekt, 'datum' => $datum];
+                    $ergebnis[] = ['art' => $art, 'id' => $id, 'typ' => $typ, 'objekt' => $objekt, 'datum' => $datum];
                 }
             }
         }
@@ -218,7 +219,7 @@ final class DateiController
      * vorbehalten.
      *
      * @param array<string,mixed> $dok
-     * @param list<array{art:string, typ:string, objekt:array<string,mixed>, datum:string}> $bezuege
+     * @param list<array{art:string, id:int, typ:string, objekt:array<string,mixed>, datum:string}> $bezuege
      */
     private function verlangeLoeschrecht(array $dok, array $bezuege = []): void
     {

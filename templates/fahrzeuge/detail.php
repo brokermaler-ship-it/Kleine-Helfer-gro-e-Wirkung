@@ -54,12 +54,15 @@ $abgestellt = $fz['status'] === 'ausgemustert';
     if (($wartung ?? null) !== null) {
         $tabs['wartung'] = 'Wartung'; // fehlt nur, solange das Datenbank-Update aussteht
     }
+    if (($reparaturen ?? null) !== null) {
+        $tabs['reparaturen'] = 'Reparaturen'; // ebenso (Migration 014)
+    }
     $tabs['verlauf'] = 'Verlauf';
     foreach ($tabs as $schluessel => $beschriftung): ?>
         <li class="nav-item" role="presentation">
             <button class="nav-link<?= $schluessel === 'uebersicht' ? ' active' : '' ?>" id="tab-<?= e($schluessel) ?>" type="button" role="tab"
                     data-bs-toggle="tab" data-bs-target="#pane-<?= e($schluessel) ?>" aria-controls="pane-<?= e($schluessel) ?>"
-                    aria-selected="<?= $schluessel === 'uebersicht' ? 'true' : 'false' ?>"><?= e($beschriftung) ?></button>
+                    aria-selected="<?= $schluessel === 'uebersicht' ? 'true' : 'false' ?>"><?= e($beschriftung) ?><?php if ($schluessel === 'reparaturen' && $reparaturen['offene'] > 0): ?> <span class="badge rounded-pill text-bg-danger" title="offene Reparaturen"><?= (int) $reparaturen['offene'] ?></span><?php endif; ?></button>
         </li>
     <?php endforeach; ?>
 </ul>
@@ -76,6 +79,11 @@ $abgestellt = $fz['status'] === 'ausgemustert';
     <?php if (($wartung ?? null) !== null): ?>
     <div class="tab-pane fade" id="pane-wartung" role="tabpanel" aria-labelledby="tab-wartung" tabindex="0">
         <?php $block = $wartung; include dirname(__DIR__) . '/wartung/_block.php'; ?>
+    </div>
+    <?php endif; ?>
+    <?php if (($reparaturen ?? null) !== null): ?>
+    <div class="tab-pane fade" id="pane-reparaturen" role="tabpanel" aria-labelledby="tab-reparaturen" tabindex="0">
+        <?php $block = $reparaturen; include dirname(__DIR__) . '/reparatur/_block.php'; ?>
     </div>
     <?php endif; ?>
     <div class="tab-pane fade" id="pane-verlauf" role="tabpanel" aria-labelledby="tab-verlauf" tabindex="0">
