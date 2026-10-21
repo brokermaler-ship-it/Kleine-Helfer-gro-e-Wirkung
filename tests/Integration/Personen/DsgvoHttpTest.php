@@ -111,6 +111,8 @@ final class DsgvoHttpTest extends DbTestCase
         $this->assertStringContainsString('Schreibweise', $a->body);
         $this->assertStringContainsString('Microsoft-Konto', $a->body);
         $this->assertStringContainsString('ehemaliges Mitglied', $a->body);
+        $this->assertStringContainsString('0 Wartungen', $a->body);
+        $this->assertStringContainsString('Wartungen an Vereinsfahrzeugen, fremden Fahrzeugen und Anlagen, die die Person ausgeführt oder eingetragen hat (0)', $a->body);
         $this->assertStringContainsString('name="nachname"', $a->body);
         $this->assertSame(404, $this->get('/personen/999999/dsgvo')->status);
     }

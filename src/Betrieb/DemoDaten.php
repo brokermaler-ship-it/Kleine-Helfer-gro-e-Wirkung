@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Emc\Betrieb;
 
+use Emc\Anlagen\AnlageRepository;
 use Emc\Auth\Rolle;
 use Emc\Core\App;
 use Emc\Core\DomainFehler;
@@ -18,6 +19,7 @@ use Emc\Digital\FunktionsvorlageRepository;
 use Emc\Fahrzeuge\FahrzeugRepository;
 use Emc\Personen\BenutzerRepository;
 use Emc\Personen\PersonRepository;
+use Emc\Wartung\WartungRepository;
 
 /**
  * Beispieldaten für die Testumgebung (erfundene Personen, plausible Modellbahn-Fahrzeuge).
@@ -100,9 +102,58 @@ final class DemoDaten
 
         $this->funktionenUndCvs($ids);
         $this->fotos($ids);
+        $this->anlageUndWartungen($ids, $personen, $spur['H0']);
     }
 
-    /** Leert alle Tabellen außer schema_migration und den Stammlisten spurweite und wartungsart sowie storage/dateien. */
+    /**
+     * Eine Anlage und einige Wartungen relativ zu heute: Gleise der Anlage überfällig, Räder der V 200 in Ordnung,
+     * Getriebe der BR 01 bald fällig, alles andere „noch nie erfasst“. Wartungsarten werden über den Namen gesucht;
+     * fehlt eine (umbenannt oder gelöscht – die Stammliste bleibt beim Zurücksetzen erhalten), entfällt nur diese Wartung.
+     *
+     * @param array<string,int> $ids
+     * @param array<string,int> $personen
+     */
+    private function anlageUndWartungen(array $ids, array $personen, int $h0): void
+    {
+        $c = $this->app->container();
+        $anlage = $c->get(AnlageRepository::class)->anlegen([
+            'name' => 'Clubanlage H0',
+            'spurweite_id' => $h0,
+            'kurzbeschreibung' => 'Zweigleisige Hauptstrecke mit Schattenbahnhof und kleinem Bahnbetriebswerk.',
+            'standort' => 'Vereinsheim, Raum 2',
+            'status' => 'in_ordnung',
+        ]);
+        $arten = [];
+        foreach ($this->pdo->query('SELECT id, name FROM wartungsart')->fetchAll(\PDO::FETCH_ASSOC) as $z) {
+            $arten[(string) $z['name']] = (int) $z['id'];
+        }
+        $konto = fn(string $email): ?int => ((int) $this->pdo->query('SELECT id FROM benutzer WHERE email = ' . $this->pdo->quote($email))->fetchColumn()) ?: null;
+        $stand = fn(int $fahrzeugId): float => (float) $this->pdo->query('SELECT betriebsstunden FROM fahrzeug WHERE id = ' . $fahrzeugId)->fetchColumn();
+        $heute = new \DateTimeImmutable('today');
+        $wartungen = $c->get(WartungRepository::class);
+        foreach ([
+            ['anlage', $anlage, 'Gleise reinigen', $heute->modify('-4 months'), null, 'bernd', 'bearbeiter@test.emc78.de', 'Mit Reinigungswagen und Isopropanol.'],
+            ['fahrzeug', $ids['v200'], 'Räder und Radschleifer reinigen', $heute->modify('-14 days'), $stand($ids['v200']), 'wart', 'fahrzeugwart@test.emc78.de', null],
+            ['fahrzeug', $ids['br01'], 'Getriebe und Lager schmieren', $heute->modify('-11 months')->modify('-15 days'), $stand($ids['br01']), 'wart', 'fahrzeugwart@test.emc78.de', 'Etwas Öl an den Achslagern.'],
+        ] as [$typ, $objektId, $art, $datum, $stunden, $person, $email, $notiz]) {
+            if (!isset($arten[$art])) {
+                continue;
+            }
+            $wartungen->eintragen($typ, $objektId, [
+                'datum' => $datum->format('Y-m-d'),
+                'betriebsstunden' => $stunden,
+                'stundenstand_bezug' => $stunden,
+                'ausgefuehrt_von_person_id' => $personen[$person],
+                'notiz' => $notiz,
+            ], [$arten[$art]], $konto($email));
+        }
+    }
+
+    /**
+     * Leert alle Tabellen außer schema_migration und den Stammlisten spurweite und wartungsart (die Wartungsarten des
+     * Vereins bleiben, auch wenn er sie geändert hat) sowie storage/dateien. Der Anlagen-Zähler steht in einstellung
+     * und beginnt daher wieder bei A1.
+     */
     private function leere(): void
     {
         $tabellen = array_map('strval', $this->pdo->query("SHOW FULL TABLES WHERE Table_type = 'BASE TABLE'")->fetchAll(\PDO::FETCH_COLUMN));

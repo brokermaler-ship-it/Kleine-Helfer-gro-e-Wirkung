@@ -13,6 +13,8 @@ use Emc\Core\Request;
 use Emc\Core\Session;
 use Emc\Digital\Adresspruefung;
 use Emc\Tests\Integration\DbTestCase;
+use Emc\Wartung\WartungFilter;
+use Emc\Wartung\Wartungsplan;
 use PHPUnit\Framework\Attributes\DataProvider;
 
 final class DemoDatenTest extends DbTestCase
@@ -187,6 +189,47 @@ final class DemoDatenTest extends DbTestCase
         $this->assertSame(7, $this->zaehle('person'));
         $this->assertSame('EMC-0001', (string) $this->pdo->query('SELECT MIN(inventarnummer) FROM fahrzeug')->fetchColumn());
         $this->assertCount($this->zaehle('dokument'), $this->originalDateien(), 'keine verwaisten Dateien nach dem Zurücksetzen');
+    }
+
+    public function test_anlage_und_wartungen_mit_ampel(): void
+    {
+        $app = $this->app();
+        (new DemoDaten($app))->erzeuge(true);
+
+        $this->assertSame(1, $this->zaehle('anlage'));
+        $anlage = $this->pdo->query('SELECT * FROM anlage')->fetch(\PDO::FETCH_ASSOC);
+        $this->assertSame(1, (int) $anlage['nummer']); // Code A1
+        $this->assertSame('Clubanlage H0', $anlage['name']);
+        $this->assertSame('Vereinsheim, Raum 2', $anlage['standort']);
+        $this->assertSame(8, $this->zaehle('wartungsart'), 'Stammliste bleibt beim Zurücksetzen');
+        $this->assertSame(3, $this->zaehle('wartung'));
+        $this->assertSame(0, (int) $this->pdo->query('SELECT COUNT(*) FROM wartung WHERE ausgefuehrt_von_person_id IS NULL')->fetchColumn());
+
+        $s = $app->container()->get(Wartungsplan::class)->zusammenfassung(new \DateTimeImmutable('today'));
+        $this->assertGreaterThanOrEqual(1, $s['rot']);
+        $this->assertGreaterThanOrEqual(1, $s['gelb']);
+        $this->assertGreaterThan(0, $s['nie']);
+        $ampel = [];
+        foreach ($app->container()->get(Wartungsplan::class)->uebersicht(new WartungFilter(), new \DateTimeImmutable('today')) as $z) {
+            $ampel[Wartungsplan::objektName($z['objekt_typ'], $z['objekt']) . '|' . $z['art']['name']] = $z['faelligkeit']->kategorie();
+        }
+        $this->assertSame('rot', $ampel['Clubanlage H0|Gleise reinigen']);
+        $this->assertSame('gruen', $ampel['V 200 060|Räder und Radschleifer reinigen']);
+        $this->assertSame('gelb', $ampel['BR 01 118|Getriebe und Lager schmieren']);
+
+        // Erneut zurücksetzen: wieder genau eine Anlage A1.
+        (new DemoDaten($app))->erzeuge(true);
+        $this->assertSame(1, $this->zaehle('anlage'));
+        $this->assertSame('1', (string) $this->pdo->query('SELECT nummer FROM anlage')->fetchColumn());
+    }
+
+    public function test_fehlende_wartungsart_wird_uebersprungen(): void
+    {
+        $this->pdo->exec("UPDATE wartungsart SET name = 'Gleise putzen' WHERE name = 'Gleise reinigen'");
+        $this->pdo->exec("DELETE FROM wartungsart WHERE name = 'Getriebe und Lager schmieren'");
+        (new DemoDaten($this->app()))->erzeuge(true);
+        $this->assertSame(1, $this->zaehle('anlage'));
+        $this->assertSame(1, $this->zaehle('wartung'));
     }
 
     public function test_testdaten_seite_nur_in_testumgebung_und_nur_fuer_admin(): void

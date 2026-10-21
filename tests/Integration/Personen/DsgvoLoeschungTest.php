@@ -14,6 +14,8 @@ use Emc\Personen\DsgvoLoeschung;
 use Emc\Protokoll\Aenderungsprotokoll;
 use Emc\Tests\Integration\Dateien\UploadServiceTest;
 use Emc\Tests\Integration\DbTestCase;
+use Emc\Wartung\AusnahmeRepository;
+use Emc\Wartung\WartungRepository;
 
 final class DsgvoLoeschungTest extends DbTestCase
 {
@@ -94,6 +96,20 @@ final class DsgvoLoeschungTest extends DbTestCase
         return (int) $st->fetchColumn();
     }
 
+    /** Wartung (Kupplungen prüfen) an einem Objekt; optional mit Foto (nur dieser Wartung zugeordnet). */
+    private function wartung(string $typ, int $objektId, ?int $personId, ?int $benutzerId, ?string $foto = null): int
+    {
+        $art = $this->zaehle("SELECT id FROM wartungsart WHERE name = 'Kupplungen prüfen'");
+        $id = (new WartungRepository($this->pdo))->eintragen($typ, $objektId, [
+            'datum' => '2026-10-01', 'betriebsstunden' => null, 'stundenstand_bezug' => null, 'ausgefuehrt_von_person_id' => $personId, 'notiz' => null,
+        ], [$art], $benutzerId);
+        if ($foto !== null) {
+            $dok = $this->dokument($foto, []);
+            $this->dokumente->zuordnen($dok, 'wartung', $id);
+        }
+        return $id;
+    }
+
     private function dateienDa(string $name): bool
     {
         foreach (['', '.anzeige.jpg', '.vorschau.jpg'] as $endung) {
@@ -145,8 +161,8 @@ final class DsgvoLoeschungTest extends DbTestCase
         $this->assertSame('carla@verein.de', $v['benutzer']['email']);
         $this->assertArrayNotHasKey('passwort_hash', $v['benutzer']);
         $this->assertSame([
-            ['id' => $s['fz1'], 'inventarnummer' => 'EMC-0001', 'bezeichnung' => 'Lok EMC-0001', 'dokumente' => 1, 'rechnungen' => 0],
-            ['id' => $s['fz2'], 'inventarnummer' => 'EMC-0002', 'bezeichnung' => 'Lok EMC-0002', 'dokumente' => 1, 'rechnungen' => 0],
+            ['id' => $s['fz1'], 'inventarnummer' => 'EMC-0001', 'bezeichnung' => 'Lok EMC-0001', 'dokumente' => 1, 'rechnungen' => 0, 'wartungen' => 0],
+            ['id' => $s['fz2'], 'inventarnummer' => 'EMC-0002', 'bezeichnung' => 'Lok EMC-0002', 'dokumente' => 1, 'rechnungen' => 0, 'wartungen' => 0],
         ], $v['fahrzeuge']);
         $this->assertFalse($v['onedrive_konto_der_person']);
         $this->assertSame(1, $v['protokolleintraege']);
@@ -236,6 +252,74 @@ final class DsgvoLoeschungTest extends DbTestCase
         $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM kennwort_token WHERE benutzer_id = ?', [$andere]));
         $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM kennwort_anfrage WHERE benutzer_id = ?', [$andere]));
         $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM kennwort_versuch WHERE email_hash = ?', [$hash('dora@verein.de')]));
+    }
+
+    public function test_eigene_fahrzeuge_mit_wartungen_und_fotos_geloescht(): void
+    {
+        $s = $this->szenario();
+        $this->wartung('fahrzeug', $s['fz1'], $s['person'], $s['konto'], 'wartung.jpg');
+        $this->wartung('fahrzeug', $s['fz2'], null, null);
+        (new AusnahmeRepository($this->pdo))->speichere('fahrzeug', $s['fz1'], $this->zaehle("SELECT id FROM wartungsart WHERE name = 'Kupplungen prüfen'"), 'aus', null, null);
+        $this->assertTrue($this->dateienDa('wartung.jpg'));
+
+        $this->dienst->loesche($s['person'], [], $this->admin);
+
+        $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM wartung'));
+        $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM wartung_art'));
+        $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM wartungsplan_ausnahme'));
+        $this->assertSame(0, $this->zaehle("SELECT COUNT(*) FROM dokument_zuordnung WHERE objekt_typ = 'wartung'"));
+        $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM dokument'));
+        $this->assertTrue($this->dateienWeg('wartung.jpg'));
+    }
+
+    public function test_wartung_am_vereinsfahrzeug_bleibt_bezug_geleert(): void
+    {
+        $s = $this->szenario();
+        $verein = $this->fahrzeug('EMC-0010', null);
+        $this->pdo->exec("INSERT INTO anlage (nummer, name, spurweite_id) SELECT 1, 'Clubanlage', id FROM spurweite ORDER BY id LIMIT 1");
+        $anlage = (int) $this->pdo->lastInsertId();
+        $w1 = $this->wartung('fahrzeug', $verein, $s['person'], $s['konto'], 'verein-wartung.jpg');
+        $w2 = $this->wartung('anlage', $anlage, $s['person'], $s['konto']);
+
+        $this->dienst->loesche($s['person'], [], $this->admin);
+
+        foreach ([$w1, $w2] as $w) {
+            $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM wartung WHERE id = ? AND ausgefuehrt_von_person_id IS NULL AND erfasst_von_benutzer_id IS NULL', [$w]));
+        }
+        $this->assertTrue($this->dateienDa('verein-wartung.jpg'));
+        $verlauf = (new WartungRepository($this->pdo))->fuerObjekt('fahrzeug', $verein);
+        $this->assertNull($verlauf[0]['ausgefuehrt_von']); // Anzeige „ehemaliges Mitglied“
+    }
+
+    public function test_uebergebenes_fahrzeug_behaelt_wartungen(): void
+    {
+        $s = $this->szenario();
+        $w = $this->wartung('fahrzeug', $s['fz1'], $s['person'], $s['konto'], 'uebergeben.jpg');
+        (new AusnahmeRepository($this->pdo))->speichere('fahrzeug', $s['fz1'], $this->zaehle("SELECT id FROM wartungsart WHERE name = 'Kupplungen prüfen'"), 'eigen', 6, null);
+
+        $this->dienst->loesche($s['person'], [$s['fz1']], $this->admin);
+
+        $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM wartung WHERE id = ? AND ausgefuehrt_von_person_id IS NULL', [$w]));
+        $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM wartung_art WHERE wartung_id = ?', [$w]));
+        $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM wartungsplan_ausnahme'));
+        $this->assertTrue($this->dateienDa('uebergeben.jpg'));
+    }
+
+    public function test_vorschau_zaehlt_wartungen(): void
+    {
+        $s = $this->szenario();
+        $this->wartung('fahrzeug', $s['fz1'], null, null);
+        $this->wartung('fahrzeug', $s['fz1'], $s['person'], null);
+        $verein = $this->fahrzeug('EMC-0010', null);
+        $this->wartung('fahrzeug', $verein, $s['person'], null);
+        $this->wartung('fahrzeug', $verein, null, $s['konto']);
+        $this->wartung('fahrzeug', $verein, null, null); // nicht von ihr
+
+        $v = $this->dienst->vorschau($s['person'], $this->admin);
+
+        $this->assertSame(2, $v['fahrzeuge'][0]['wartungen']);
+        $this->assertSame(0, $v['fahrzeuge'][1]['wartungen']);
+        $this->assertSame(2, $v['wartungen_in_vereinsdaten']);
     }
 
     public function test_uebergabe_an_verein_behaelt_fahrzeug(): void
@@ -336,6 +420,8 @@ final class DsgvoLoeschungTest extends DbTestCase
     {
         $s = $this->szenario();
         $this->protokoll->schreibe($s['konto'], 'person', $s['person'], 'angelegt', ['nachname' => ['alt' => null, 'neu' => 'Beispiel']]);
+        $wartung = $this->wartung('fahrzeug', $s['fz2'], $s['person'], $s['konto'], 'rollback-wartung.jpg');
+        (new AusnahmeRepository($this->pdo))->speichere('fahrzeug', $s['fz2'], $this->zaehle("SELECT id FROM wartungsart WHERE name = 'Kupplungen prüfen'"), 'aus', null, null);
         $vorher = $this->zaehle('SELECT COUNT(*) FROM aenderungsprotokoll');
         // Scheitert im letzten Schritt (Person löschen) – alles davor muss zurückgerollt werden.
         $this->pdo->exec("CREATE TRIGGER test_person_sperre BEFORE DELETE ON person FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'gesperrt'");
@@ -362,6 +448,12 @@ final class DsgvoLoeschungTest extends DbTestCase
         $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM aenderungsprotokoll WHERE benutzer_id = ?', [$s['konto']]));
         $this->assertTrue($this->dateienDa('lokal.jpg'));
         $this->assertTrue($this->dateienDa('wolke.jpg'));
+        // Wartungen, Fotos und Ausnahmen unverändert.
+        $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM wartung WHERE id = ? AND ausgefuehrt_von_person_id = ? AND erfasst_von_benutzer_id = ?', [$wartung, $s['person'], $s['konto']]));
+        $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM wartung_art WHERE wartung_id = ?', [$wartung]));
+        $this->assertSame(1, $this->zaehle("SELECT COUNT(*) FROM dokument_zuordnung WHERE objekt_typ = 'wartung' AND objekt_id = ?", [$wartung]));
+        $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM wartungsplan_ausnahme'));
+        $this->assertTrue($this->dateienDa('rollback-wartung.jpg'));
     }
 
     public function test_eigene_person_und_letzter_admin_verweigert(): void

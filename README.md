@@ -1,6 +1,6 @@
 # EMC 78 Lokschuppen
 
-Webanwendung „EMC 78 Lokschuppen“ des Eisenbahn Modellbahn Clubs 78 e.V. Halle („Die Modellbahnfamilie“) zur Verwaltung des Fahrzeugbestands: Fahrzeuge, Decoder (Adressen, Funktionstasten, CVs), Fotos und Dokumente, Personen und Benutzer. Die Anwendung läuft auf normalem PHP-Webspace und ist für PC, Tablet und Handy gedacht.
+Webanwendung „EMC 78 Lokschuppen“ des Eisenbahn Modellbahn Clubs 78 e.V. Halle („Die Modellbahnfamilie“) zur Verwaltung des Fahrzeugbestands: Fahrzeuge, Decoder (Adressen, Funktionstasten, CVs), Fotos und Dokumente, Anlagen, Wartung mit Fälligkeits-Ampel, Personen und Benutzer. Die Anwendung läuft auf normalem PHP-Webspace und ist für PC, Tablet und Handy gedacht.
 
 ## Rollen und Rechte
 
@@ -8,9 +8,9 @@ Die Rollen bauen aufeinander auf; jede höhere Rolle darf alles, was die darunte
 
 | Rolle | Darf |
 |---|---|
-| **Mitglied** | alles lesen (Fahrzeuge, Decoder, Funktionen, CVs, Dateien); **eigene Fahrzeuge anlegen** (der Eigentümer ist immer das Mitglied selbst); die **selbst angelegten Fahrzeuge bearbeiten**, einschließlich Status (auch „ausgemustert“), Decoder, Funktionstasten (Formular, CSV-Import, Vorlagen), CVs sowie Fotos und Dateien dieses Fahrzeugs. Nicht erlaubt: Eigentümer ändern, Fahrzeuge löschen, Fahrzeuge anderer bearbeiten (auch nicht als Eigentümer), Personen verwalten |
-| **Fahrzeugwart** | zusätzlich **alles rund um alle Fahrzeuge, auch die privaten**: anlegen (Eigentümer frei wählbar), bearbeiten, **löschen**, Decoder, Funktionstasten, CVs sowie Fotos und Dokumente an Fahrzeugen. Nicht erlaubt: Personen, Benutzer, Stammdaten und Betrieb (Sicherung, Update, OneDrive); eine Datei, die mehreren Objekten zugeordnet ist, löscht nur ein Bearbeiter |
-| **Bearbeiter** | zusätzlich Personen verwalten und **alle** Dateien (auch geteilte) löschen |
+| **Mitglied** | alles lesen (Fahrzeuge, Decoder, Funktionen, CVs, Dateien, Anlagen, Wartungen und Fälligkeiten); **Wartungen an eigenen Fahrzeugen eintragen** (Eigentümer oder selbst angelegt); **eigene Fahrzeuge anlegen** (der Eigentümer ist immer das Mitglied selbst); die **selbst angelegten Fahrzeuge bearbeiten**, einschließlich Status (auch „ausgemustert“), Decoder, Funktionstasten (Formular, CSV-Import, Vorlagen), CVs sowie Fotos und Dateien dieses Fahrzeugs. Nicht erlaubt: Eigentümer ändern, Fahrzeuge löschen, Fahrzeuge anderer bearbeiten (auch nicht als Eigentümer), Personen verwalten |
+| **Fahrzeugwart** | zusätzlich **alles rund um alle Fahrzeuge, auch die privaten**: anlegen (Eigentümer frei wählbar), bearbeiten, **löschen**, Decoder, Funktionstasten, CVs sowie Fotos und Dokumente an Fahrzeugen; **Wartungen an allen Fahrzeugen** eintragen und löschen, den Wartungsplan der Fahrzeuge anpassen und die **Wartungsarten** pflegen (Verwaltung → Wartungsarten). Nicht erlaubt: Personen, Benutzer, Stammdaten und Betrieb (Sicherung, Update, OneDrive); eine Datei, die mehreren Objekten zugeordnet ist, löscht nur ein Bearbeiter |
+| **Bearbeiter** | zusätzlich Personen verwalten, **alle** Dateien (auch geteilte) löschen, **Anlagen** anlegen, bearbeiten und löschen sowie Wartungen und Wartungsplan der Anlagen |
 | **Administrator** | zusätzlich Benutzer und Rollen, Stammdaten (Spurweiten), Datensicherung, Update und OneDrive-Anbindung |
 
 Jedes Fahrzeug merkt sich, wer es angelegt hat. Fahrzeuge, die schon vor Version 0.2.0 vorhanden waren, gelten als von einem Bearbeiter angelegt; Mitglieder können sie nicht ändern. Alle Rechte werden auf dem Server für jedes einzelne Fahrzeug geprüft, nicht nur durch ausgeblendete Schaltflächen. Eine Datei, die mehreren Objekten zugeordnet ist, kann nur ein Bearbeiter löschen. Ausgemusterte Fahrzeuge stehen auf dem **Abstellgleis** (siehe dort); sie verschwinden aus „Meine Fahrzeuge“ und der Fahrzeugliste. Gespeicherte Funktionsvorlagen sind für alle sichtbar.
@@ -22,6 +22,8 @@ Version 0.3.0 bringt die freiwillige OneDrive-Ablage (siehe „OneDrive anbinden
 Version 0.3.1 verbessert die OneDrive-Ablage: Jede übertragene Datei merkt sich, in welchem OneDrive sie liegt (sie bleibt auch nach einem Wechsel des Zielordners abrufbar und löschbar), liegen gebliebene Übertragungen werden auch ohne Cronjob nebenbei nachgeholt, und der Cronjob läuft auch, wenn der Hoster PHP dafür als `php-cgi` startet (in 0.3.0 brach `bin/onedrive-sync.php` mit einem Syntaxfehler ab). Beim Update auf 0.3.1 unter **Verwaltung → Update** einmal „Datenbank jetzt aktualisieren“ wählen; dabei läuft die Migration `007_onedrive_laufwerk`. Wer direkt von 0.2.x kommt, bekommt 004–007 in einem Schritt.
 
 Version 0.4.0 bringt die Rolle **Fahrzeugwart**, die **Löschung einer Person nach DSGVO** (siehe „Person nach DSGVO löschen“) und das **Abstellgleis** für ausgemusterte Fahrzeuge (siehe „Abstellgleis“). Beim Update auf 0.4.0 unter **Verwaltung → Update** einmal „Datenbank jetzt aktualisieren“ wählen; dabei laufen die Migrationen `008_rolle_fahrzeugwart` und `009_abstellgleis`. Bestehende Zugänge behalten ihre Rolle; bereits ausgemusterte Fahrzeuge bekommen als Abstelldatum den Tag ihrer letzten Änderung. Wer von 0.3.x oder älter kommt, bekommt alle fehlenden Migrationen (bis 009) in einem Schritt.
+
+Version 0.5.0 bringt **„Kennwort vergessen?“** auf der Anmeldeseite (siehe „Kennwort vergessen“), eine einfache **Anlagenliste** (siehe „Anlagen“), die **Wartung** mit Wartungsarten, Wartungsplan, Wartungsprotokoll und Fälligkeits-Ampel (siehe „Wartung“) und eine neue **Startseite** mit der Kachel „Wartung“. Beim Update auf 0.5.0 unter **Verwaltung → Update** einmal „Datenbank jetzt aktualisieren“ wählen; dabei laufen die Migrationen `010_kennwort_vergessen`, `011_anlage`, `012_wartungsart` (legt acht Wartungsarten als Startbestand an) und `013_wartung`. Vorhandene Daten bleiben unverändert. Wer von 0.4.0 oder älter kommt, bekommt alle fehlenden Migrationen (bis 013) in einem Schritt. Der E-Mail-Versand ist freiwillig: Ohne die neuen `mail_*`-Einträge in der `config.php` landen Anfragen bei den Administratoren.
 
 ## Voraussetzungen
 
@@ -73,6 +75,57 @@ Kann keine Subdomain eingerichtet werden, läuft die Anwendung auch in einem Unt
 
 Die Installation auf dem Handy (siehe unten) funktioniert auch im Unterordner.
 
+## Kennwort vergessen
+
+Auf der Anmeldeseite führt **„Kennwort vergessen?“** zu einem Formular für die E-Mail-Adresse. Die Antwort ist immer dieselbe, gleich ob die Adresse bekannt ist oder nicht (so lässt sich nicht ausforschen, wer ein Konto hat). Nur für ein bekanntes, aktives Konto passiert etwas:
+
+- **Mit Postfach** (E-Mail-Versand eingerichtet): Die Person bekommt eine E-Mail mit einem Link zum Zurücksetzen. Der Link ist **60 Minuten** gültig und funktioniert **nur einmal**; ein neu angeforderter Link macht den alten ungültig. Nach dem Setzen des neuen Kennworts (mindestens 10 Zeichen) ist man angemeldet, alle anderen Sitzungen des Kontos enden.
+- **Ohne Postfach** oder wenn der Versand scheitert: Es entsteht eine **Anfrage an die Administratoren**. Sie sehen oben den Hinweis „1 Anfrage auf neues Kennwort“ und unter **Verwaltung → Benutzer** Name und Zeitpunkt. Ein Administrator setzt dann unter „Bearbeiten“ ein Startpasswort und gibt es der Person persönlich weiter (damit ist die Anfrage erledigt) oder verwirft die Anfrage.
+
+Je E-Mail-Adresse sind höchstens 3, je Internetanschluss höchstens 10 Anfragen pro Stunde möglich; gespeichert werden dafür nur Prüfsummen, keine Adressen oder IP-Adressen im Klartext.
+
+**E-Mail-Versand einrichten** (in der `config.php`, alle Einträge freiwillig; siehe Abschnitt „E-Mail-Versand“ in `config.example.php`):
+
+| Schlüssel | Bedeutung |
+|---|---|
+| `mail_smtp_host` | SMTP-Server des Postfachs, nur der Hostname (STRATO: `smtp.strato.de`) |
+| `mail_smtp_verschluesselung` | `ssl` (Standard, verschlüsselt ab Verbindungsbeginn) oder `tls` (STARTTLS) |
+| `mail_smtp_port` | `465` für `ssl`, `587` für `tls`; `0` wählt den Port automatisch |
+| `mail_smtp_benutzer` | Anmeldename am SMTP-Server, meist die vollständige E-Mail-Adresse |
+| `mail_smtp_passwort` | Kennwort des Postfachs (nur in der `config.php`) |
+| `mail_absender` | Absenderadresse, meist gleich dem Postfach |
+| `mail_absender_name` | angezeigter Absendername (Standard „EMC 78 Lokschuppen“) |
+
+Der Versand gilt als eingerichtet, sobald `mail_smtp_host`, `mail_absender` und `oeffentliche_url` (z. B. `https://mitglieder.emc78.de`) gesetzt sind; aus `oeffentliche_url` und `basis_url` entsteht der Link in der E-Mail. Beispiel für ein STRATO-Postfach: `mail_smtp_host` = `smtp.strato.de`, `mail_smtp_port` = `465`, `mail_smtp_verschluesselung` = `ssl`, Benutzer und Absender = die Postfachadresse.
+
+**In der Testumgebung** (`'testumgebung' => true`) ohne eingerichtetes Postfach zeigt die Antwortseite für ein bekanntes Konto zusätzlich den Link zum Zurücksetzen an, damit sich der Ablauf ohne E-Mail ausprobieren lässt; die Anfrage an die Administratoren entsteht trotzdem. Im Echtbetrieb erscheint der Link nie auf der Seite.
+
+## Anlagen
+
+Unter **Anlagen** (Hauptmenü) stehen die Modellbahnanlagen des Vereins mit **Code `A<n>`** (automatisch fortlaufend, A1, A2 …; eine gelöschte Nummer wird nie wieder vergeben), Name, Spurweite, Kurzbeschreibung, Standort und Status („in Ordnung“, „defekt“, „in Arbeit“). Fotos und Dokumente lassen sich wie bei Fahrzeugen anhängen; das erste Foto wird Titelbild. Lesen dürfen alle, anlegen, bearbeiten und löschen ab **Bearbeiter**. Im OneDrive liegen die Dateien unter `Anlagen/A<n> <Name>/`. Stufe 3 baut die Anlagen später weiter aus; die Daten bleiben dabei erhalten.
+
+## Wartung
+
+**Wartungsarten** (Verwaltung → Wartungsarten, ab Fahrzeugwart) legen fest, was wie oft zu tun ist: Name, gilt für (Fahrzeuge alle, Lok/Triebwagen, Wagen oder Anlagen), Intervall in **Monaten und/oder Betriebsstunden** (mindestens eines; Anlagen nur Monate). Der Startbestand (z. B. „Räder und Radschleifer reinigen“ alle 6 Monate oder 20 h, „Gleise reinigen“ alle 3 Monate) lässt sich ändern und ergänzen. Nicht mehr benötigte Arten bitte **deaktivieren**; löschen geht nur, solange eine Art nie eingetragen wurde.
+
+**Wartungsplan:** Eine Wartungsart gilt automatisch für alle passenden Objekte; ausgemusterte Fahrzeuge zählen nicht. Unter „Wartungsplan anpassen“ (auf der Fahrzeug- bzw. Anlagenseite) lässt sich je Objekt eine Art **abschalten** oder ein **eigenes Intervall** setzen (es ersetzt beide Werte der Art). Das dürfen bei Fahrzeugen Fahrzeugwarte, bei Anlagen Bearbeiter.
+
+**Wartung eintragen:** Im Tab „Wartung“ des Fahrzeugs bzw. im Abschnitt „Wartung“ der Anlage: Datum, eine oder mehrere Wartungsarten, bei Fahrzeugen optional der Betriebsstundenstand, ausgeführt von, Notiz und Fotos. Ein höherer Stundenstand wird am Fahrzeug übernommen; ein Nachtrag mit kleinerem Stand ändert nichts. Bei Nachträgen bitte den damaligen Stand angeben – ohne Angabe gilt für einen älteren Eintrag kein Stundenstand. Der Fahrzeugstatus bleibt unverändert. Eintragen dürfen Mitglieder an eigenen Fahrzeugen, Fahrzeugwarte an allen Fahrzeugen und Bearbeiter an Anlagen; mit demselben Recht lassen sich eine Wartung oder einzelne Fotos wieder löschen.
+
+**Ampel:** Maßgeblich ist die letzte Wartung dieser Art am Objekt (das jüngste Datum); fällig ist, was zuerst erreicht wird – Zeit oder Stunden.
+
+- 🔴 **überfällig:** Fälligkeitstag überschritten (ab dem Folgetag) bzw. Stundenstand über dem Intervall.
+- 🟡 **bald fällig:** höchstens ein Monat bis zum Fälligkeitstag (der Fälligkeitstag selbst ist noch gelb) bzw. höchstens 10 % des Stundenintervalls übrig; ebenso gelb sind **„noch nie erfasst“** und **„Stundenstand fehlt“** (das Fahrzeug führt Stunden, aber keine Wartung dieser Art hat einen Stand).
+- 🟢 **in Ordnung.**
+
+Monate werden auf das Monatsende begrenzt (letzte Wartung am 31.08. + 6 Monate → fällig am 28.02., im Schaltjahr 29.02.). Fahrzeuge mit 0 Betriebsstunden, für die nie ein Stand eingegeben wurde (z. B. Wagen), führen keine Stunden: bei ihnen zählt nur das Intervall in Monaten.
+
+**Anzeigen:** Die Seite **Wartung** (Hauptmenü) listet alle Fälligkeiten nach Dringlichkeit, mit der Anzahl je Stand und Filtern nach Objekt (Fahrzeuge/Anlagen), Spurweite, Eigentum (Verein/Mitglieder) und Stand. Jede Fahrzeug- und Anlagenseite zeigt die Fälligkeiten je Wartungsart und den Verlauf.
+
+## Startseite
+
+Nach der Anmeldung erscheint die **Startseite** mit der Kachel **„Wartung“**: Anzahl „überfällig“, „bald fällig“ und „noch nie erfasst“, die fünf dringendsten Fälligkeiten mit Link aufs Objekt und „Alle Fälligkeiten“. Daneben führen Schnellzugriffe zu den Fahrzeugen und Anlagen.
+
 ## Abstellgleis
 
 Ausgemusterte Fahrzeuge stehen auf dem **Abstellgleis** (Menü **Fahrzeuge → Abstellgleis**, dort mit Anzahl). Sie bleiben mit Decodern, Funktionen, CVs, Fotos und Dokumenten erhalten, erscheinen aber nicht mehr in der Fahrzeugliste und in „Meine Fahrzeuge“ und zählen bei der Adressprüfung nicht mit: Ihre Decoder-Adressen sind frei für andere Fahrzeuge. Die Seite zeigt je Fahrzeug, seit wann es abgestellt ist, und lässt sich wie die Fahrzeugliste nach Spurweite, Gattung und Eigentum filtern. Die Textsuche der Fahrzeugliste findet ausgemusterte Fahrzeuge trotzdem (z. B. über die Inventarnummer); sie sind dort als „Abstellgleis“ gekennzeichnet.
@@ -92,7 +145,7 @@ Neuerungen und Beispieldaten lassen sich gefahrlos auf einer eigenen Testinstanz
    - im Browser als Administrator unter **Verwaltung → Testdaten** mit „Beispieldaten neu laden“ oder
    - per SSH (falls das STRATO-Paket SSH bietet) im Verzeichnis `/test/`: `php bin/demo-daten.php --zuruecksetzen`
 
-   Beides **löscht alle vorhandenen Daten der Testinstanz** und legt neu an: 7 erfundene Personen, 12 Fahrzeuge in H0 und N (Verein und Mitglieder, ein ausgemustertes), Decoder mit Funktionstasten und CVs, Beispielfotos und absichtlich **eine doppelte DCC-Adresse in H0**, an der man die Warnung der Adressprüfung sieht. Nach dem Laden im Browser wird man abgemeldet.
+   Beides **löscht alle vorhandenen Daten der Testinstanz** und legt neu an: 7 erfundene Personen, 12 Fahrzeuge in H0 und N (Verein und Mitglieder, ein ausgemustertes), Decoder mit Funktionstasten und CVs, Beispielfotos, absichtlich **eine doppelte DCC-Adresse in H0**, an der man die Warnung der Adressprüfung sieht, die Anlage **A1 „Clubanlage H0“** und einige Wartungen (eine überfällige, eine bald fällige, eine in Ordnung; der Rest „noch nie erfasst“). Die Wartungsarten der Testinstanz bleiben dabei erhalten. Nach dem Laden im Browser wird man abgemeldet.
 7. Als Mitglied (Carla) kannst du die E 94 279 und den Eilzugwagen Bymb 421 bearbeiten – die hat Carla selbst angelegt; andere Fahrzeuge siehst du nur.
 8. Anmelden mit `bearbeiter@test.emc78.de`, `fahrzeugwart@test.emc78.de` (Greta Wagner) oder `mitglied@test.emc78.de` (Passwort `Test-EMC78!`) oder als Administrator mit `admin@test.emc78.de` und dem Passwort aus `testumgebung_admin_passwort`. Den Admin-Zugang erfahren Tester beim Vorstand; er steht bewusst nicht auf der Anmeldeseite.
 
@@ -169,8 +222,9 @@ Eine Sicherung des Echtbetriebs **nie in die Testinstanz** einspielen, solange d
 Verlangt ein Mitglied die Löschung seiner Daten, öffnet ein **Administrator** die Person unter **Personen → Bearbeiten** und wählt **„Person endgültig löschen (DSGVO)“**. Die Vorschau zeigt, was passiert:
 
 - Die Person (Name, E-Mail, Telefon, Notiz) und ihr Benutzerkonto werden gelöscht, ebenso ihre Anmeldeversuche (außer bei einer E-Mail-Adresse, die auch eine andere Person nutzt).
-- **Eigene Fahrzeuge** der Person werden samt Fotos und Dokumenten (Webspace und OneDrive), Decodern, Funktionstasten und CVs mitgelöscht. Fahrzeuge, die in der Vorschau mit **„an den Verein übergeben“** angehakt werden, bleiben erhalten; Eigentümer wird der Verein.
-- Bezüge in Vereinsdaten (z. B. „angelegt von“, „hochgeladen von“) werden entfernt und als „ehemaliges Mitglied“ angezeigt.
+- **Eigene Fahrzeuge** der Person werden samt Fotos und Dokumenten (Webspace und OneDrive), Decodern, Funktionstasten, CVs, **Wartungen (mit Fotos) und Wartungsplan-Ausnahmen** mitgelöscht. Fahrzeuge, die in der Vorschau mit **„an den Verein übergeben“** angehakt werden, bleiben samt Wartungen erhalten; Eigentümer wird der Verein.
+- Bezüge in Vereinsdaten (z. B. „angelegt von“, „hochgeladen von“, bei Wartungen „ausgeführt von“ und „eingetragen von“) werden entfernt und als „ehemaliges Mitglied“ angezeigt. Wartungen an Vereinsfahrzeugen, fremden Fahrzeugen und Anlagen bleiben erhalten; die Vorschau nennt ihre Zahl.
+- „Kennwort vergessen“: Links und Anfragen der Person verschwinden mit dem Konto, ihre gezählten Anfragen ebenfalls.
 - Im Änderungsprotokoll verschwinden die Einträge zur Person und zu ihren Zugängen; in allen übrigen Einträgen werden Name, E-Mail und Telefon (auch frühere Werte) durch „ehemaliges Mitglied“ ersetzt (außer einer E-Mail-Adresse, die auch eine andere Person nutzt, z. B. eine Familienadresse). Übrig bleibt genau ein Nachweis „Person Nr. N nach DSGVO gelöscht“ mit dem ausführenden Administrator.
 
 Zur Bestätigung den **Nachnamen** eingeben. Der Datenbankteil läuft ganz oder gar nicht; erst danach werden die Dateien vom Webspace entfernt und die OneDrive-Löschungen angestoßen. Meldet die Seite „Bitte erneut versuchen“, wurde nichts gelöscht. Die eigene Person und den letzten aktiven Administrator kann man so nicht löschen.

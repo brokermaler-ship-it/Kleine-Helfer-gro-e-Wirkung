@@ -11,10 +11,14 @@ use Emc\Fahrzeuge\FahrzeugRepository;
 use Emc\OneDrive\Auftraege;
 use Emc\OneDrive\Uebertragung;
 use Emc\Protokoll\Aenderungsprotokoll;
+use Emc\Wartung\AusnahmeRepository;
+use Emc\Wartung\WartungRepository;
 
 /**
- * Löscht eine Person nach DSGVO vollständig: Konto (auch frühere Konten im Protokoll), eigene Fahrzeuge samt Dateien
- * (außer an den Verein übergebene), Bezüge in Vereinsdaten und Personendaten im Änderungsprotokoll.
+ * Löscht eine Person nach DSGVO vollständig: Konto (auch frühere Konten im Protokoll), eigene Fahrzeuge samt Dateien,
+ * Wartungen (mit Fotos) und Wartungsplan-Ausnahmen (außer an den Verein übergebene), Bezüge in Vereinsdaten (auch
+ * „ausgeführt von“/„erfasst von“ an Wartungen, Anzeige „ehemaliges Mitglied“) und Personendaten im Änderungsprotokoll.
+ * „Kennwort vergessen“: Tokens und Anfragen per CASCADE mit dem Konto, Versuche über den E-Mail-Hash.
  * Datenbankteil in einer Transaktion, Dateien vom Webspace erst nach dem Commit.
  */
 final class DsgvoLoeschung
@@ -31,7 +35,11 @@ final class DsgvoLoeschung
         private FahrzeugRepository $fahrzeuge,
         private Auftraege $auftraege,
         private ?Uebertragung $uebertragung = null,
+        private ?WartungRepository $wartungen = null,
+        private ?AusnahmeRepository $ausnahmen = null,
     ) {
+        $this->wartungen ??= new WartungRepository($pdo);
+        $this->ausnahmen ??= new AusnahmeRepository($pdo);
     }
 
     /**
@@ -39,7 +47,10 @@ final class DsgvoLoeschung
      *
      * `onedrive_konto_der_person`: die OneDrive-Verbindung läuft über ein Microsoft-Konto mit einer E-Mail der Person.
      *
-     * @return array{person: array<string,mixed>, benutzer: ?array<string,mixed>, fahrzeuge: list<array{id:int, inventarnummer:string, bezeichnung:string, dokumente:int, rechnungen:int}>, protokolleintraege:int, verweigert:?string, onedrive_konto_der_person:bool}
+     * `wartungen_in_vereinsdaten`: Wartungen an anderen Objekten (Vereins- und fremde Fahrzeuge, Anlagen), die die Person
+     * ausgeführt oder eingetragen hat – sie bleiben, der Bezug wird „ehemaliges Mitglied“.
+     *
+     * @return array{person: array<string,mixed>, benutzer: ?array<string,mixed>, fahrzeuge: list<array{id:int, inventarnummer:string, bezeichnung:string, dokumente:int, rechnungen:int, wartungen:int}>, wartungen_in_vereinsdaten:int, protokolleintraege:int, verweigert:?string, onedrive_konto_der_person:bool}
      */
     public function vorschau(int $personId, int $ausfuehrenderBenutzerId): array
     {
@@ -53,6 +64,7 @@ final class DsgvoLoeschung
                 'bezeichnung' => (string) $fz['bezeichnung'],
                 'dokumente' => count($this->dokumente->idsFuerObjekt('fahrzeug', (int) $fz['id'])),
                 'rechnungen' => $this->rechnungen((int) $fz['id']),
+                'wartungen' => count($this->wartungIds((int) $fz['id'])),
             ];
         }
         $k = $this->kennungen($personId, $person, $benutzer);
@@ -72,10 +84,41 @@ final class DsgvoLoeschung
             'person' => $person,
             'benutzer' => $benutzer,
             'fahrzeuge' => $fahrzeuge,
+            'wartungen_in_vereinsdaten' => $this->wartungenInVereinsdaten($personId, $benutzer === null ? null : (int) $benutzer['id']),
             'protokolleintraege' => $this->protokoll->zaehleBetroffene($k['begriffe'], $k['konten'], $k['objekte']),
             'verweigert' => $verweigert,
             'onedrive_konto_der_person' => $onedriveKonto !== '' && in_array($onedriveKonto, $mails, true),
         ];
+    }
+
+    /** Wartungen am Fahrzeug; vor Migration 013 keine. @return list<int> */
+    private function wartungIds(int $fahrzeugId): array
+    {
+        try {
+            return $this->wartungen->idsFuerObjekt('fahrzeug', $fahrzeugId);
+        } catch (\PDOException $e) {
+            if ((string) $e->getCode() === '42S02') {
+                return [];
+            }
+            throw $e;
+        }
+    }
+
+    private function wartungenInVereinsdaten(int $personId, ?int $benutzerId): int
+    {
+        try {
+            $st = $this->pdo->prepare(
+                'SELECT COUNT(*) FROM wartung w WHERE (w.ausgefuehrt_von_person_id = ? OR w.erfasst_von_benutzer_id = ?) '
+                . "AND NOT (w.objekt_typ = 'fahrzeug' AND w.objekt_id IN (SELECT f.id FROM fahrzeug f WHERE f.eigentuemer_person_id = ?))"
+            );
+            $st->execute([$personId, $benutzerId ?? 0, $personId]);
+            return (int) $st->fetchColumn();
+        } catch (\PDOException $e) {
+            if ((string) $e->getCode() === '42S02') {
+                return 0;
+            }
+            throw $e;
+        }
     }
 
     /** Anzahl der Rechnungen am Fahrzeug (bleiben bei Übergabe an den Verein erhalten, oft mit Name und Adresse). */
@@ -128,7 +171,22 @@ final class DsgvoLoeschung
 
             // 3. Übrige eigene Fahrzeuge samt nur ihnen zugeordneter Dokumente; geteilte verlieren nur diese Zuordnung.
             //    Nie DokumentRepository::loeschen()/entferneVonObjekt() hier: die öffnen eine eigene Transaktion.
+            //    Vorher Wartungen (Fotos wie Dokumente, wartung_art per CASCADE) und Ausnahmen des Fahrzeugs.
+            //    Wartungen an übergebenen und Vereinsfahrzeugen bleiben; „ausgeführt von“ (Person) und „erfasst von“
+            //    (Konto) leeren die Fremdschlüssel ON DELETE SET NULL in den Schritten 4 und 6.
             foreach (array_diff($eigene, $uebergeben) as $fzId) {
+                foreach ($this->wartungIds($fzId) as $wartungId) {
+                    foreach ($this->dokumenteNurHier($wartungId, 'wartung') as $dokId) {
+                        $pfad = $this->loescheDokument($dokId);
+                        if ($pfad !== null) {
+                            $pfade[$dokId] = $pfad;
+                        }
+                    }
+                    $this->pdo->prepare("DELETE FROM dokument_zuordnung WHERE objekt_typ = 'wartung' AND objekt_id = ?")->execute([$wartungId]);
+                    $this->wartungen->loeschen($wartungId);
+                    $eigeneObjekte[] = ['wartung', $wartungId];
+                }
+                $this->loescheAusnahmen($fzId);
                 foreach ($this->dokumenteNurHier($fzId) as $dokId) {
                     $pfad = $this->loescheDokument($dokId);
                     if ($pfad !== null) {
@@ -187,20 +245,32 @@ final class DsgvoLoeschung
         $this->uebertragung?->nebenbei();
     }
 
+    /** Ausnahmen im Wartungsplan des Fahrzeugs; vor Migration 013 gibt es keine. */
+    private function loescheAusnahmen(int $fahrzeugId): void
+    {
+        try {
+            $this->ausnahmen->loescheFuerObjekt('fahrzeug', $fahrzeugId);
+        } catch (\PDOException $e) {
+            if ((string) $e->getCode() !== '42S02') {
+                throw $e;
+            }
+        }
+    }
+
     /**
-     * Dokumente, die nur diesem Fahrzeug zugeordnet sind – mit sperrenden Reads, damit eine gleichzeitig angelegte
-     * Zuordnung weder übersehen noch ohne ihr Dokument gelöscht wird.
+     * Dokumente, die nur diesem Objekt (Fahrzeug bzw. Wartung) zugeordnet sind – mit sperrenden Reads, damit eine
+     * gleichzeitig angelegte Zuordnung weder übersehen noch ohne ihr Dokument gelöscht wird.
      *
      * @return list<int>
      */
-    private function dokumenteNurHier(int $fahrzeugId): array
+    private function dokumenteNurHier(int $objektId, string $objektTyp = 'fahrzeug'): array
     {
-        $st = $this->pdo->prepare("SELECT dokument_id FROM dokument_zuordnung WHERE objekt_typ = 'fahrzeug' AND objekt_id = ? ORDER BY dokument_id FOR UPDATE");
-        $st->execute([$fahrzeugId]);
-        $andere = $this->pdo->prepare("SELECT COUNT(*) FROM dokument_zuordnung WHERE dokument_id = ? AND NOT (objekt_typ = 'fahrzeug' AND objekt_id = ?) FOR UPDATE");
+        $st = $this->pdo->prepare('SELECT dokument_id FROM dokument_zuordnung WHERE objekt_typ = ? AND objekt_id = ? ORDER BY dokument_id FOR UPDATE');
+        $st->execute([$objektTyp, $objektId]);
+        $andere = $this->pdo->prepare('SELECT COUNT(*) FROM dokument_zuordnung WHERE dokument_id = ? AND NOT (objekt_typ = ? AND objekt_id = ?) FOR UPDATE');
         $ids = [];
         foreach ($st->fetchAll(\PDO::FETCH_COLUMN) as $dokId) {
-            $andere->execute([(int) $dokId, $fahrzeugId]);
+            $andere->execute([(int) $dokId, $objektTyp, $objektId]);
             if ((int) $andere->fetchColumn() === 0) {
                 $ids[] = (int) $dokId;
             }
