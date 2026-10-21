@@ -35,6 +35,8 @@ use Emc\Digital\DecoderRepository;
 use Emc\Digital\FunktionController;
 use Emc\Digital\FunktionRepository;
 use Emc\Digital\FunktionsvorlageRepository;
+use Emc\Etiketten\EtikettAuswahl;
+use Emc\Etiketten\EtikettController;
 use Emc\Fahrzeuge\FahrzeugController;
 use Emc\Fahrzeuge\FahrzeugRepository;
 use Emc\Mail\Mailer;
@@ -339,6 +341,13 @@ final class App
         $this->container->set(CodeController::class, fn(Container $c) => new CodeController(
             $this->view,
             $c->get(CodeAufloesung::class)
+        ));
+        $this->container->set(EtikettController::class, fn(Container $c) => new EtikettController(
+            $this->view,
+            new EtikettAuswahl($c->get('pdo')),
+            $c->get(SpurweiteRepository::class),
+            $c->get('session'),
+            $this->config
         ));
         $this->container->set(AnlageController::class, fn(Container $c) => new AnlageController(
             $this->view,

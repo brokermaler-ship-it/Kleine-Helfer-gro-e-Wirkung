@@ -15,6 +15,9 @@ $zeile = function (string $label, ?string $wert): void { ?>
     </div>
     <div class="d-flex flex-wrap gap-2">
         <a class="btn btn-danger" href="<?= e(url('/anlagen/' . $a['id'] . '/defekt')) ?>">Defekt melden</a>
+        <?php if ($darf(\Emc\Auth\Berechtigung::ETIKETTEN_DRUCKEN)): ?>
+            <a class="btn btn-outline-secondary" href="<?= e(url('/etiketten', ['art' => 'anlage', 'auswahl' => 'einzeln', 'ids' => [(int) $a['id']]])) ?>">Etikett drucken</a>
+        <?php endif; ?>
         <?php if ($darfBearbeiten): ?>
             <a class="btn btn-primary" href="<?= e(url('/anlagen/' . $a['id'] . '/bearbeiten')) ?>">Bearbeiten</a>
             <form method="post" action="<?= e(url('/anlagen/' . $a['id'] . '/loeschen')) ?>"

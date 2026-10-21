@@ -54,6 +54,9 @@ use Emc\Auth\Berechtigung;
                 if ($darf(Berechtigung::WARTUNGSART_VERWALTEN)) {
                     $verwaltung['/admin/wartungsarten'] = 'Wartungsarten';
                 }
+                if ($darf(Berechtigung::ETIKETTEN_DRUCKEN)) {
+                    $verwaltung['/etiketten'] = 'Etiketten';
+                }
                 if ($darf(Berechtigung::BETRIEB)) {
                     $verwaltung['/admin/sicherung'] = 'Sicherung';
                     $verwaltung['/admin/onedrive'] = 'OneDrive';

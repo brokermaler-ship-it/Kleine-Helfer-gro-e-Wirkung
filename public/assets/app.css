@@ -150,3 +150,33 @@ body.login-seite .emc-fuss { background: rgba(244, 244, 244, .92); }
     .login-karte h1 { font-size: 1.25rem; margin-bottom: .75rem !important; }
     .login-karte .mb-3 { margin-bottom: .6rem !important; }
 }
+
+/* Etiketten-Druckseite (templates/etiketten/druck.php): feste Bogenmaße in mm, keine Skalierung.
+   @page { size: A4; margin: 0 } steht nur auf der Druckseite selbst. */
+body.druckseite { display: block; min-height: 0; background: #e9ecef; }
+.druckseite .druck-steuerung { background: #fff; max-width: 210mm; margin: 0 auto 1rem; }
+.druckseite .boegen { overflow-x: auto; padding: 0 0 2rem; }
+.druckseite .bogen { position: relative; width: 210mm; height: 297mm; margin: 0 auto 1rem; overflow: hidden; background: #fff; box-shadow: 0 0 .5rem rgba(0, 0, 0, .2); break-after: page; page-break-after: always; }
+.druckseite .bogen:last-child { break-after: auto; page-break-after: auto; }
+.druckseite .etikett, .druckseite .feld-leer { position: absolute; box-sizing: border-box; overflow: hidden; }
+.druckseite .feld-leer { outline: .1mm dashed #ced4da; outline-offset: -.1mm; }
+.druckseite .etikett { display: flex; color: #000; font-family: Arial, Helvetica, sans-serif; line-height: 1.15; outline: .1mm dashed #adb5bd; outline-offset: -.1mm; }
+.druckseite .etikett .code { font-weight: 700; white-space: nowrap; }
+.etikett-klebchen { align-items: center; justify-content: center; }
+.etikett-klebchen .code { font-size: 4.2mm; line-height: 1; }
+.etikett-verpackung { flex-direction: column; align-items: center; justify-content: center; padding: .4mm 1mm; text-align: center; }
+.etikett-verpackung .code { font-size: 3.8mm; line-height: 1; }
+.etikett-verpackung .bezeichnung { font-size: 1.9mm; max-height: calc(2 * 1.15 * 1.9mm); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.etikett-anlage { align-items: center; gap: 2.5mm; padding: 3.5mm; }
+.etikett-anlage .qr { flex: none; width: 30mm; height: 30mm; }
+.etikett-anlage .qr svg { display: block; width: 100%; height: 100%; }
+.etikett-anlage .text { display: flex; flex-direction: column; gap: 1.5mm; min-width: 0; }
+.etikett-anlage .name { font-size: 3.6mm; font-weight: 600; max-height: calc(4 * 1.15 * 3.6mm); overflow: hidden; overflow-wrap: anywhere; }
+.etikett-anlage .code { font-size: 9mm; line-height: 1; }
+@media print {
+    body.druckseite { background: #fff; margin: 0; }
+    .druckseite .druck-steuerung { display: none !important; }
+    .druckseite .boegen { overflow: visible; padding: 0; }
+    .druckseite .bogen { margin: 0; box-shadow: none; }
+    .druckseite .feld-leer, .druckseite .etikett { outline: none; }
+}

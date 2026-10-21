@@ -17,6 +17,9 @@ $abgestellt = $fz['status'] === 'ausgemustert';
     </div>
     <div class="d-flex flex-wrap gap-2">
         <a class="btn btn-danger" href="<?= e(url('/fahrzeuge/' . $fz['id'] . '/defekt')) ?>">Defekt melden</a>
+        <?php if ($fzCode !== null && $darf(\Emc\Auth\Berechtigung::ETIKETTEN_DRUCKEN)): ?>
+            <a class="btn btn-outline-secondary" href="<?= e(url('/etiketten', ['art' => 'klebchen', 'auswahl' => 'einzeln', 'ids' => [(int) $fz['id']]])) ?>">Etikett drucken</a>
+        <?php endif; ?>
         <?php if ($darfFz($fz)): ?>
             <a class="btn btn-primary" href="<?= e(url('/fahrzeuge/' . $fz['id'] . '/bearbeiten')) ?>">Bearbeiten</a>
             <?php if ($abgestellt): ?>

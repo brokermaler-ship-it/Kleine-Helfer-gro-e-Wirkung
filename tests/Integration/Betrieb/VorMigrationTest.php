@@ -269,6 +269,42 @@ final class VorMigrationTest extends DbTestCase
         self::assertSame(200, $app()->handle(new \Emc\Core\Request('GET', '/'))->status);
     }
 
+    /** Vor Migration 015 führen die Etiketten Administratoren zum Update; Fahrzeug- und Anlagenseite bleiben lesbar. */
+    public function test_etiketten_vor_migration_015(): void
+    {
+        $id = $this->legeBenutzerAn('admin@verein.de', 'geheim-passwort-1', 'admin');
+        [$fz] = $this->dokumentMitFahrzeug();
+        $this->pdo->exec("INSERT INTO anlage (nummer, name, spurweite_id) SELECT 1, 'Clubanlage', id FROM spurweite LIMIT 1");
+        $anl = (int) $this->pdo->lastInsertId();
+        $this->pdo->exec('ALTER TABLE fahrzeug DROP COLUMN etikett_gedruckt_am');
+        $this->pdo->exec('ALTER TABLE anlage DROP COLUMN etikett_gedruckt_am');
+        $sitzung = ['_csrf' => str_repeat('a', 64)];
+        $this->sitzungAnmelden($sitzung, $id);
+        $app = fn() => \Emc\Core\App::erzeuge(self::testConfig(), new \Emc\Core\Session($sitzung));
+        $anfragen = [
+            ['GET', '/etiketten', ['art' => 'klebchen']],
+            ['GET', '/etiketten/druck', ['art' => 'klebchen', 'auswahl' => 'ungedruckt']],
+            ['GET', '/etiketten/druck', ['art' => 'anlage', 'auswahl' => 'ungedruckt']],
+            ['POST', '/etiketten/gedruckt', ['typ' => 'fahrzeug', 'ids' => [(string) $fz]]],
+        ];
+        $pruefe = function () use ($app, $anfragen, $fz, $anl): void {
+            foreach ($anfragen as [$methode, $pfad, $daten]) {
+                $r = $methode === 'GET'
+                    ? $app()->handle(new \Emc\Core\Request('GET', $pfad, $daten))
+                    : $app()->handle(new \Emc\Core\Request('POST', $pfad, [], $daten + ['_csrf' => str_repeat('a', 64)]));
+                self::assertSame(303, $r->status, $pfad);
+                self::assertSame('/admin/update', $r->headers['Location'], $pfad);
+            }
+            self::assertSame(200, $app()->handle(new \Emc\Core\Request('GET', "/fahrzeuge/$fz"))->status);
+        };
+        // Spalten fehlen, obwohl die Version eingetragen ist: der Controller fängt es ab.
+        $pruefe();
+        self::assertSame(200, $app()->handle(new \Emc\Core\Request('GET', "/anlagen/$anl"))->status);
+        // Steht die Migration aus, leitet schon App weiter (auch die Anlagen, siehe 3c in App).
+        $this->pdo->exec("DELETE FROM schema_migration WHERE version >= '015'");
+        $pruefe();
+    }
+
     /** App merkt sich die ausstehenden Migrationen nur für eine Anfrage: nach dem Update gilt sofort der neue Stand. */
     public function test_ausstehende_migrationen_je_anfrage_neu_ermittelt(): void
     {

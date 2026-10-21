@@ -18,6 +18,7 @@ use Emc\Digital\AdressenController;
 use Emc\Digital\CvController;
 use Emc\Digital\DecoderController;
 use Emc\Digital\FunktionController;
+use Emc\Etiketten\EtikettController;
 use Emc\Fahrzeuge\FahrzeugController;
 use Emc\OneDrive\OneDriveController;
 use Emc\Personen\BenutzerController;
@@ -107,6 +108,12 @@ return function (Router $router, App $app): void {
     $router->add('GET', '/reparaturen/{id}/bearbeiten', $app->erfordert('lesen', $rep('bearbeiten')));
     $router->add('POST', '/reparaturen/{id}', $app->erfordert('lesen', $rep('aendern')));
     $router->add('POST', '/reparaturen/{id}/fotos', $app->erfordert('lesen', $rep('fotos')));
+
+    // Etiketten (ab Fahrzeugwart): nur der POST „Als gedruckt vermerken“ setzt etikett_gedruckt_am.
+    $etk = fn(string $m) => fn(Request $r, array $p = []) => $c->get(EtikettController::class)->$m($r);
+    $router->add('GET', '/etiketten', $app->erfordert('etiketten_drucken', $etk('formular')));
+    $router->add('GET', '/etiketten/druck', $app->erfordert('etiketten_drucken', $etk('druck')));
+    $router->add('POST', '/etiketten/gedruckt', $app->erfordert('etiketten_drucken', $etk('gedruckt')));
 
     $dec = fn(string $m) => fn(Request $r, array $p = []) => $c->get(DecoderController::class)->$m($r, $p);
     $router->add('POST', '/fahrzeuge/{id}/decoder', $app->erfordert('lesen', $dec('anlegen')));
