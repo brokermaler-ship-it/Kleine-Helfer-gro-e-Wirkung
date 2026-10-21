@@ -19,6 +19,7 @@ zum Vorlesenlassen, auch ohne laufenden Tutor-Server.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import html
 import json
 import os
@@ -98,6 +99,16 @@ def synthesize(text: str, voice: str, model: str, target: Path) -> None:
     )
     with urllib.request.urlopen(request, timeout=300) as response:
         target.write_bytes(response.read())
+
+
+def cached_audio(text: str, voice: str, model: str, cache: Path) -> Path:
+    """Vertonungen werden zwischengespeichert, damit ein neuer Build kein Cartesia-Guthaben kostet."""
+    key = hashlib.sha256(f"{model}|{voice}|{text}".encode("utf-8")).hexdigest()[:20]
+    path = cache / f"{key}.mp3"
+    if not path.exists():
+        cache.mkdir(parents=True, exist_ok=True)
+        synthesize(text, voice, model, path)
+    return path
 
 
 def read_aloud_html(players: list[tuple[str, str]]) -> str:
@@ -248,7 +259,8 @@ def build(module_path: Path, tutor_url: str, out_dir: Path, with_audio: bool = F
             for tutor in settings.tutors.values():
                 name = f"audio/modul{n}-{tutor.id}.mp3"
                 print(f"Vertone {name} …", flush=True)
-                synthesize(spoken_text(module, n), tutor.voice, settings.tts_model, target / name)
+                mp3 = cached_audio(spoken_text(module, n), tutor.voice, settings.tts_model, out_dir / "audio-cache")
+                shutil.copy(mp3, target / name)
                 audio.setdefault(n, []).append((tutor.name, name))
                 files.append(name)
     index = build_index(module, tutors, tutor_url.rstrip("/"), has_logo, audio)
