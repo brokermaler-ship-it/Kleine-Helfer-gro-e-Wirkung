@@ -13,6 +13,8 @@ final class Auth
     private const SESSION_KEY = 'benutzer_id';
     /** Fingerabdruck der Instanz, an der die Anmeldung erfolgt ist (siehe Instanz::fingerabdruck). */
     public const INSTANZ_KEY = 'instanz';
+    /** Kennwort-Stand des Kontos bei der Anmeldung; weicht er vom Stand in der Datenbank ab, endet die Sitzung. */
+    public const STAND_KEY = 'kennwort_stand';
 
     /** Vorberechneter bcrypt-Hash (Kosten 10) für unbekannte E-Mails: gleiche Rechenzeit, kein password_hash je Anfrage. */
     private const ATTRAPPE = '$2y$10$N3RKsKsuGQBFYUWpIQyp..zwSKRjz27CPnRIFDoLb/jx9nVvPagpG';
@@ -31,7 +33,8 @@ final class Auth
             return AnmeldeErgebnis::Gesperrt;
         }
 
-        $st = $this->pdo->prepare('SELECT id, passwort_hash, aktiv FROM benutzer WHERE email = ?');
+        // SELECT *: vor Migration 010 gibt es kennwort_stand noch nicht (Anmeldung zum Datenbank-Update).
+        $st = $this->pdo->prepare('SELECT * FROM benutzer WHERE email = ?');
         $st->execute([$email]);
         $zeile = $st->fetch(\PDO::FETCH_ASSOC);
 
@@ -55,12 +58,31 @@ final class Auth
         $this->protokolliere($email, $ip, true);
         $this->pdo->prepare('UPDATE benutzer SET letzter_login = NOW() WHERE id = ?')->execute([$zeile['id']]);
 
+        $this->setzeSitzung((int) $zeile['id'], (int) ($zeile['kennwort_stand'] ?? 0));
+        return AnmeldeErgebnis::Erfolg;
+    }
+
+    /** Meldet ein aktives Konto ohne Kennwortprüfung an (nach „Kennwort vergessen“, der Token ist der Nachweis). */
+    public function anmeldenAls(int $benutzerId): void
+    {
+        $st = $this->pdo->prepare('SELECT * FROM benutzer WHERE id = ? AND aktiv = 1');
+        $st->execute([$benutzerId]);
+        $zeile = $st->fetch(\PDO::FETCH_ASSOC);
+        if ($zeile === false) {
+            throw new \RuntimeException('Konto nicht gefunden oder deaktiviert.');
+        }
+        $this->pdo->prepare('UPDATE benutzer SET letzter_login = NOW() WHERE id = ?')->execute([$benutzerId]);
+        $this->setzeSitzung($benutzerId, (int) ($zeile['kennwort_stand'] ?? 0));
+    }
+
+    private function setzeSitzung(int $benutzerId, int $kennwortStand): void
+    {
         $this->session->erneuere();
-        $this->session->setze(self::SESSION_KEY, (int) $zeile['id']);
+        $this->session->setze(self::SESSION_KEY, $benutzerId);
         $this->session->setze(self::INSTANZ_KEY, $this->instanz);
+        $this->session->setze(self::STAND_KEY, $kennwortStand);
         $this->geladen = null;
         $this->geladenId = null;
-        return AnmeldeErgebnis::Erfolg;
     }
 
     /** Verwirft die ganze Sitzung; danach gesetzte Meldungen bleiben für die nächste Seite erhalten. */
@@ -86,12 +108,18 @@ final class Auth
         if ($this->geladenId === $id) {
             return $this->geladen;
         }
+        // b.*: vor Migration 010 fehlt kennwort_stand (gilt dann als 0).
         $st = $this->pdo->prepare(
-            'SELECT b.id, b.person_id, b.email, b.rolle, b.muss_passwort_aendern, p.vorname, p.nachname '
-            . 'FROM benutzer b JOIN person p ON p.id = b.person_id WHERE b.id = ? AND b.aktiv = 1'
+            'SELECT b.*, p.vorname, p.nachname FROM benutzer b JOIN person p ON p.id = b.person_id WHERE b.id = ? AND b.aktiv = 1'
         );
         $st->execute([$id]);
         $z = $st->fetch(\PDO::FETCH_ASSOC);
+        $stand = $this->session->hole(self::STAND_KEY, 0);
+        if ($z !== false && (!is_int($stand) || $stand !== (int) ($z['kennwort_stand'] ?? 0))) {
+            // Kennwort inzwischen über „Kennwort vergessen“ neu gesetzt: diese Sitzung ist beendet.
+            $this->abmelden();
+            return null;
+        }
         $this->geladenId = $id;
         $this->geladen = $z === false ? null : new Benutzer(
             (int) $z['id'],

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Emc\Personen;
 
 use Emc\Auth\Auth;
+use Emc\Auth\KennwortVergessen;
 use Emc\Auth\Rolle;
 use Emc\Core\DomainFehler;
 use Emc\Core\HttpFehler;
@@ -23,6 +24,7 @@ final class BenutzerController
         private Aenderungsprotokoll $protokoll,
         private Auth $auth,
         private Session $session,
+        private KennwortVergessen $kennwort,
     ) {
     }
 
@@ -32,7 +34,39 @@ final class BenutzerController
             'titel' => 'Benutzer',
             'benutzerListe' => $this->benutzer->alle(),
             'eigeneId' => $this->auth->benutzer()?->id,
+            'kennwortAnfragen' => $this->kennwortAnfragen(),
         ]);
+    }
+
+    /** Offene „Kennwort vergessen“-Anfragen; vor dem Datenbank-Update (Migration 010) keine. */
+    private function kennwortAnfragen(): array
+    {
+        try {
+            return $this->kennwort->offeneAnfragen();
+        } catch (\PDOException) {
+            return [];
+        }
+    }
+
+    public function anfrageVerwerfen(Request $r, array $p): Response
+    {
+        $id = ctype_digit((string) ($p['id'] ?? '')) ? (int) $p['id'] : 0;
+        $admin = $this->auth->benutzer();
+        $anfrage = null;
+        foreach ($this->kennwort->offeneAnfragen() as $a) {
+            if ($a['id'] === $id) {
+                $anfrage = $a;
+            }
+        }
+        if ($anfrage !== null && $admin !== null && $this->kennwort->verwerfe($id, $admin->id)) {
+            $this->protokoll->schreibe($admin->id, 'benutzer', $anfrage['benutzer_id'], 'geaendert', [
+                'passwort' => ['alt' => null, 'neu' => 'Anfrage auf neues Kennwort verworfen'],
+            ]);
+            $this->session->meldung('erfolg', 'Die Anfrage wurde verworfen.');
+        } else {
+            $this->session->meldung('warnung', 'Diese Anfrage ist schon erledigt.');
+        }
+        return Response::redirect(url('/admin/benutzer'));
     }
 
     public function neu(Request $r): Response
@@ -120,6 +154,7 @@ final class BenutzerController
         $this->protokoll->schreibe($this->auth->benutzer()?->id, 'benutzer', (int) $b['id'], 'geaendert', [
             'passwort' => ['alt' => null, 'neu' => 'zurückgesetzt'],
         ]);
+        $this->kennwort->erledigeFuer((int) $b['id'], $this->auth->benutzer()?->id);
         $this->session->meldung('erfolg', 'Das Startpasswort wurde gesetzt. Es muss beim nächsten Anmelden geändert werden.');
         return Response::redirect(url('/admin/benutzer'));
     }

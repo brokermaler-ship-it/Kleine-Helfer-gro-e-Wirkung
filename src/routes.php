@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Emc\Auth\AuthController;
 use Emc\Auth\InstallController;
+use Emc\Auth\KennwortController;
 use Emc\Core\App;
 use Emc\Core\Request;
 use Emc\Core\Response;
@@ -38,6 +39,12 @@ return function (Router $router, App $app): void {
     $router->add('GET', '/login', fn(Request $r) => $c->get(AuthController::class)->loginForm($r));
     $router->add('POST', '/login', fn(Request $r) => $c->get(AuthController::class)->login($r));
     $router->add('POST', '/logout', fn(Request $r) => $c->get(AuthController::class)->logout($r));
+
+    $kw = fn(string $m) => fn(Request $r, array $p = []) => $c->get(KennwortController::class)->$m($r);
+    $router->add('GET', '/kennwort/vergessen', $kw('vergessenForm'));
+    $router->add('POST', '/kennwort/vergessen', $kw('vergessen'));
+    $router->add('GET', '/kennwort/neu', $kw('neuForm'));
+    $router->add('POST', '/kennwort/neu', $kw('neu'));
 
     $router->add('GET', '/install', fn(Request $r) => $c->get(InstallController::class)->formular($r));
     $router->add('POST', '/install', fn(Request $r) => $c->get(InstallController::class)->installiere($r));
@@ -103,6 +110,7 @@ return function (Router $router, App $app): void {
     $router->add('POST', '/admin/benutzer/{id}', $app->erfordert('benutzer_verwalten', $benutzer('aendern')));
     $router->add('POST', '/admin/benutzer/{id}/passwort', $app->erfordert('benutzer_verwalten', $benutzer('passwortZuruecksetzen')));
     $router->add('POST', '/admin/benutzer/{id}/loeschen', $app->erfordert('benutzer_verwalten', $benutzer('loeschen')));
+    $router->add('POST', '/admin/kennwort-anfragen/{id}/verwerfen', $app->erfordert('benutzer_verwalten', $benutzer('anfrageVerwerfen')));
 
     $spur = fn(string $m) => fn(Request $r, array $p = []) => $c->get(SpurweiteController::class)->$m($r, $p);
     $router->add('GET', '/admin/spurweiten', $app->erfordert('stammdaten_verwalten', $spur('liste')));

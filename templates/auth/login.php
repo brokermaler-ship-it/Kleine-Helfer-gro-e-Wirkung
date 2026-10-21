@@ -23,6 +23,7 @@
                 <input type="password" class="form-control" id="passwort" name="passwort" autocomplete="current-password" required>
             </div>
             <button type="submit" class="btn btn-primary">Anmelden</button>
+            <a class="btn btn-link" href="<?= e(url('/kennwort/vergessen')) ?>">Kennwort vergessen?</a>
         </form>
         </div></div>
         <?php if (!empty($testumgebung)): ?>

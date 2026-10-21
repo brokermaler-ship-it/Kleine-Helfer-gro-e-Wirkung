@@ -51,4 +51,25 @@ return [
     // Zeitbudget je Seitenaufruf in Sekunden (Standard 25): danach beginnt die Anwendung keine neuen Übertragungen
     // mehr, der Rest bleibt in der Warteschlange (Cronjob oder „Jetzt übertragen“). Der Cronjob hat kein Zeitbudget.
     'onedrive_zeitbudget_s' => 25,
+    // ---- E-Mail-Versand (optional) ----
+    // Für „Kennwort vergessen?“ auf der Anmeldeseite. Ohne Postfach funktioniert das trotzdem: Es entsteht eine Anfrage,
+    // die Administratoren oben als Hinweis und unter Verwaltung › Benutzer sehen; sie setzen dann ein Startpasswort.
+    // Eingerichtet ist der Versand, sobald mail_smtp_host, mail_absender und oeffentliche_url (siehe oben) gesetzt sind;
+    // der Link in der E-Mail lautet <oeffentliche_url><basis_url>/kennwort/neu?t=… Scheitert ein Versand, wird
+    // automatisch die Anfrage an die Administratoren angelegt.
+    // SMTP-Server des Postfachs, z. B. 'smtp.example.org' (nur der Hostname, ohne ssl:// und ohne Port).
+    'mail_smtp_host' => '',
+    // Port: 465 für ssl (Standard), 587 für tls.
+    'mail_smtp_port' => 465,
+    // 'ssl' (verschlüsselt ab Verbindungsbeginn, Standard) oder 'tls' (STARTTLS). Unverschlüsselt wird nie gesendet;
+    // das Zertifikat des Servers wird immer geprüft.
+    'mail_smtp_verschluesselung' => 'ssl',
+    // Anmeldung am SMTP-Server (meist die vollständige E-Mail-Adresse); leer = ohne Anmeldung.
+    'mail_smtp_benutzer' => '',
+    // Kennwort des Postfachs. Nur hier ablegen, niemals in der Datenbank oder weitergeben.
+    'mail_smtp_passwort' => '',
+    // Absenderadresse der E-Mails, z. B. 'lokschuppen@example.org' (meist gleich dem Postfach).
+    'mail_absender' => '',
+    // Angezeigter Absendername (Standard „EMC 78 Lokschuppen“).
+    'mail_absender_name' => 'EMC 78 Lokschuppen',
 ];

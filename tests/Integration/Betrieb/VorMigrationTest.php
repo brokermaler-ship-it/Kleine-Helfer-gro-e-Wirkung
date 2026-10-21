@@ -67,4 +67,27 @@ final class VorMigrationTest extends DbTestCase
         (new DokumentRepository($this->pdo, sys_get_temp_dir(), new Auftraege($this->pdo)))->loeschen($dok);
         self::assertSame('ITEM', $this->pdo->query("SELECT item_id FROM onedrive_auftrag WHERE art = 'loeschen'")->fetchColumn());
     }
+
+    /** Vor Migration 010 (ohne kennwort_stand) funktionieren Anmeldung und laufende Sitzungen weiter. */
+    public function test_anmeldung_vor_migration_010(): void
+    {
+        $id = $this->legeBenutzerAn('admin@verein.de', 'geheim-passwort-1', 'admin');
+        $this->pdo->exec('DROP TABLE kennwort_versuch');
+        $this->pdo->exec('DROP TABLE kennwort_anfrage');
+        $this->pdo->exec('DROP TABLE kennwort_token');
+        $this->pdo->exec('ALTER TABLE benutzer DROP COLUMN kennwort_stand');
+        $this->pdo->exec("DELETE FROM schema_migration WHERE version >= '010'");
+
+        $sitzung = [];
+        $auth = new \Emc\Auth\Auth($this->pdo, new \Emc\Core\Session($sitzung), 'x');
+        self::assertSame(\Emc\Auth\AnmeldeErgebnis::Erfolg, $auth->anmelden('admin@verein.de', 'geheim-passwort-1', '127.0.0.1'));
+        self::assertSame($id, $auth->benutzer()?->id);
+
+        $sitzung2 = ['_csrf' => str_repeat('a', 64)];
+        $this->sitzungAnmelden($sitzung2, $id);
+        $app = \Emc\Core\App::erzeuge(self::testConfig(), new \Emc\Core\Session($sitzung2));
+        $r = $app->handle(new \Emc\Core\Request('GET', '/admin/benutzer'));
+        self::assertSame(200, $r->status);
+        self::assertStringContainsString('Datenbank-Update', $r->body);
+    }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Emc\Personen;
 
+use Emc\Auth\KennwortVergessen;
 use Emc\Core\DomainFehler;
 use Emc\Dateien\DokumentRepository;
 use Emc\Fahrzeuge\FahrzeugRepository;
@@ -144,11 +145,15 @@ final class DsgvoLoeschung
                 $eigeneObjekte[] = ['fahrzeug', $fzId];
             }
 
-            // 4. Anmeldeversuche aller bekannten E-Mails (Person, Konto, frühere) und das Benutzerkonto.
+            // 4. Anmelde- und Kennwort-Versuche aller bekannten E-Mails (Person, Konto, frühere) und das Benutzerkonto.
             //    Fremdschlüssel: dokument.hochgeladen_von und fahrzeug.angelegt_von_benutzer_id werden NULL.
             if ($k['mails'] !== []) {
                 $this->pdo->prepare('DELETE FROM login_versuch WHERE email IN (' . implode(', ', array_fill(0, count($k['mails']), '?')) . ')')
                     ->execute($k['mails']);
+                // „Kennwort vergessen“-Versuche stehen nur gehasht da; Tokens und Anfragen gehen per CASCADE mit dem Konto.
+                $hashes = array_values(array_unique(array_map(KennwortVergessen::emailHash(...), $k['mails'])));
+                $this->pdo->prepare('DELETE FROM kennwort_versuch WHERE email_hash IN (' . implode(', ', array_fill(0, count($hashes), '?')) . ')')
+                    ->execute($hashes);
             }
             if ($benutzerId !== null) {
                 $this->pdo->prepare('DELETE FROM benutzer WHERE id = ?')->execute([$benutzerId]);

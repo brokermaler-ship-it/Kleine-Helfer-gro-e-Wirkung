@@ -8,6 +8,8 @@ use Emc\Auth\Auth;
 use Emc\Auth\AuthController;
 use Emc\Auth\Berechtigung;
 use Emc\Auth\InstallController;
+use Emc\Auth\KennwortController;
+use Emc\Auth\KennwortVergessen;
 use Emc\Betrieb\DemoDaten;
 use Emc\Betrieb\Einstellungen;
 use Emc\Betrieb\Migrator;
@@ -30,6 +32,9 @@ use Emc\Digital\FunktionRepository;
 use Emc\Digital\FunktionsvorlageRepository;
 use Emc\Fahrzeuge\FahrzeugController;
 use Emc\Fahrzeuge\FahrzeugRepository;
+use Emc\Mail\Mailer;
+use Emc\Mail\SmtpMailer;
+use Emc\Mail\StreamVerbindung;
 use Emc\OneDrive\CurlHttpClient;
 use Emc\OneDrive\Graph;
 use Emc\OneDrive\HttpClient;
@@ -142,6 +147,25 @@ final class App
             }
         });
         $this->container->set(Aenderungsprotokoll::class, fn(Container $c) => new Aenderungsprotokoll($c->get('pdo')));
+        // null, solange kein Postfach eingerichtet ist: dann gehen Kennwort-Anfragen an die Administratoren.
+        $this->container->set(Mailer::class, fn() => SmtpMailer::ausConfig($this->config, new StreamVerbindung()));
+        $this->container->set(KennwortVergessen::class, fn(Container $c) => new KennwortVergessen(
+            $c->get('pdo'),
+            $c->get(Einstellungen::class),
+            $c->get(Aenderungsprotokoll::class),
+            $c->get(Mailer::class),
+            rtrim(trim((string) ($this->config['oeffentliche_url'] ?? '')), '/') . rtrim((string) ($this->config['basis_url'] ?? ''), '/'),
+            $this->istTestumgebung(),
+            (string) ($this->config['app_name'] ?? 'EMC 78 Lokschuppen')
+        ));
+        $this->container->set(KennwortController::class, fn(Container $c) => new KennwortController(
+            $this->view,
+            $c->get(KennwortVergessen::class),
+            $c->get(Auth::class),
+            $c->get('session'),
+            // Mit echtem SMTP-Versand antwortet „Kennwort vergessen“ nie schneller als nach 3 Sekunden.
+            SmtpMailer::konfiguriert($this->config) ? 3.0 : 0.0
+        ));
         $this->container->set(PersonRepository::class, fn(Container $c) => new PersonRepository($c->get('pdo')));
         $this->container->set(BenutzerRepository::class, fn(Container $c) => new BenutzerRepository($c->get('pdo')));
         $this->container->set(PersonController::class, fn(Container $c) => new PersonController(
@@ -158,7 +182,8 @@ final class App
             $c->get(PersonRepository::class),
             $c->get(Aenderungsprotokoll::class),
             $c->get(Auth::class),
-            $c->get('session')
+            $c->get('session'),
+            $c->get(KennwortVergessen::class)
         ));
         $this->container->set(DsgvoLoeschung::class, fn(Container $c) => new DsgvoLoeschung(
             $c->get('pdo'),
@@ -403,7 +428,11 @@ final class App
             }
         }
 
-        $oeffentlich = $pfad === '/login' || $pfad === '/install';
+        $oeffentlich = in_array($pfad, ['/login', '/install', '/kennwort/vergessen', '/kennwort/neu'], true);
+        // 2b. „Kennwort vergessen“ braucht die Tabellen aus Migration 010.
+        if (str_starts_with($pfad, '/kennwort/') && $this->container->get(Migrator::class)->ausstehend() !== []) {
+            return $this->wartungsSeite();
+        }
         if (!$oeffentlich) {
             // 3. Anmeldung erforderlich.
             $benutzer = $this->container->get(Auth::class)->benutzer();
@@ -452,7 +481,7 @@ final class App
     }
 
     /**
-     * Hinweisleisten für Administratoren (Update ausstehend, Sicherung überfällig).
+     * Hinweisleisten für Administratoren (Kennwort-Anfragen, Update ausstehend, Sicherung überfällig).
      *
      * @return list<array{typ:string,text:string,link:string,linktext:string}>
      */
@@ -460,8 +489,19 @@ final class App
     {
         $hinweise = [];
         try {
+            $benutzer = $this->container->get(Auth::class)->benutzer();
+            if (Berechtigung::darf($benutzer, Berechtigung::BENUTZER_VERWALTEN) && $this->container->get(Migrator::class)->ausstehend() === []) {
+                $n = $this->container->get(KennwortVergessen::class)->anzahlOffen();
+                if ($n > 0) {
+                    $hinweise[] = ['typ' => 'info', 'text' => ($n === 1 ? '1 Anfrage' : $n . ' Anfragen') . ' auf neues Kennwort', 'link' => '/admin/benutzer', 'linktext' => 'Anfragen ansehen'];
+                }
+            }
+        } catch (\Throwable) {
+            // Hinweise sind nur Beiwerk.
+        }
+        try {
             if (!Berechtigung::darf($this->container->get(Auth::class)->benutzer(), Berechtigung::BETRIEB)) {
-                return [];
+                return $hinweise;
             }
             if ($this->container->get(Migrator::class)->ausstehend() !== []) {
                 $hinweise[] = ['typ' => 'warning', 'text' => 'Es steht ein Datenbank-Update an.', 'link' => '/admin/update', 'linktext' => 'Jetzt aktualisieren'];

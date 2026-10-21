@@ -19,14 +19,14 @@ final class MigratorTest extends DbTestCase
         self::alleTabellenLoeschen($this->pdo);
         $migrator = new Migrator($this->pdo, $this->migrationen());
         $this->assertFalse($migrator->istInstalliert());
-        $this->assertSame(['001_grundgeruest', '002_spurweiten_start', '003_fahrzeug_angelegt_von', '004_onedrive', '005_onedrive_auftrag_sperre', '006_onedrive_sperr_token_index', '007_onedrive_laufwerk', '008_rolle_fahrzeugwart', '009_abstellgleis'], $migrator->ausstehend());
+        $this->assertSame(['001_grundgeruest', '002_spurweiten_start', '003_fahrzeug_angelegt_von', '004_onedrive', '005_onedrive_auftrag_sperre', '006_onedrive_sperr_token_index', '007_onedrive_laufwerk', '008_rolle_fahrzeugwart', '009_abstellgleis', '010_kennwort_vergessen'], $migrator->ausstehend());
     }
 
     public function test_ausfuehren_legt_tabellen_an_und_ist_idempotent(): void
     {
         self::alleTabellenLoeschen($this->pdo);
         $migrator = new Migrator($this->pdo, $this->migrationen());
-        $this->assertSame(['001_grundgeruest', '002_spurweiten_start', '003_fahrzeug_angelegt_von', '004_onedrive', '005_onedrive_auftrag_sperre', '006_onedrive_sperr_token_index', '007_onedrive_laufwerk', '008_rolle_fahrzeugwart', '009_abstellgleis'], $migrator->ausfuehren());
+        $this->assertSame(['001_grundgeruest', '002_spurweiten_start', '003_fahrzeug_angelegt_von', '004_onedrive', '005_onedrive_auftrag_sperre', '006_onedrive_sperr_token_index', '007_onedrive_laufwerk', '008_rolle_fahrzeugwart', '009_abstellgleis', '010_kennwort_vergessen'], $migrator->ausfuehren());
         $this->assertTrue($migrator->istInstalliert());
         $this->assertSame([], $migrator->ausstehend());
         $this->assertSame([], $migrator->ausfuehren());

@@ -212,6 +212,32 @@ final class DsgvoLoeschungTest extends DbTestCase
         $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM benutzer WHERE id = ?', [$this->admin]));
     }
 
+    public function test_loesche_entfernt_kennwort_tokens_anfragen_und_versuche(): void
+    {
+        $s = $this->szenario();
+        $andere = $this->konto($this->person('Dora', 'Andere', 'dora@privat.de'), 'dora@verein.de');
+        $hash = fn(string $m): string => hash('sha256', $m);
+        foreach ([$s['konto'], $andere] as $konto) {
+            $this->pdo->prepare('INSERT INTO kennwort_token (benutzer_id, token_hash, gueltig_bis) VALUES (?, ?, NOW() + INTERVAL 1 HOUR)')
+                ->execute([$konto, hash('sha256', 'token' . $konto)]);
+            $this->pdo->prepare('INSERT INTO kennwort_anfrage (benutzer_id, erstellt_am) VALUES (?, NOW())')->execute([$konto]);
+        }
+        foreach (['carla@verein.de', 'carla@privat.de', 'dora@verein.de'] as $mail) {
+            $this->pdo->prepare("INSERT INTO kennwort_versuch (email_hash, ip_hash, zeitpunkt) VALUES (?, ?, NOW())")
+                ->execute([$hash($mail), str_repeat('1', 64)]);
+        }
+
+        $this->dienst->loesche($s['person'], [], $this->admin);
+
+        $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM kennwort_token WHERE benutzer_id = ?', [$s['konto']]));
+        $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM kennwort_anfrage WHERE benutzer_id = ?', [$s['konto']]));
+        $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM kennwort_versuch WHERE email_hash IN (?, ?)', [$hash('carla@verein.de'), $hash('carla@privat.de')]));
+        // Daten anderer Personen bleiben.
+        $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM kennwort_token WHERE benutzer_id = ?', [$andere]));
+        $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM kennwort_anfrage WHERE benutzer_id = ?', [$andere]));
+        $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM kennwort_versuch WHERE email_hash = ?', [$hash('dora@verein.de')]));
+    }
+
     public function test_uebergabe_an_verein_behaelt_fahrzeug(): void
     {
         $s = $this->szenario();
