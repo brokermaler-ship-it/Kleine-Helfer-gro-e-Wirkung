@@ -10,10 +10,10 @@ use Emc\Core\Response;
 use Emc\Core\Session;
 use Emc\Dateien\Bildbearbeitung;
 use Emc\Dateien\UploadService;
+use Emc\Reparatur\ReparaturRepository;
 use Emc\Tests\Integration\Dateien\UploadServiceTest;
 use Emc\Tests\Integration\DbTestCase;
 use Emc\Wartung\AusnahmeRepository;
-use Emc\Reparatur\ReparaturRepository;
 use Emc\Wartung\WartungRepository;
 
 final class WartungHttpTest extends DbTestCase

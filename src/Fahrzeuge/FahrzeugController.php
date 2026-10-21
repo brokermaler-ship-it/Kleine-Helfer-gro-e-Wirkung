@@ -7,20 +7,20 @@ namespace Emc\Fahrzeuge;
 use Emc\Auth\Auth;
 use Emc\Auth\Berechtigung;
 use Emc\Core\HttpFehler;
-use Emc\Dateien\DokumentRepository;
-use Emc\Digital\AdressValidator;
-use Emc\Digital\Adresspruefung;
-use Emc\Digital\DecoderRepository;
-use Emc\Digital\Protokoll;
 use Emc\Core\Request;
 use Emc\Core\Response;
 use Emc\Core\Session;
 use Emc\Core\View;
+use Emc\Dateien\DokumentRepository;
+use Emc\Digital\Adresspruefung;
+use Emc\Digital\AdressValidator;
+use Emc\Digital\DecoderRepository;
+use Emc\Digital\Protokoll;
 use Emc\OneDrive\Uebertragung;
 use Emc\Personen\PersonRepository;
 use Emc\Protokoll\Aenderungsprotokoll;
-use Emc\Stammdaten\SpurweiteRepository;
 use Emc\Reparatur\ReparaturDienst;
+use Emc\Stammdaten\SpurweiteRepository;
 use Emc\Wartung\WartungDienst;
 
 final class FahrzeugController
@@ -91,14 +91,25 @@ final class FahrzeugController
     {
         $fz = $this->ladeBearbeitbar($p);
         if (($fz['status'] === 'ausgemustert') !== $abgestellt) {
-            $this->fahrzeuge->setzeAbgestellt((int) $fz['id'], $abgestellt);
-            $neu = $this->fahrzeuge->finde((int) $fz['id']);
-            if ($neu === null) {
+            $id = (int) $fz['id'];
+            $benutzerId = $this->auth->benutzer()?->id;
+            $arbeit = function () use ($fz, $id, $abgestellt, $benutzerId): bool {
+                $this->fahrzeuge->setzeAbgestellt($id, $abgestellt);
+                $neu = $this->fahrzeuge->finde($id);
+                if ($neu === null) {
+                    return false;
+                }
+                $diff = Aenderungsprotokoll::diff($this->vergleichswerte($fz), $this->vergleichswerte($neu));
+                if ($diff !== []) {
+                    $this->protokoll->schreibe($benutzerId, 'fahrzeug', $id, 'geaendert', $diff);
+                }
+                return true;
+            };
+            // Mit Reparaturen: unter der Sperre des Fahrzeugs und mit automatischem Status – wer ein Fahrzeug mit offener
+            // dringender Reparatur zurückholt, bekommt „defekt“ statt „einsatzbereit“.
+            $ok = $this->reparatur !== null ? $this->reparatur->inTransaktion('fahrzeug', $id, $benutzerId, $arbeit) : $arbeit();
+            if ($ok !== true) {
                 throw new HttpFehler(404); // zwischenzeitlich gelöscht
-            }
-            $diff = Aenderungsprotokoll::diff($this->vergleichswerte($fz), $this->vergleichswerte($neu));
-            if ($diff !== []) {
-                $this->protokoll->schreibe($this->auth->benutzer()?->id, 'fahrzeug', (int) $fz['id'], 'geaendert', $diff);
             }
             $this->session->meldung('erfolg', $meldung);
         }

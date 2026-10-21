@@ -156,6 +156,27 @@ final class AbstellgleisHttpTest extends DbTestCase
         $this->assertSame(1, (int) $this->pdo->query("SELECT COUNT(*) FROM aenderungsprotokoll WHERE objekt_typ = 'fahrzeug' AND aktion = 'geaendert'")->fetchColumn());
     }
 
+    /** Offene dringende Reparatur: wieder in Betrieb heißt „defekt“ (automatisch), nicht „einsatzbereit“. */
+    public function test_zurueckholen_mit_offener_dringender_reparatur_wird_defekt(): void
+    {
+        $fz = $this->fahrzeug('EMC-0001', 'Alte Lok', 'ausgemustert', $this->mitglied, '2026-01-10');
+        $this->pdo->exec("INSERT INTO reparatur (objekt_typ, objekt_id, beschreibung, gemeldet_am, prioritaet) VALUES ('fahrzeug', $fz, 'Motor brummt', NOW(), 'dringend')");
+        $this->als($this->wart);
+        $this->assertSame(303, $this->post("/fahrzeuge/$fz/zurueckholen")->status);
+        $this->assertSame('defekt', $this->feld($fz, 'status'));
+        $this->assertSame(1, (int) $this->feld($fz, 'status_automatisch'));
+        $this->assertNull($this->feld($fz, 'ausgemustert_am'));
+        $eintraege = $this->pdo->query("SELECT aenderungen FROM aenderungsprotokoll WHERE objekt_typ = 'fahrzeug' AND objekt_id = $fz ORDER BY id")->fetchAll(\PDO::FETCH_COLUMN);
+        $this->assertCount(2, $eintraege);
+        $this->assertStringContainsString('"neu":"einsatzbereit"', (string) $eintraege[0]);
+        $this->assertStringContainsString('defekt (automatisch durch Reparatur)', (string) $eintraege[1]);
+
+        // Abstellen bleibt „ausgemustert“ trotz offener dringender Reparatur.
+        $this->assertSame(303, $this->post("/fahrzeuge/$fz/abstellen")->status);
+        $this->assertSame('ausgemustert', $this->feld($fz, 'status'));
+        $this->assertSame(0, (int) $this->feld($fz, 'status_automatisch'));
+    }
+
     public function test_detailseite_zeigt_hinweis_und_knoepfe(): void
     {
         $alt = $this->fahrzeug('EMC-0001', 'Alte Lok', 'ausgemustert', $this->mitglied, '2026-04-01');

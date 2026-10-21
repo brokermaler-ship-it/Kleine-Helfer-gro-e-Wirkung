@@ -326,6 +326,85 @@ final class ReparaturDienstTest extends DbTestCase
         self::assertSame([$alt, $dringend, $neu], $this->rep->idsFuerObjekt('fahrzeug', $fz));
     }
 
+    /**
+     * Zwei Verbindungen: B speichert eine Reparatur über inTransaktion und liest dabei zuerst (wie Task 4), während A
+     * eine dringende Meldung festschreibt. B muss beim automatischen Status die neue Meldung sehen (READ COMMITTED),
+     * sonst stünde das Fahrzeug trotz offener dringender Reparatur auf „einsatzbereit“.
+     */
+    public function test_in_transaktion_sieht_gleichzeitig_festgeschriebene_meldung(): void
+    {
+        $fz = $this->fahrzeug();
+        $r2 = $this->rep->anlegen('fahrzeug', $fz, ['beschreibung' => 'Licht flackert', 'prioritaet' => 'normal'], $this->benutzer);
+        $this->pdo->exec("UPDATE reparatur SET status = 'in_arbeit' WHERE id = $r2");
+        $this->pdo->exec("UPDATE fahrzeug SET status = 'in_wartung', status_automatisch = 1 WHERE id = $fz");
+
+        $a = self::verbindung();
+        $repA = new ReparaturRepository($a);
+        $ergebnis = $this->dienst->inTransaktion('fahrzeug', $fz, $this->benutzer, function (array $objekt) use ($r2, $repA, $fz): string {
+            self::assertSame('in_wartung', $objekt['status']);
+            $r = $this->rep->finde($r2); // erste Lesung in der Transaktion
+            $this->rep->aktualisieren($r2, $this->daten($r, ['status' => 'erledigt', 'was_gemacht' => 'Gelötet']), [], (string) $r['geaendert_am']);
+            // A meldet derweil dringend und schreibt fest (ohne die Sperre auf dem Fahrzeug).
+            $repA->anlegen('fahrzeug', $fz, ['beschreibung' => 'Fährt nicht mehr', 'prioritaet' => 'dringend'], null);
+            return 'fertig';
+        });
+        self::assertSame('fertig', $ergebnis);
+        self::assertFalse($this->pdo->inTransaction());
+        self::assertSame(['defekt', 1], $this->zustand('fahrzeug', $fz));
+    }
+
+    public function test_in_transaktion_sperrt_objekt_vor_der_arbeit(): void
+    {
+        $fz = $this->fahrzeug();
+        $this->dienst->inTransaktion('fahrzeug', $fz, null, function () use ($fz): void {
+            $b = self::verbindung();
+            $b->exec('SET SESSION innodb_lock_wait_timeout = 1');
+            try {
+                $b->query("SELECT id FROM fahrzeug WHERE id = $fz FOR UPDATE");
+                self::fail('Fahrzeug müsste gesperrt sein');
+            } catch (\PDOException $e) {
+                self::assertSame(1205, (int) ($e->errorInfo[1] ?? 0));
+            }
+        });
+    }
+
+    public function test_in_transaktion_ohne_objekt_und_bei_fehler(): void
+    {
+        $lief = false;
+        self::assertNull($this->dienst->inTransaktion('fahrzeug', 999999, null, function () use (&$lief): void {
+            $lief = true;
+        }));
+        self::assertFalse($lief);
+        self::assertFalse($this->pdo->inTransaction());
+
+        $a = $this->anlage();
+        try {
+            $this->dienst->inTransaktion('anlage', $a, null, function () use ($a): void {
+                $this->rep->anlegen('anlage', $a, ['beschreibung' => 'Kaputt', 'prioritaet' => 'dringend'], null);
+                throw new \RuntimeException('Abbruch');
+            });
+            self::fail('RuntimeException erwartet');
+        } catch (\RuntimeException $e) {
+            self::assertSame('Abbruch', $e->getMessage());
+        }
+        self::assertFalse($this->pdo->inTransaction());
+        self::assertSame(0, $this->zahl('SELECT COUNT(*) FROM reparatur'));
+        self::assertSame(['in_ordnung', 0], $this->zustand('anlage', $a));
+
+        // Anlegen + Status in einem Schritt.
+        $id = $this->dienst->inTransaktion('anlage', $a, $this->benutzer, fn(): int => $this->rep->anlegen('anlage', $a, ['beschreibung' => 'Kaputt', 'prioritaet' => 'dringend'], $this->benutzer));
+        self::assertIsInt($id);
+        self::assertSame(['defekt', 1], $this->zustand('anlage', $a));
+    }
+
+    public function test_negative_kosten_lehnt_die_datenbank_ab(): void
+    {
+        $fz = $this->fahrzeug();
+        $id = $this->rep->anlegen('fahrzeug', $fz, ['beschreibung' => 'X'], null);
+        $this->expectException(\PDOException::class);
+        $this->pdo->exec("INSERT INTO ersatzteil (reparatur_id, bezeichnung, kosten) VALUES ($id, 'Minus', -1)");
+    }
+
     public function test_entferne_fuer_objekt(): void
     {
         $fz = $this->fahrzeug();

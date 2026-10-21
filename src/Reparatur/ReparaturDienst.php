@@ -29,17 +29,54 @@ final class ReparaturDienst
     }
 
     /**
+     * Rahmen für alles, was Reparaturen eines Objekts anlegt oder ändert: eigene Transaktion in READ COMMITTED (jede
+     * Lesung sieht den neuesten festgeschriebenen Stand, auch nach früheren Lesungen in der Transaktion), das Objekt
+     * wird ZUERST mit FOR UPDATE gesperrt, dann läuft $arbeit, danach wendeStatusAn, dann Commit. So gilt überall
+     * dieselbe Sperrreihenfolge (Objekt vor Reparaturzeilen), und gleichzeitige Schreiber entscheiden nacheinander.
+     * Bei einem Fehler wird zurückgerollt und weitergeworfen.
+     *
+     * @template T
+     * @param callable(array<string,mixed> $objekt): T $arbeit erhält die gesperrte Zeile des Objekts
+     * @return ?T null, wenn es das Objekt nicht (mehr) gibt ($arbeit läuft dann nicht; Aufrufer: 404)
+     */
+    public function inTransaktion(string $objektTyp, int $objektId, ?int $benutzerId, callable $arbeit): mixed
+    {
+        $tabelle = self::tabelle($objektTyp);
+        if ($this->pdo->inTransaction()) {
+            throw new \LogicException('ReparaturDienst::inTransaktion braucht eine eigene Transaktion.');
+        }
+        $this->pdo->exec('SET TRANSACTION ISOLATION LEVEL READ COMMITTED'); // gilt nur für die nächste Transaktion
+        $this->pdo->beginTransaction();
+        try {
+            $st = $this->pdo->prepare("SELECT * FROM $tabelle WHERE id = ? FOR UPDATE");
+            $st->execute([$objektId]);
+            $objekt = $st->fetch(\PDO::FETCH_ASSOC);
+            if ($objekt === false) {
+                $this->pdo->rollBack();
+                return null;
+            }
+            $ergebnis = $arbeit($objekt);
+            $this->wendeStatusAn($objektTyp, $objektId, $benutzerId);
+            $this->pdo->commit();
+            return $ergebnis;
+        } catch (\Throwable $t) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $t;
+        }
+    }
+
+    /**
      * Wendet den automatischen Status auf das Objekt an (nach Anlegen oder Speichern einer Reparatur). Läuft in der
-     * Transaktion des Aufrufers: das Objekt wird mit FOR UPDATE gelesen, damit gleichzeitige Meldungen am selben Objekt
-     * nacheinander entscheiden. Ändert sich der Status, steht das im Änderungsprotokoll des Objekts.
+     * Transaktion des Aufrufers – dafür inTransaktion() verwenden: nur dort ist das Objekt vor jeder anderen Lesung
+     * gesperrt und die Liste der offenen Reparaturen garantiert aktuell (READ COMMITTED). In einer eigenen Transaktion
+     * mit REPEATABLE READ sähe offeneFuerObjekt nach einer früheren Lesung einen veralteten Schnappschuss.
+     * Ändert sich der Status, steht das im Änderungsprotokoll des Objekts.
      */
     public function wendeStatusAn(string $objektTyp, int $objektId, ?int $benutzerId): void
     {
-        $tabelle = match ($objektTyp) {
-            'fahrzeug' => 'fahrzeug',
-            'anlage' => 'anlage',
-            default => throw new \InvalidArgumentException('Unbekannter Objekttyp: ' . $objektTyp),
-        };
+        $tabelle = self::tabelle($objektTyp);
         $st = $this->pdo->prepare("SELECT status, status_automatisch FROM $tabelle WHERE id = ? FOR UPDATE");
         $st->execute([$objektId]);
         $objekt = $st->fetch(\PDO::FETCH_ASSOC);
@@ -91,5 +128,14 @@ final class ReparaturDienst
             $this->pdo->rollBack();
             throw $t;
         }
+    }
+
+    private static function tabelle(string $objektTyp): string
+    {
+        return match ($objektTyp) {
+            'fahrzeug' => 'fahrzeug',
+            'anlage' => 'anlage',
+            default => throw new \InvalidArgumentException('Unbekannter Objekttyp: ' . $objektTyp),
+        };
     }
 }

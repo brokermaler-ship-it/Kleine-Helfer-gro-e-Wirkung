@@ -99,9 +99,9 @@ final class MeldungController
             return $this->formular($typ, $objekt, $d + ['einstufung' => $d['prioritaet']], $fehler, $hatFotos, 422);
         }
 
-        // Meldung und automatischer Status gemeinsam; Fotos erst danach (eine fehlerhafte Datei verwirft die Meldung nicht).
-        $this->pdo->beginTransaction();
-        try {
+        // Meldung und automatischer Status gemeinsam unter der Sperre des Objekts; Fotos erst danach (eine fehlerhafte
+        // Datei verwirft die Meldung nicht). Inzwischen gelöschtes Objekt: 404 statt einer verwaisten Meldung.
+        $reparaturId = $this->dienst->inTransaktion($typ, $objektId, $benutzerId, function () use ($typ, $objektId, $d, $benutzerId): int {
             $reparaturId = $this->reparaturen->anlegen($typ, $objektId, $d, $benutzerId);
             $this->protokoll->schreibe($benutzerId, 'reparatur', $reparaturId, 'angelegt', Aenderungsprotokoll::diff([], [
                 'beschreibung' => $d['beschreibung'],
@@ -111,12 +111,8 @@ final class MeldungController
             $this->protokoll->schreibe($benutzerId, $typ, $objektId, 'geaendert', [
                 'reparatur' => ['alt' => null, 'neu' => 'Defekt gemeldet: ' . self::kurz($d['beschreibung'])],
             ]);
-            $this->dienst->wendeStatusAn($typ, $objektId, $benutzerId);
-            $this->pdo->commit();
-        } catch (\Throwable $t) {
-            $this->pdo->rollBack();
-            throw $t;
-        }
+            return $reparaturId;
+        }) ?? throw new HttpFehler(404);
 
         $this->speichereFotos($r, $reparaturId, $benutzerId);
         $this->session->meldung('erfolg', 'Danke! Dein Defekt wurde gemeldet.', url('/meine-meldungen'), 'Meine Meldungen');

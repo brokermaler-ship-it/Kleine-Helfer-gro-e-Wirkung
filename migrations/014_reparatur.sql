@@ -44,6 +44,7 @@ CREATE TABLE ersatzteil (
     bestellt TINYINT(1) NOT NULL DEFAULT 0,
     sortierung INT NOT NULL DEFAULT 0,
     INDEX idx_ersatzteil_reparatur (reparatur_id, sortierung),
+    CONSTRAINT chk_ersatzteil_kosten CHECK (kosten IS NULL OR kosten >= 0),
     CONSTRAINT fk_ersatzteil_reparatur FOREIGN KEY (reparatur_id) REFERENCES reparatur (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

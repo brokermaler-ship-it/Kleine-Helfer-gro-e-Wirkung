@@ -39,10 +39,10 @@ use Emc\Fahrzeuge\FahrzeugRepository;
 use Emc\Mail\Mailer;
 use Emc\Mail\SmtpMailer;
 use Emc\Mail\StreamVerbindung;
+use Emc\OneDrive\Auftraege;
 use Emc\OneDrive\CurlHttpClient;
 use Emc\OneDrive\Graph;
 use Emc\OneDrive\HttpClient;
-use Emc\OneDrive\Auftraege;
 use Emc\OneDrive\OAuth;
 use Emc\OneDrive\OneDriveController;
 use Emc\OneDrive\TokenSpeicher;
@@ -53,12 +53,13 @@ use Emc\Personen\DsgvoLoeschung;
 use Emc\Personen\KontoController;
 use Emc\Personen\PersonController;
 use Emc\Personen\PersonRepository;
-use Emc\Stammdaten\SpurweiteController;
-use Emc\Stammdaten\SpurweiteRepository;
-use Emc\Start\StartController;
+use Emc\Protokoll\Aenderungsprotokoll;
 use Emc\Reparatur\MeldungController;
 use Emc\Reparatur\ReparaturDienst;
 use Emc\Reparatur\ReparaturRepository;
+use Emc\Stammdaten\SpurweiteController;
+use Emc\Stammdaten\SpurweiteRepository;
+use Emc\Start\StartController;
 use Emc\Wartung\AusnahmeRepository;
 use Emc\Wartung\UebersichtController;
 use Emc\Wartung\WartungController;
@@ -67,7 +68,6 @@ use Emc\Wartung\WartungRepository;
 use Emc\Wartung\WartungsartController;
 use Emc\Wartung\WartungsartRepository;
 use Emc\Wartung\Wartungsplan;
-use Emc\Protokoll\Aenderungsprotokoll;
 
 final class App
 {
