@@ -75,6 +75,25 @@ final class Auth
         $this->setzeSitzung($benutzerId, (int) ($zeile['kennwort_stand'] ?? 0));
     }
 
+    /**
+     * Nach einer Kennwortänderung in dieser Sitzung: den neuen Kennwort-Stand übernehmen, damit nur die anderen
+     * Sitzungen des Kontos enden. Wirkt nur, wenn diese Sitzung genau dieses Konto angemeldet hat.
+     */
+    public function uebernimmStand(int $benutzerId): void
+    {
+        if ($this->session->hole(self::SESSION_KEY) !== $benutzerId) {
+            return;
+        }
+        $st = $this->pdo->prepare('SELECT * FROM benutzer WHERE id = ?');
+        $st->execute([$benutzerId]);
+        $zeile = $st->fetch(\PDO::FETCH_ASSOC);
+        if ($zeile !== false) {
+            $this->session->setze(self::STAND_KEY, (int) ($zeile['kennwort_stand'] ?? 0));
+            $this->geladen = null;
+            $this->geladenId = null;
+        }
+    }
+
     private function setzeSitzung(int $benutzerId, int $kennwortStand): void
     {
         $this->session->erneuere();

@@ -56,6 +56,8 @@ final class KontoController
         }
 
         $this->benutzer->passwortSetzen($nutzer->id, $neu, false);
+        // Andere Sitzungen des Kontos enden, diese bleibt angemeldet.
+        $this->auth->uebernimmStand($nutzer->id);
         $this->protokoll->schreibe($nutzer->id, 'benutzer', $nutzer->id, 'geaendert', [
             'passwort' => ['alt' => null, 'neu' => 'geändert'],
         ]);

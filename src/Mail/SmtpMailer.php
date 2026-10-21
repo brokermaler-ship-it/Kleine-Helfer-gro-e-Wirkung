@@ -13,6 +13,7 @@ namespace Emc\Mail;
 final class SmtpMailer implements Mailer
 {
     public const STANDARD_PORT = 465;
+    public const STANDARD_PORT_TLS = 587;
     public const STANDARD_NAME = 'EMC 78 Lokschuppen';
 
     public function __construct(
@@ -45,15 +46,16 @@ final class SmtpMailer implements Mailer
         if (!self::konfiguriert($config)) {
             return null;
         }
-        $port = (int) ($config['mail_smtp_port'] ?? self::STANDARD_PORT);
-        $verschluesselung = strtolower(trim((string) ($config['mail_smtp_verschluesselung'] ?? 'ssl')));
+        // Nie unverschlüsselt: alles außer „tls“ gilt als „ssl“.
+        $verschluesselung = strtolower(trim((string) ($config['mail_smtp_verschluesselung'] ?? 'ssl'))) === 'tls' ? 'tls' : 'ssl';
+        // Ohne Port der passende Standard: 587 für STARTTLS, 465 für SSL.
+        $port = (int) ($config['mail_smtp_port'] ?? 0);
         $name = trim((string) ($config['mail_absender_name'] ?? ''));
         return new self(
             $v ?? new StreamVerbindung(),
             trim((string) $config['mail_smtp_host']),
-            $port > 0 ? $port : self::STANDARD_PORT,
-            // Nie unverschlüsselt: alles außer „tls“ gilt als „ssl“.
-            $verschluesselung === 'tls' ? 'tls' : 'ssl',
+            $port > 0 ? $port : ($verschluesselung === 'tls' ? self::STANDARD_PORT_TLS : self::STANDARD_PORT),
+            $verschluesselung,
             (string) ($config['mail_smtp_benutzer'] ?? ''),
             (string) ($config['mail_smtp_passwort'] ?? ''),
             trim((string) $config['mail_absender']),
@@ -119,7 +121,7 @@ final class SmtpMailer implements Mailer
     }
 
     /** @param list<int> $codes */
-    private function befehl(string $zeile, array $codes, string $name): void
+    private function befehl(#[\SensitiveParameter] string $zeile, array $codes, string $name): void
     {
         $this->v->schreibe($zeile);
         $this->erwarte($codes, $name);

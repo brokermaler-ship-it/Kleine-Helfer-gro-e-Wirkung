@@ -194,6 +194,46 @@ final class KennwortHttpTest extends DbTestCase
         $this->assertStringContainsString(e(KennwortVergessen::UNGUELTIG), $nochmal->body);
     }
 
+    /** Ein Startpasswort vom Administrator beendet die Sitzungen des Kontos; die Sitzung des Administrators bleibt. */
+    public function test_admin_startpasswort_beendet_sitzungen(): void
+    {
+        $admin = $this->legeBenutzerAn('admin@verein.de', rolle: 'admin');
+        $max = $this->legeBenutzerAn('max@verein.de');
+        $sitzungMax = [];
+        $this->sitzungAnmelden($sitzungMax, $max);
+        $this->assertSame(200, $this->app($sitzungMax)->handle(new Request('GET', '/fahrzeuge'))->status);
+        $this->sitzungAnmelden($this->sitzung, $admin);
+
+        $this->assertSame(303, $this->post('/admin/benutzer/' . $max . '/passwort', ['passwort' => 'start-kennwort-1'])->status);
+        $a = $this->app($sitzungMax)->handle(new Request('GET', '/fahrzeuge'));
+        $this->assertSame(303, $a->status);
+        $this->assertStringStartsWith('/login', $a->headers['Location']);
+        $this->assertSame(200, $this->get('/fahrzeuge')->status);
+
+        // Setzt der Administrator sein eigenes Konto zurück, bleibt er angemeldet (muss dann das Passwort ändern).
+        $this->assertSame(303, $this->post('/admin/benutzer/' . $admin . '/passwort', ['passwort' => 'start-kennwort-2'])->status);
+        $this->assertSame($admin, $this->sitzung['benutzer_id'] ?? null);
+        $r = $this->get('/fahrzeuge');
+        $this->assertSame(303, $r->status);
+        $this->assertSame('/konto/passwort', $r->headers['Location']);
+    }
+
+    /** Eigene Passwortänderung: die ändernde Sitzung bleibt angemeldet, alle anderen enden. */
+    public function test_eigene_passwortaenderung_beendet_andere_sitzungen(): void
+    {
+        $id = $this->legeBenutzerAn('max@verein.de');
+        $sitzungA = [];
+        $this->sitzungAnmelden($sitzungA, $id);
+        $this->sitzungAnmelden($this->sitzung, $id);
+
+        $r = $this->post('/konto/passwort', ['altes_passwort' => 'geheim-passwort-1', 'neues_passwort' => 'brandneues-passwort', 'wiederholung' => 'brandneues-passwort']);
+        $this->assertSame(303, $r->status);
+        $this->assertSame(200, $this->get('/fahrzeuge')->status);
+        $a = $this->app($sitzungA)->handle(new Request('GET', '/fahrzeuge'));
+        $this->assertSame(303, $a->status);
+        $this->assertStringStartsWith('/login', $a->headers['Location']);
+    }
+
     public function test_ungueltiger_token(): void
     {
         $id = $this->legeBenutzerAn('max@verein.de');

@@ -10,8 +10,8 @@ interface SmtpVerbindung
     /** @param bool $ssl true: verschlüsselt ab dem ersten Byte (ssl://), false: Klartext bis STARTTLS */
     public function oeffne(string $host, int $port, bool $ssl, int $zeitlimit): void;
 
-    /** Schreibt eine Zeile und hängt CRLF an. */
-    public function schreibe(string $zeile): void;
+    /** Schreibt eine Zeile und hängt CRLF an (kann die base64-kodierten Zugangsdaten enthalten). */
+    public function schreibe(#[\SensitiveParameter] string $zeile): void;
 
     /**
      * Liest eine (ggf. mehrzeilige, „250-…“) Antwort.

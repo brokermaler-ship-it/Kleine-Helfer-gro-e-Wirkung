@@ -51,19 +51,10 @@ final class KennwortVergessen
     public function beantrage(string $email, string $ip): ?string
     {
         $email = mb_strtolower(trim($email));
-        $emailHash = self::emailHash($email);
         $ipHash = hash_hmac('sha256', $ip, $this->salz());
 
         $this->pdo->exec('DELETE FROM kennwort_versuch WHERE zeitpunkt < NOW() - INTERVAL ' . self::AUFBEWAHRUNG_STUNDEN . ' HOUR');
         $this->pdo->exec('DELETE FROM kennwort_token WHERE gueltig_bis < NOW() - INTERVAL ' . self::AUFBEWAHRUNG_STUNDEN . ' HOUR');
-
-        if ($this->anzahlVersuche('email_hash', $emailHash) >= self::MAX_JE_EMAIL
-            || $this->anzahlVersuche('ip_hash', $ipHash) >= self::MAX_JE_IP
-        ) {
-            return null; // still nichts tun und nicht zählen
-        }
-        $this->pdo->prepare('INSERT INTO kennwort_versuch (email_hash, ip_hash, zeitpunkt) VALUES (?, ?, NOW())')
-            ->execute([$emailHash, $ipHash]);
 
         $konto = null;
         if ($email !== '' && mb_strlen($email) <= 190) {
@@ -73,39 +64,73 @@ final class KennwortVergessen
             $st->execute([$email]);
             $konto = $st->fetch(\PDO::FETCH_ASSOC) ?: null;
         }
+        // Begrenzung je Konto: die Datenbank vergleicht ohne Groß-/Kleinschreibung und Akzente („máx@…“ trifft
+        // „max@…“), deshalb zählt bei einem Treffer die gespeicherte Adresse, nicht die Schreibweise der Eingabe.
+        $emailHash = self::emailHash($konto !== null ? (string) $konto['email'] : $email);
 
         // Token in beiden Fällen erzeugen, damit bekannte und unbekannte Adressen vergleichbar viel Arbeit machen.
         $token = bin2hex(random_bytes(32));
         $tokenHash = hash('sha256', $token);
-
-        if ($konto === null) {
-            // Gleichartige Abfragen wie bei einem bekannten Konto (Tokens aufräumen, offene Anfrage suchen), ändern nichts.
-            $this->pdo->prepare('DELETE FROM kennwort_token WHERE token_hash = ? AND verwendet_am IS NULL')->execute([$tokenHash]);
-            $this->pdo->prepare('SELECT id FROM kennwort_anfrage WHERE benutzer_id = 0 AND erledigt_am IS NULL LIMIT 1')->execute();
-            // Nur gezählt, ohne Adresse: niemand soll Fremdadressen in die Verwaltung einschleusen können.
-            $this->protokoll->schreibe(null, 'kennwort_anfrage', 0, 'angelegt', ['adresse' => ['alt' => null, 'neu' => 'unbekannt']]);
-            return null;
-        }
-
-        $id = (int) $konto['id'];
-        $this->pdo->prepare('DELETE FROM kennwort_token WHERE benutzer_id = ? AND verwendet_am IS NULL')->execute([$id]);
         $link = $this->linkBasis . '/kennwort/neu?t=' . $token;
-        // Ohne Postfach braucht nur die Testinstanz einen Token (sie zeigt den Link an).
-        if ($this->mailer !== null || $this->testumgebung) {
-            $this->pdo->prepare(
-                'INSERT INTO kennwort_token (benutzer_id, token_hash, gueltig_bis) VALUES (?, ?, NOW() + INTERVAL ' . self::TOKEN_MINUTEN . ' MINUTE)'
-            )->execute([$id, $tokenHash]);
+
+        // Begrenzung, Zählung und Token in einer Transaktion mit gesperrtem Konto: parallele Anfragen laufen
+        // nacheinander, überschreiten die Begrenzung nicht und hinterlassen höchstens einen gültigen Token.
+        $this->pdo->beginTransaction();
+        try {
+            $sperre = $this->pdo->prepare('SELECT id FROM benutzer WHERE id = ? AND aktiv = 1 FOR UPDATE');
+            $sperre->execute([$konto !== null ? (int) $konto['id'] : 0]);
+            if ($sperre->fetchColumn() === false) {
+                $konto = null; // unbekannt oder inzwischen deaktiviert
+            }
+            if ($this->anzahlVersuche('email_hash', $emailHash) >= self::MAX_JE_EMAIL
+                || $this->anzahlVersuche('ip_hash', $ipHash) >= self::MAX_JE_IP
+            ) {
+                $this->pdo->commit();
+                return null; // still nichts tun und nicht zählen
+            }
+            $this->pdo->prepare('INSERT INTO kennwort_versuch (email_hash, ip_hash, zeitpunkt) VALUES (?, ?, NOW())')
+                ->execute([$emailHash, $ipHash]);
+
+            if ($konto === null) {
+                // Gleichartige Abfragen wie bei einem bekannten Konto (Tokens aufräumen, offene Anfrage suchen), ändern nichts.
+                $this->pdo->prepare('DELETE FROM kennwort_token WHERE token_hash = ? AND verwendet_am IS NULL')->execute([$tokenHash]);
+                $this->pdo->prepare('SELECT id FROM kennwort_anfrage WHERE benutzer_id = 0 AND erledigt_am IS NULL LIMIT 1')->execute();
+                // Nur gezählt, ohne Adresse: niemand soll Fremdadressen in die Verwaltung einschleusen können.
+                $this->protokoll->schreibe(null, 'kennwort_anfrage', 0, 'angelegt', ['adresse' => ['alt' => null, 'neu' => 'unbekannt']]);
+                $this->pdo->commit();
+                return null;
+            }
+
+            $id = (int) $konto['id'];
+            $this->pdo->prepare('DELETE FROM kennwort_token WHERE benutzer_id = ? AND verwendet_am IS NULL')->execute([$id]);
+            // Ohne Postfach braucht nur die Testinstanz einen Token (sie zeigt den Link an).
+            if ($this->mailer !== null || $this->testumgebung) {
+                $this->pdo->prepare(
+                    'INSERT INTO kennwort_token (benutzer_id, token_hash, gueltig_bis) VALUES (?, ?, NOW() + INTERVAL ' . self::TOKEN_MINUTEN . ' MINUTE)'
+                )->execute([$id, $tokenHash]);
+            }
+            $this->pdo->commit();
+        } catch (\Throwable $t) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $t;
         }
 
+        // Versand erst nach dem Commit (die Sperre hält nicht während der SMTP-Verbindung).
         if ($this->mailer !== null) {
+            $gesendet = false;
             try {
                 $this->mailer->sende($this->nachricht($konto, $link));
-                $this->protokoll->schreibe(null, 'benutzer', $id, 'geaendert', ['passwort' => ['alt' => null, 'neu' => 'Link „Kennwort vergessen“ per E-Mail verschickt']]);
-                return null;
+                $gesendet = true;
             } catch (\Throwable $t) {
                 // Rückfall auf die Admin-Anfrage. Nie Adresse, Token oder Zugangsdaten ins Fehlerprotokoll.
                 $this->pdo->prepare('DELETE FROM kennwort_token WHERE token_hash = ?')->execute([$tokenHash]);
                 error_log('Kennwort vergessen: E-Mail-Versand gescheitert (' . $t::class . ': ' . ($t instanceof \Emc\Mail\MailFehler ? $t->getMessage() : 'unerwarteter Fehler') . '), Anfrage an die Administratoren angelegt.');
+            }
+            if ($gesendet) {
+                $this->protokoll->schreibe(null, 'benutzer', $id, 'geaendert', ['passwort' => ['alt' => null, 'neu' => 'Link „Kennwort vergessen“ per E-Mail verschickt']]);
+                return null;
             }
         }
 
@@ -142,8 +167,8 @@ final class KennwortVergessen
             $id = (int) $zeile['benutzer_id'];
             $this->pdo->prepare('UPDATE kennwort_token SET verwendet_am = NOW() WHERE id = ?')->execute([(int) $zeile['id']]);
             $this->pdo->prepare('DELETE FROM kennwort_token WHERE benutzer_id = ? AND id <> ?')->execute([$id, (int) $zeile['id']]);
+            // Erhöht auch kennwort_stand und beendet damit alle anderen Sitzungen.
             (new BenutzerRepository($this->pdo))->passwortSetzen($id, $kennwort, false);
-            $this->pdo->prepare('UPDATE benutzer SET kennwort_stand = kennwort_stand + 1 WHERE id = ?')->execute([$id]);
             $this->pdo->prepare('UPDATE kennwort_anfrage SET erledigt_am = NOW() WHERE benutzer_id = ? AND erledigt_am IS NULL')->execute([$id]);
             $this->protokoll->schreibe($id, 'benutzer', $id, 'geaendert', [
                 'passwort' => ['alt' => null, 'neu' => 'über „Kennwort vergessen“ neu gesetzt'],
@@ -158,13 +183,13 @@ final class KennwortVergessen
         }
     }
 
-    /** @return list<array{id:int, benutzer_id:int, email:string, name:string, erstellt_am:string}> älteste zuerst */
+    /** @return list<array{id:int, benutzer_id:int, email:string, name:string, erstellt_am:string}> nur aktive Konten, älteste zuerst */
     public function offeneAnfragen(): array
     {
         $zeilen = $this->pdo->query(
             'SELECT a.id, a.benutzer_id, b.email, p.vorname, p.nachname, a.erstellt_am FROM kennwort_anfrage a '
             . 'JOIN benutzer b ON b.id = a.benutzer_id JOIN person p ON p.id = b.person_id '
-            . 'WHERE a.erledigt_am IS NULL ORDER BY a.erstellt_am, a.id'
+            . 'WHERE a.erledigt_am IS NULL AND b.aktiv = 1 ORDER BY a.erstellt_am, a.id'
         )->fetchAll(\PDO::FETCH_ASSOC);
         return array_map(fn(array $z): array => [
             'id' => (int) $z['id'],
@@ -177,7 +202,10 @@ final class KennwortVergessen
 
     public function anzahlOffen(): int
     {
-        return (int) $this->pdo->query('SELECT COUNT(*) FROM kennwort_anfrage WHERE erledigt_am IS NULL')->fetchColumn();
+        // Nur aktive Konten: ein inzwischen deaktiviertes Konto braucht kein neues Kennwort.
+        return (int) $this->pdo->query(
+            'SELECT COUNT(*) FROM kennwort_anfrage a JOIN benutzer b ON b.id = a.benutzer_id WHERE a.erledigt_am IS NULL AND b.aktiv = 1'
+        )->fetchColumn();
     }
 
     /** Ein Administrator hat ein Startkennwort gesetzt: offene Anfragen des Kontos sind erledigt. */
@@ -225,13 +253,24 @@ final class KennwortVergessen
     /** Je Konto höchstens eine offene Anfrage; eine weitere aktualisiert nur den Zeitpunkt. */
     private function legeAnfrageAn(int $benutzerId): void
     {
-        $st = $this->pdo->prepare('SELECT id FROM kennwort_anfrage WHERE benutzer_id = ? AND erledigt_am IS NULL ORDER BY id LIMIT 1');
-        $st->execute([$benutzerId]);
-        $offen = $st->fetchColumn();
-        if ($offen !== false) {
-            $this->pdo->prepare('UPDATE kennwort_anfrage SET erstellt_am = NOW() WHERE id = ?')->execute([(int) $offen]);
-        } else {
-            $this->pdo->prepare('INSERT INTO kennwort_anfrage (benutzer_id, erstellt_am) VALUES (?, NOW())')->execute([$benutzerId]);
+        // Konto gesperrt, damit zwei gleichzeitige Rückfälle keine zweite offene Anfrage anlegen.
+        $this->pdo->beginTransaction();
+        try {
+            $this->pdo->prepare('SELECT id FROM benutzer WHERE id = ? FOR UPDATE')->execute([$benutzerId]);
+            $st = $this->pdo->prepare('SELECT id FROM kennwort_anfrage WHERE benutzer_id = ? AND erledigt_am IS NULL ORDER BY id LIMIT 1');
+            $st->execute([$benutzerId]);
+            $offen = $st->fetchColumn();
+            if ($offen !== false) {
+                $this->pdo->prepare('UPDATE kennwort_anfrage SET erstellt_am = NOW() WHERE id = ?')->execute([(int) $offen]);
+            } else {
+                $this->pdo->prepare('INSERT INTO kennwort_anfrage (benutzer_id, erstellt_am) VALUES (?, NOW())')->execute([$benutzerId]);
+            }
+            $this->pdo->commit();
+        } catch (\Throwable $t) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $t;
         }
     }
 

@@ -4,11 +4,21 @@ declare(strict_types=1);
 
 namespace Emc\Mail;
 
-/** SMTP-Verbindung über stream_socket_client; Zertifikat und Hostname werden immer geprüft, mindestens TLS 1.2. */
+/**
+ * SMTP-Verbindung über stream_socket_client; Zertifikat und Hostname werden immer geprüft, mindestens TLS 1.2.
+ * Neben dem Zeitlimit je Schritt gilt eine Gesamtfrist ab dem Öffnen, damit ein langsamer Server eine Anfrage
+ * nicht über viele Schritte hinweg aufhält.
+ */
 final class StreamVerbindung implements SmtpVerbindung
 {
     /** @var resource|null */
     private $strom = null;
+    private float $frist = 0.0;
+    private int $zeitlimit = 15;
+
+    public function __construct(private int $gesamtSekunden = 30)
+    {
+    }
 
     private static function methoden(): int
     {
@@ -17,6 +27,8 @@ final class StreamVerbindung implements SmtpVerbindung
 
     public function oeffne(string $host, int $port, bool $ssl, int $zeitlimit): void
     {
+        $this->frist = microtime(true) + max(1, $this->gesamtSekunden);
+        $this->zeitlimit = max(1, $zeitlimit);
         $kontext = stream_context_create(['ssl' => [
             'verify_peer' => true,
             'verify_peer_name' => true,
@@ -31,24 +43,24 @@ final class StreamVerbindung implements SmtpVerbindung
             ($ssl ? 'ssl://' : 'tcp://') . $host . ':' . $port,
             $fehlerNr,
             $fehlerText,
-            $zeitlimit,
+            min((float) $this->zeitlimit, $this->rest()),
             STREAM_CLIENT_CONNECT,
             $kontext
         );
         if ($strom === false) {
             throw new MailFehler('SMTP: keine Verbindung zum Server (' . $fehlerNr . ')');
         }
-        stream_set_timeout($strom, $zeitlimit);
         $this->strom = $strom;
     }
 
-    public function schreibe(string $zeile): void
+    public function schreibe(#[\SensitiveParameter] string $zeile): void
     {
         if (preg_match('/[\r\n\0]/', $zeile) === 1) {
             throw new MailFehler('SMTP: ungültige Zeile');
         }
         $daten = $zeile . "\r\n";
         while ($daten !== '') {
+            $this->stelleZeitlimit();
             $n = @fwrite($this->strom(), $daten);
             if ($n === false || $n === 0) {
                 throw new MailFehler('SMTP: Schreiben fehlgeschlagen');
@@ -63,6 +75,7 @@ final class StreamVerbindung implements SmtpVerbindung
         $code = 0;
         // Höchstens 100 Zeilen, damit ein fehlerhafter Server nicht endlos liefert.
         for ($i = 0; $i < 100; $i++) {
+            $this->stelleZeitlimit();
             $zeile = fgets($this->strom(), 2048);
             if ($zeile === false) {
                 $meta = stream_get_meta_data($this->strom());
@@ -83,6 +96,7 @@ final class StreamVerbindung implements SmtpVerbindung
 
     public function starteTls(): void
     {
+        $this->stelleZeitlimit();
         $ok = @stream_socket_enable_crypto($this->strom(), true, self::methoden());
         if ($ok !== true) {
             throw new MailFehler('SMTP: TLS konnte nicht gestartet werden');
@@ -95,6 +109,23 @@ final class StreamVerbindung implements SmtpVerbindung
             @fclose($this->strom);
             $this->strom = null;
         }
+    }
+
+    /** Verbleibende Sekunden der Gesamtfrist. */
+    private function rest(): float
+    {
+        return $this->frist - microtime(true);
+    }
+
+    /** Zeitlimit des nächsten Schritts: höchstens das Limit je Schritt und nie über die Gesamtfrist hinaus. */
+    private function stelleZeitlimit(): void
+    {
+        $rest = min((float) $this->zeitlimit, $this->rest());
+        if ($rest <= 0) {
+            throw new MailFehler('SMTP: Gesamtzeit überschritten');
+        }
+        $sekunden = (int) floor($rest);
+        stream_set_timeout($this->strom(), $sekunden, (int) (($rest - $sekunden) * 1e6));
     }
 
     /** @return resource */

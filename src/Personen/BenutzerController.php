@@ -151,6 +151,8 @@ final class BenutzerController
         } catch (DomainFehler $e) {
             return $this->formularBearbeiten($b, ['passwort' => $e->getMessage()], $b['rolle'], (int) $b['aktiv'], 422);
         }
+        // Alle Sitzungen des Kontos enden; setzt ein Administrator sein eigenes Konto zurück, bleibt seine bestehen.
+        $this->auth->uebernimmStand((int) $b['id']);
         $this->protokoll->schreibe($this->auth->benutzer()?->id, 'benutzer', (int) $b['id'], 'geaendert', [
             'passwort' => ['alt' => null, 'neu' => 'zurückgesetzt'],
         ]);

@@ -77,13 +77,17 @@ final class BenutzerRepository
         });
     }
 
-    public function passwortSetzen(int $id, string $passwort, bool $mussAendern): void
+    /**
+     * Setzt ein neues Passwort und erhöht kennwort_stand: alle bestehenden Sitzungen des Kontos enden
+     * (die eigene Sitzung übernimmt den neuen Stand mit Auth::uebernimmStand).
+     */
+    public function passwortSetzen(int $id, #[\SensitiveParameter] string $passwort, bool $mussAendern): void
     {
         $meldung = self::pruefePasswort($passwort);
         if ($meldung !== null) {
             throw new DomainFehler($meldung);
         }
-        $this->pdo->prepare('UPDATE benutzer SET passwort_hash = ?, muss_passwort_aendern = ? WHERE id = ?')
+        $this->pdo->prepare('UPDATE benutzer SET passwort_hash = ?, muss_passwort_aendern = ?, kennwort_stand = kennwort_stand + 1 WHERE id = ?')
             ->execute([password_hash($passwort, PASSWORD_DEFAULT), $mussAendern ? 1 : 0, $id]);
     }
 

@@ -210,6 +210,28 @@ final class SmtpMailerTest extends TestCase
         $this->assertSame(1, $v->tlsGestartet);
     }
 
+    public function test_standardport_passend_zur_verschluesselung(): void
+    {
+        $basis = ['mail_smtp_host' => 'mail.example.org', 'mail_absender' => 'verein@example.org', 'oeffentliche_url' => 'https://verein.example'];
+        foreach ([['tls', null, 587], ['tls', 0, 587], ['tls', '', 587], ['ssl', null, 465], ['ssl', 0, 465], ['tls', 2525, 2525], ['ssl', '465', 465]] as [$art, $port, $erwartet]) {
+            $v = FakeSmtpVerbindung::erfolgreich(tls: $art === 'tls', anmeldung: false);
+            $c = $basis + ['mail_smtp_verschluesselung' => $art];
+            if ($port !== null) {
+                $c['mail_smtp_port'] = $port;
+            }
+            SmtpMailer::ausConfig($c, $v)->sende($this->nachricht());
+            $this->assertSame($erwartet, $v->geoeffnet[0]['port'], $art . ' ' . var_export($port, true));
+        }
+    }
+
+    public function test_kennwort_als_sensibler_parameter(): void
+    {
+        foreach ([[SmtpMailer::class, 'befehl'], [\Emc\Mail\SmtpVerbindung::class, 'schreibe'], [\Emc\Mail\StreamVerbindung::class, 'schreibe']] as [$klasse, $methode]) {
+            $p = (new \ReflectionMethod($klasse, $methode))->getParameters()[0];
+            $this->assertNotEmpty($p->getAttributes(\SensitiveParameter::class), $klasse . '::' . $methode);
+        }
+    }
+
     public function test_unbekannte_verschluesselung_wird_ssl(): void
     {
         $v = FakeSmtpVerbindung::erfolgreich(anmeldung: false);

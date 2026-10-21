@@ -19,6 +19,9 @@ return [
     // Nur für die Testinstanz (test.emc78.de): zeigt eine gelbe Leiste, die Testzugänge auf der Anmeldeseite
     // und unter Verwaltung → Testdaten das Laden von Beispieldaten. Nur genau true schaltet sie ein.
     // Im Echtbetrieb immer false.
+    // Achtung: Ohne E-Mail-Postfach zeigt die Testinstanz bei „Kennwort vergessen?“ den Link zum Zurücksetzen direkt an –
+    // wer eine Adresse kennt (auch die eines Admins), kann dort sofort das Kennwort setzen. Eine Testinstanz daher nie mit
+    // echten Mitgliederdaten oder echten E-Mail-Adressen betreiben.
     'testumgebung' => false,
     // Nur Testinstanz: Passwort für admin@test.emc78.de beim Laden der Beispieldaten (mindestens 10 Zeichen).
     // Wird nirgends angezeigt; nur an Administratoren weitergeben. Ohne diesen Wert werden keine Beispieldaten geladen.
@@ -59,11 +62,12 @@ return [
     // automatisch die Anfrage an die Administratoren angelegt.
     // SMTP-Server des Postfachs, z. B. 'smtp.example.org' (nur der Hostname, ohne ssl:// und ohne Port).
     'mail_smtp_host' => '',
-    // Port: 465 für ssl (Standard), 587 für tls.
-    'mail_smtp_port' => 465,
     // 'ssl' (verschlüsselt ab Verbindungsbeginn, Standard) oder 'tls' (STARTTLS). Unverschlüsselt wird nie gesendet;
     // das Zertifikat des Servers wird immer geprüft.
     'mail_smtp_verschluesselung' => 'ssl',
+    // Port passend zur Verschlüsselung: ssl → 465, tls → 587. 0 (Standard) wählt ihn automatisch.
+    // Wer auf 'tls' umstellt und hier 465 einträgt, bekommt keine Verbindung (465 erwartet ssl).
+    'mail_smtp_port' => 0,
     // Anmeldung am SMTP-Server (meist die vollständige E-Mail-Adresse); leer = ohne Anmeldung.
     'mail_smtp_benutzer' => '',
     // Kennwort des Postfachs. Nur hier ablegen, niemals in der Datenbank oder weitergeben.

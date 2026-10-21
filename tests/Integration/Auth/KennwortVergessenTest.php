@@ -234,6 +234,55 @@ final class KennwortVergessenTest extends DbTestCase
         $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM kennwort_versuch'));
     }
 
+    /** Die Datenbank vergleicht Adressen ohne Groß-/Kleinschreibung und Akzente: die Begrenzung zählt je Konto. */
+    public function test_begrenzung_gilt_fuer_schreibvarianten(): void
+    {
+        $this->legeBenutzerAn('max@verein.de');
+        foreach (['max@verein.de', 'MAX@Verein.DE', 'máx@verein.de ', 'Mäx@verein.de', 'mâx@VEREIN.de'] as $i => $variante) {
+            $this->dienst()->beantrage($variante, '198.51.100.' . $i);
+        }
+        $this->assertCount(KennwortVergessen::MAX_JE_EMAIL, $this->mailer->gesendet);
+        $this->assertSame(3, $this->zaehle('SELECT COUNT(*) FROM kennwort_versuch WHERE email_hash = ?', [hash('sha256', 'max@verein.de')]));
+        $this->assertSame(3, $this->zaehle('SELECT COUNT(*) FROM kennwort_versuch'));
+        // Der zuletzt verschickte Link bleibt gültig.
+        $this->assertNotNull($this->dienst()->pruefeToken((string) $this->mailer->letzterToken()));
+    }
+
+    /** beantrage sperrt das Konto: parallele Anfragen laufen nacheinander und hinterlassen nur einen gültigen Token. */
+    public function test_beantrage_sperrt_das_konto(): void
+    {
+        $id = $this->legeBenutzerAn('max@verein.de');
+        $this->pdo->exec('SET SESSION innodb_lock_wait_timeout = 1');
+        $andere = self::verbindung();
+        $andere->beginTransaction();
+        $andere->query("SELECT id FROM benutzer WHERE id = $id FOR UPDATE")->fetchAll();
+        try {
+            $this->dienst()->beantrage('max@verein.de', self::IP);
+            $this->fail('Sperrwartezeit erwartet');
+        } catch (\PDOException) {
+            $this->assertFalse($this->pdo->inTransaction());
+        } finally {
+            $andere->rollBack();
+        }
+        $this->assertSame([], $this->mailer->gesendet);
+        $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM kennwort_token'));
+        // Alles in einer Transaktion: auch der Versuch ist nicht gezählt.
+        $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM kennwort_versuch'));
+        $this->dienst()->beantrage('max@verein.de', self::IP);
+        $this->dienst()->beantrage('max@verein.de', self::IP);
+        $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM kennwort_token WHERE verwendet_am IS NULL'));
+    }
+
+    public function test_anfragen_deaktivierter_konten_nicht_offen(): void
+    {
+        $id = $this->legeBenutzerAn('max@verein.de');
+        $this->dienst(ohneMailer: true)->beantrage('max@verein.de', self::IP);
+        $this->assertSame(1, $this->dienst()->anzahlOffen());
+        $this->pdo->exec("UPDATE benutzer SET aktiv = 0 WHERE id = $id");
+        $this->assertSame(0, $this->dienst()->anzahlOffen());
+        $this->assertSame([], $this->dienst()->offeneAnfragen());
+    }
+
     public function test_versand_scheitert_faellt_auf_anfrage_zurueck(): void
     {
         $id = $this->legeBenutzerAn('max@verein.de');

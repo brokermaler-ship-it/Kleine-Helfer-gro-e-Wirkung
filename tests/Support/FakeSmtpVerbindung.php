@@ -44,7 +44,7 @@ final class FakeSmtpVerbindung implements SmtpVerbindung
         $this->geoeffnet[] = ['host' => $host, 'port' => $port, 'ssl' => $ssl, 'zeitlimit' => $zeitlimit];
     }
 
-    public function schreibe(string $zeile): void
+    public function schreibe(#[\SensitiveParameter] string $zeile): void
     {
         $this->zeilen[] = $zeile;
     }
