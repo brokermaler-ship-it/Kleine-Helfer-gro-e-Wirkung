@@ -257,9 +257,8 @@ final class KennwortVergessenTest extends DbTestCase
         $andere->beginTransaction();
         $andere->query("SELECT id FROM benutzer WHERE id = $id FOR UPDATE")->fetchAll();
         try {
-            $this->dienst()->beantrage('max@verein.de', self::IP);
-            $this->fail('Sperrwartezeit erwartet');
-        } catch (\PDOException) {
+            // Sperrwartezeit (1205) endet still mit der neutralen Antwort, nie mit einem Fehler 500.
+            $this->assertNull($this->dienst()->beantrage('max@verein.de', self::IP));
             $this->assertFalse($this->pdo->inTransaction());
         } finally {
             $andere->rollBack();
@@ -271,6 +270,87 @@ final class KennwortVergessenTest extends DbTestCase
         $this->dienst()->beantrage('max@verein.de', self::IP);
         $this->dienst()->beantrage('max@verein.de', self::IP);
         $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM kennwort_token WHERE verwendet_am IS NULL'));
+    }
+
+    /** PDO, das bei der ersten Anweisung mit $muster einen Fehler mit den angegebenen errorInfo-Werten wirft. */
+    private function stoerPdo(string $muster, array $errorInfo, int $wie_oft = 1): \PDO
+    {
+        $pdo = new class (
+            getenv('TEST_DB_DSN') ?: 'mysql:host=127.0.0.1;dbname=emc_test;charset=utf8mb4',
+            getenv('TEST_DB_BENUTZER') ?: 'root',
+            getenv('TEST_DB_PASSWORT') !== false ? (string) getenv('TEST_DB_PASSWORT') : ''
+        ) extends \PDO {
+            public string $muster = '';
+            public array $info = [];
+            public int $rest = 0;
+
+            public function prepare(string $query, array $options = []): \PDOStatement|false
+            {
+                if ($this->rest > 0 && str_contains($query, $this->muster)) {
+                    $this->rest--;
+                    $e = new \PDOException('SQLSTATE[' . $this->info[0] . ']: ' . $this->info[2]);
+                    $e->errorInfo = $this->info;
+                    throw $e;
+                }
+                return parent::prepare($query, $options);
+            }
+        };
+        $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+        $pdo->setAttribute(\PDO::ATTR_DEFAULT_FETCH_MODE, \PDO::FETCH_ASSOC);
+        $pdo->setAttribute(\PDO::ATTR_EMULATE_PREPARES, false);
+        $pdo->muster = $muster;
+        $pdo->info = $errorInfo;
+        $pdo->rest = $wie_oft;
+        return $pdo;
+    }
+
+    private function dienstMit(\PDO $pdo, ?Mailer $mailer): KennwortVergessen
+    {
+        return new KennwortVergessen($pdo, new Einstellungen($pdo), new Aenderungsprotokoll($pdo), $mailer, 'https://verein.example/emc', false, 'EMC 78 Lokschuppen');
+    }
+
+    /** Deadlock (40001/1213) beim Anlegen des Tokens: gleiche neutrale Antwort, nichts gespeichert, keine Mail. */
+    public function test_deadlock_endet_still(): void
+    {
+        $this->legeBenutzerAn('max@verein.de');
+        $pdo = $this->stoerPdo('INSERT INTO kennwort_token', ['40001', 1213, 'Deadlock found when trying to get lock']);
+        $this->assertNull($this->dienstMit($pdo, $this->mailer)->beantrage('max@verein.de', self::IP));
+        $this->assertFalse($pdo->inTransaction());
+        $this->assertSame([], $this->mailer->gesendet);
+        $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM kennwort_token'));
+        $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM kennwort_versuch'));
+        // Danach funktioniert alles normal.
+        $this->dienst()->beantrage('max@verein.de', self::IP);
+        $this->assertCount(1, $this->mailer->gesendet);
+    }
+
+    /** Sperrkonflikt beim Anlegen der Admin-Anfrage: ein zweiter Versuch, sonst still die neutrale Antwort. */
+    public function test_sperrkonflikt_bei_anfrage(): void
+    {
+        $this->legeBenutzerAn('max@verein.de');
+        $einmal = $this->stoerPdo('INSERT INTO kennwort_anfrage', ['40001', 1213, 'Deadlock found when trying to get lock']);
+        $this->assertNull($this->dienstMit($einmal, null)->beantrage('max@verein.de', self::IP));
+        $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM kennwort_anfrage'));
+
+        $this->pdo->exec('DELETE FROM kennwort_anfrage');
+        $zweimal = $this->stoerPdo('INSERT INTO kennwort_anfrage', ['HY000', 1205, 'Lock wait timeout exceeded'], 2);
+        $this->assertNull($this->dienstMit($zweimal, null)->beantrage('max@verein.de', self::IP));
+        $this->assertFalse($zweimal->inTransaction());
+        $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM kennwort_anfrage'));
+    }
+
+    /** Andere Datenbankfehler werden nicht verschluckt. */
+    public function test_anderer_datenbankfehler_wird_weitergereicht(): void
+    {
+        $this->legeBenutzerAn('max@verein.de');
+        $pdo = $this->stoerPdo('INSERT INTO kennwort_token', ['42S02', 1146, "Table 'kennwort_token' doesn't exist"]);
+        try {
+            $this->dienstMit($pdo, $this->mailer)->beantrage('max@verein.de', self::IP);
+            $this->fail('PDOException erwartet');
+        } catch (\PDOException $e) {
+            $this->assertSame('42S02', $e->errorInfo[0]);
+        }
+        $this->assertFalse($pdo->inTransaction());
     }
 
     public function test_anfragen_deaktivierter_konten_nicht_offen(): void

@@ -75,7 +75,9 @@ final class KennwortVergessen
 
         // Begrenzung, Zählung und Token in einer Transaktion mit gesperrtem Konto: parallele Anfragen laufen
         // nacheinander, überschreiten die Begrenzung nicht und hinterlassen höchstens einen gültigen Token.
-        $this->pdo->beginTransaction();
+        // READ COMMITTED: keine Lückensperren bei DELETE ohne Treffer + INSERT, sonst geraten parallele Anfragen
+        // verschiedener Konten in einen Deadlock. Die Sperre der Kontozeile serialisiert je Konto weiterhin.
+        $this->beginneTransaktion();
         try {
             $sperre = $this->pdo->prepare('SELECT id FROM benutzer WHERE id = ? AND aktiv = 1 FOR UPDATE');
             $sperre->execute([$konto !== null ? (int) $konto['id'] : 0]);
@@ -114,6 +116,11 @@ final class KennwortVergessen
             if ($this->pdo->inTransaction()) {
                 $this->pdo->rollBack();
             }
+            if ($t instanceof \PDOException && self::istSperrkonflikt($t)) {
+                // Deadlock oder Sperrwartezeit: nichts gespeichert, dieselbe neutrale Antwort wie immer (kein Fehler 500).
+                error_log('Kennwort vergessen: Sperrkonflikt, Anfrage verworfen.');
+                return null;
+            }
             throw $t;
         }
 
@@ -134,7 +141,9 @@ final class KennwortVergessen
             }
         }
 
-        $this->legeAnfrageAn($id);
+        if (!$this->legeAnfrageAn($id)) {
+            return null;
+        }
         $this->protokoll->schreibe(null, 'benutzer', $id, 'geaendert', ['passwort' => ['alt' => null, 'neu' => 'neues Kennwort bei den Administratoren angefragt']]);
         return $this->mailer === null && $this->testumgebung ? $link : null;
     }
@@ -154,10 +163,15 @@ final class KennwortVergessen
      */
     public function setzeNeu(string $token, #[\SensitiveParameter] string $kennwort): int
     {
-        $this->pdo->beginTransaction();
+        $this->beginneTransaktion();
         try {
-            $zeile = $this->tokenZeile($token, true);
-            if ($zeile === null) {
+            // Gleiche Sperrreihenfolge wie beantrage: Konto zuerst (benutzer_id ungesperrt gelesen), dann der Token.
+            $konto = $this->tokenZeile($token, false);
+            if ($konto !== null) {
+                $this->pdo->prepare('SELECT id FROM benutzer WHERE id = ? FOR UPDATE')->execute([(int) $konto['benutzer_id']]);
+            }
+            $zeile = $konto === null ? null : $this->tokenZeile($token, true);
+            if ($zeile === null || (int) $zeile['benutzer_id'] !== (int) $konto['benutzer_id']) {
                 throw new DomainFehler(self::UNGUELTIG);
             }
             $regel = BenutzerRepository::pruefePasswort($kennwort);
@@ -250,28 +264,56 @@ final class KennwortVergessen
         return (int) $st->fetchColumn();
     }
 
-    /** Je Konto höchstens eine offene Anfrage; eine weitere aktualisiert nur den Zeitpunkt. */
-    private function legeAnfrageAn(int $benutzerId): void
+    /**
+     * Je Konto höchstens eine offene Anfrage; eine weitere aktualisiert nur den Zeitpunkt. Bei einem Sperrkonflikt
+     * ein zweiter Versuch; scheitert auch der, false (der Aufrufer antwortet trotzdem neutral).
+     */
+    private function legeAnfrageAn(int $benutzerId): bool
     {
-        // Konto gesperrt, damit zwei gleichzeitige Rückfälle keine zweite offene Anfrage anlegen.
-        $this->pdo->beginTransaction();
-        try {
-            $this->pdo->prepare('SELECT id FROM benutzer WHERE id = ? FOR UPDATE')->execute([$benutzerId]);
-            $st = $this->pdo->prepare('SELECT id FROM kennwort_anfrage WHERE benutzer_id = ? AND erledigt_am IS NULL ORDER BY id LIMIT 1');
-            $st->execute([$benutzerId]);
-            $offen = $st->fetchColumn();
-            if ($offen !== false) {
-                $this->pdo->prepare('UPDATE kennwort_anfrage SET erstellt_am = NOW() WHERE id = ?')->execute([(int) $offen]);
-            } else {
-                $this->pdo->prepare('INSERT INTO kennwort_anfrage (benutzer_id, erstellt_am) VALUES (?, NOW())')->execute([$benutzerId]);
+        for ($versuch = 1; ; $versuch++) {
+            // Konto gesperrt, damit zwei gleichzeitige Rückfälle keine zweite offene Anfrage anlegen.
+            $this->beginneTransaktion();
+            try {
+                $this->pdo->prepare('SELECT id FROM benutzer WHERE id = ? FOR UPDATE')->execute([$benutzerId]);
+                $st = $this->pdo->prepare('SELECT id FROM kennwort_anfrage WHERE benutzer_id = ? AND erledigt_am IS NULL ORDER BY id LIMIT 1');
+                $st->execute([$benutzerId]);
+                $offen = $st->fetchColumn();
+                if ($offen !== false) {
+                    $this->pdo->prepare('UPDATE kennwort_anfrage SET erstellt_am = NOW() WHERE id = ?')->execute([(int) $offen]);
+                } else {
+                    $this->pdo->prepare('INSERT INTO kennwort_anfrage (benutzer_id, erstellt_am) VALUES (?, NOW())')->execute([$benutzerId]);
+                }
+                $this->pdo->commit();
+                return true;
+            } catch (\Throwable $t) {
+                if ($this->pdo->inTransaction()) {
+                    $this->pdo->rollBack();
+                }
+                if (!($t instanceof \PDOException) || !self::istSperrkonflikt($t)) {
+                    throw $t;
+                }
+                if ($versuch >= 2) {
+                    error_log('Kennwort vergessen: Sperrkonflikt, Anfrage an die Administratoren nicht angelegt.');
+                    return false;
+                }
             }
-            $this->pdo->commit();
-        } catch (\Throwable $t) {
-            if ($this->pdo->inTransaction()) {
-                $this->pdo->rollBack();
-            }
-            throw $t;
         }
+    }
+
+    /** Nächste Transaktion in READ COMMITTED (ohne Lückensperren); gilt nur für genau diese Transaktion. */
+    private function beginneTransaktion(): void
+    {
+        $this->pdo->exec('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
+        $this->pdo->beginTransaction();
+    }
+
+    /** Deadlock (SQLSTATE 40001 bzw. MySQL 1213) oder Sperrwartezeit überschritten (1205). */
+    private static function istSperrkonflikt(\PDOException $e): bool
+    {
+        $info = is_array($e->errorInfo) ? $e->errorInfo : [];
+        $zustand = (string) ($info[0] ?? $e->getCode());
+        $nummer = (int) ($info[1] ?? 0);
+        return $zustand === '40001' || in_array($nummer, [1205, 1213], true);
     }
 
     /** Geheimes Salz für die IP-Hashes (32 Zufallsbytes, beim ersten Bedarf erzeugt). */
