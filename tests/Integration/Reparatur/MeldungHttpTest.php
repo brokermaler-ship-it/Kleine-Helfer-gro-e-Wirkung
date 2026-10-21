@@ -385,12 +385,13 @@ final class MeldungHttpTest extends DbTestCase
         $fz = $this->fahrzeug();
         $this->anmelden('mitglied');
         $this->post("/fahrzeuge/$fz/defekt", ['beschreibung' => 'Licht vorne geht nicht']);
-        // Objekt inzwischen gelöscht (ohne Aufräumen): die Liste bricht nicht ab.
+        // Objekt inzwischen gelöscht (ohne Aufräumen, wie vor 0.7.0 möglich): die Liste bricht nicht ab und zeigt die
+        // verwaiste Meldung nicht mehr (sie lässt sich weder öffnen noch verwerfen).
         $this->pdo->exec("DELETE FROM fahrzeug WHERE id = $fz");
         $r = $this->get('/meine-meldungen');
         $this->assertSame(200, $r->status);
-        $this->assertStringContainsString('Licht vorne geht nicht', $r->body);
-        $this->assertStringContainsString('gelöscht', $r->body);
+        $this->assertStringNotContainsString('Licht vorne geht nicht', $r->body);
+        $this->assertStringContainsString('Du hast noch keine Defekte gemeldet.', $r->body);
     }
 
     public function test_schaltflaechen_defekt_melden(): void

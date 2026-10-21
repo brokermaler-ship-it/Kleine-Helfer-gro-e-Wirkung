@@ -131,33 +131,93 @@ final class ReparaturDienst
     }
 
     /**
+     * Rahmen zum Löschen eines Fahrzeugs bzw. einer Anlage, wie inTransaktion(): eigene Transaktion in READ COMMITTED, das
+     * Objekt wird ZUERST mit FOR UPDATE gesperrt; dann die Reparaturen samt nur ihnen zugeordneter Fotos, danach $loeschen
+     * (Wartungen, Dokumente und der Datensatz selbst, alles ohne eigene Transaktion), dann Commit; erst danach die Dateien
+     * vom Webspace. Eine gleichzeitige Meldung (inTransaktion) liegt so entweder vorher – die Löschung wartet auf sie und
+     * sieht sie danach – und wird mitgelöscht, oder sie findet das Objekt nicht mehr (404): keine verwaiste Reparatur.
+     *
+     * @param callable(array<string,mixed> $objekt): list<string> $loeschen liefert relative Pfade, deren Dateien nach
+     *                                                              dem Commit entfernt werden
+     * @return bool false, wenn es das Objekt nicht (mehr) gibt ($loeschen läuft dann nicht; Aufrufer: 404)
+     */
+    public function loescheObjekt(string $objektTyp, int $objektId, callable $loeschen): bool
+    {
+        $tabelle = self::tabelle($objektTyp);
+        if ($this->pdo->inTransaction()) {
+            throw new \LogicException('ReparaturDienst::loescheObjekt braucht eine eigene Transaktion.');
+        }
+        $this->pdo->exec('SET TRANSACTION ISOLATION LEVEL READ COMMITTED'); // gilt nur für die nächste Transaktion
+        $this->pdo->beginTransaction();
+        try {
+            $st = $this->pdo->prepare("SELECT * FROM $tabelle WHERE id = ? FOR UPDATE");
+            $st->execute([$objektId]);
+            $objekt = $st->fetch(\PDO::FETCH_ASSOC);
+            if ($objekt === false) {
+                $this->pdo->rollBack();
+                return false;
+            }
+            $pfade = $this->entferneFuerObjektInTransaktion($objektTyp, $objektId);
+            array_push($pfade, ...$loeschen($objekt));
+            // Ab dem Commit müssen die Dateien weg, auch wenn der Browser die Anfrage abbricht.
+            ignore_user_abort(true);
+            $this->pdo->commit();
+        } catch (\Throwable $t) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $t;
+        }
+        foreach ($pfade as $pfad) {
+            if (!$this->dokumente->entferneDateien($pfad)) {
+                error_log('Löschen ' . $objektTyp . ' Nr. ' . $objektId . ': Dateien konnten nicht vom Webspace entfernt werden.');
+            }
+        }
+        return true;
+    }
+
+    /**
      * Vor dem Löschen eines Fahrzeugs bzw. einer Anlage: Reparaturen samt nur ihnen zugeordneter Fotos entfernen
-     * (Ersatzteile und Gesehen-Zeilen per CASCADE). Die Fotos zuerst (DokumentRepository::loeschen hat eigene
-     * Transaktionen), danach die Reparaturen gemeinsam.
+     * (Ersatzteile und Gesehen-Zeilen per CASCADE) – gemeinsam in einer Transaktion, die Fotodateien danach. Für das
+     * Löschen des Objekts selbst loescheObjekt() verwenden (Objekt zuerst gesperrt).
      */
     public function entferneFuerObjekt(string $objektTyp, int $objektId): void
     {
-        try {
-            $ids = $this->reparaturen->idsFuerObjekt($objektTyp, $objektId);
-        } catch (\PDOException $e) {
-            if ((string) $e->getCode() === '42S02') {
-                return; // Migration 014 noch nicht ausgeführt: es gibt keine Reparaturen.
-            }
-            throw $e;
-        }
-        foreach ($ids as $reparaturId) {
-            $this->dokumente->entferneVonObjekt('reparatur', $reparaturId);
-        }
         $this->pdo->beginTransaction();
         try {
-            foreach ($ids as $reparaturId) {
-                $this->reparaturen->loeschen($reparaturId);
-            }
+            $pfade = $this->entferneFuerObjektInTransaktion($objektTyp, $objektId);
             $this->pdo->commit();
         } catch (\Throwable $t) {
             $this->pdo->rollBack();
             throw $t;
         }
+        foreach ($pfade as $pfad) {
+            $this->dokumente->entferneDateien($pfad);
+        }
+    }
+
+    /**
+     * Reparaturen des Objekts mit sperrender Lesung (aktueller Stand, auch eine eben festgeschriebene Meldung) samt nur
+     * ihnen zugeordneter Fotos löschen, in der Transaktion des Aufrufers; vor Migration 014 gibt es keine.
+     *
+     * @return list<string> relative Pfade der gelöschten Fotos (Dateien entfernt der Aufrufer nach dem Commit)
+     */
+    private function entferneFuerObjektInTransaktion(string $objektTyp, int $objektId): array
+    {
+        try {
+            $ids = $this->reparaturen->idsFuerObjekt($objektTyp, $objektId, true);
+        } catch (\PDOException $e) {
+            if ((string) $e->getCode() === '42S02') {
+                return []; // Migration 014 noch nicht ausgeführt: es gibt keine Reparaturen.
+            }
+            throw $e;
+        }
+        $pfade = [];
+        foreach ($ids as $reparaturId) {
+            array_push($pfade, ...$this->dokumente->loeseVonObjekt('reparatur', $reparaturId));
+            $this->reparaturen->loeschen($reparaturId);
+        }
+        return $pfade;
     }
 
     private static function tabelle(string $objektTyp): string

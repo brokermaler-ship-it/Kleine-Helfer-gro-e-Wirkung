@@ -232,6 +232,88 @@ final class PdfTextGrenzenTest extends TestCase
         $this->assertSame(self::NICHT_LESBAR, $this->fehler(new PdfText(), $pdf));
     }
 
+    /** ToUnicode-Zeichentabelle mit einem bfrange-Eintrag <0000> <$bis> <0041> (Ziel ab „A“) und optional weiteren Zeilen. */
+    private static function zeichentabelle(string $bis, string $zusatz = ''): string
+    {
+        return "/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n"
+            . "1 beginbfrange\n<0000> <" . $bis . "> <0041>\nendbfrange\n" . $zusatz . "endcmap\n";
+    }
+
+    /**
+     * PDF mit Textseite; $schriften Schriften (F1 … Fn) verweisen alle auf die Zeichentabelle in Objekt 6.
+     */
+    private static function mitZeichentabelle(string $tabelle, int $schriften = 1): string
+    {
+        $o = MiniPdf::seitenObjekte(MiniPdf::text(['F0 Licht vorne und hinten', 'F1 Fahrgeräusch an und aus']));
+        $o[3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding /ToUnicode 6 0 R >>';
+        $o[6] = MiniPdf::strom($tabelle);
+        $namen = ['/F1 3 0 R'];
+        for ($i = 2; $i <= $schriften; $i++) {
+            $o[100 + $i] = $o[3];
+            $namen[] = '/F' . $i . ' ' . (100 + $i) . ' 0 R';
+        }
+        $o[4] = str_replace('/Font << /F1 3 0 R >>', '/Font << ' . implode(' ', $namen) . ' >>', $o[4]);
+        return MiniPdf::ausObjekten($o);
+    }
+
+    /**
+     * Review R1: Ein kurzer ToUnicode-Eintrag „<0000> <FFFFFFFF> <0041>“ ließe die Bibliothek schon beim Einlesen
+     * (Document::init → Font::loadTranslateTable) Milliarden Tabelleneinträge anlegen (gemessen: 1 Mio. Einträge ≈ 90 MB,
+     * 16 Mio. → Fatal Error bei 512M). Solche Tabellen werden übersprungen; der Text kommt dann ohne sie.
+     */
+    #[RunInSeparateProcess]
+    public function test_riesige_zeichentabelle_wird_uebersprungen(): void
+    {
+        ini_set('memory_limit', '512M');
+        $pdf = self::mitZeichentabelle(self::zeichentabelle('FFFFFFFF'));
+        $this->assertLessThan(2048, strlen($pdf));
+        memory_reset_peak_usage();
+        $vorher = memory_get_usage();
+        $start = microtime(true);
+        $text = (new PdfText())->lies($pdf)['text'];
+        $this->assertStringContainsString('F0 Licht vorne und hinten', $text);
+        $this->assertLessThan(5, microtime(true) - $start);
+        $this->assertLessThan(32 * 1048576, memory_get_peak_usage() - $vorher);
+    }
+
+    /** Knapp über der Grenze je Tabelle (65 536 Einträge) wird übersprungen, genau an der Grenze nicht. */
+    public function test_grenze_je_zeichentabelle(): void
+    {
+        // An der Grenze: <0000>…<FFFF> = 65 536 Einträge, die Tabelle gilt (Codes ab „A“ verschoben: „F“ → „F“ + 0x41).
+        $an = (new PdfText())->lies(self::mitZeichentabelle(self::zeichentabelle('FFFF')))['text'];
+        $this->assertStringNotContainsString('F0 Licht', $an);
+        // Darüber: übersprungen, Text wie ohne Tabelle.
+        $ueber = (new PdfText())->lies(self::mitZeichentabelle(self::zeichentabelle('00010000')))['text'];
+        $this->assertStringContainsString('F0 Licht vorne und hinten', $ueber);
+    }
+
+    /**
+     * Viele Schriften mit derselben großen Tabelle: die Bibliothek lädt sie für jede Schrift neu. Insgesamt werden höchstens
+     * so viele Einträge geladen, wie das Speicherbudget erlaubt; danach wird die Tabelle übersprungen.
+     */
+    #[RunInSeparateProcess]
+    public function test_viele_schriften_mit_grosser_zeichentabelle(): void
+    {
+        ini_set('memory_limit', '512M');
+        $pdf = self::mitZeichentabelle(self::zeichentabelle('FFFF'), 200); // ohne Grenze 13 Mio. Einträge
+        memory_reset_peak_usage();
+        $vorher = memory_get_usage();
+        $start = microtime(true);
+        $text = (new PdfText())->lies($pdf)['text'];
+        $this->assertStringContainsString('F0 Licht vorne und hinten', $text);
+        $this->assertLessThan(10, microtime(true) - $start);
+        $this->assertLessThan(128 * 1048576, memory_get_peak_usage() - $vorher);
+    }
+
+    /** Kleine Zeichentabellen (bfchar und bfrange) wirken wie bisher. */
+    public function test_kleine_zeichentabelle_wirkt(): void
+    {
+        $tabelle = "begincmap\n1 begincodespacerange\n<00> <FF>\nendcodespacerange\n"
+            . "1 beginbfchar\n<4C> <004B>\nendbfchar\n1 beginbfrange\n<69> <69> <0049>\nendbfrange\nendcmap\n";
+        $text = (new PdfText())->lies(self::mitZeichentabelle($tabelle))['text'];
+        $this->assertStringContainsString('KIcht', $text); // „L“ → „K“, „i“ → „I“
+    }
+
     public function test_ohne_objekte_nicht_als_verschluesselt_gemeldet(): void
     {
         $pdf = "%PDF-1.4\nxref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 1 >>\nstartxref\n9\n%%EOF\n";

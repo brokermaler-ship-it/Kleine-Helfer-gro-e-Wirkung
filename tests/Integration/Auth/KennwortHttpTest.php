@@ -301,6 +301,12 @@ final class KennwortHttpTest extends DbTestCase
         $this->pdo->exec('DELETE FROM kennwort_versuch');
         $this->post('/kennwort/vergessen', ['email' => 'anna@verein.de']);
         $this->post('/kennwort/vergessen', ['email' => 'bea@verein.de']);
+        // Erst der Datenbankstand (mit Angaben für die Fehlersuche), dann die Anzeige: „Kennwort vergessen“ antwortet
+        // immer gleich, eine verlorene Anfrage fiele sonst nur über den fehlenden Hinweis auf.
+        $offen = $this->pdo->query('SELECT benutzer_id FROM kennwort_anfrage WHERE erledigt_am IS NULL ORDER BY benutzer_id')->fetchAll(\PDO::FETCH_COLUMN);
+        $this->assertSame([$anna, $bearbeiter], array_map('intval', $offen), 'offene Anfragen; Versuche: '
+            . (int) $this->pdo->query('SELECT COUNT(*) FROM kennwort_versuch')->fetchColumn()
+            . ', Konten: ' . (int) $this->pdo->query('SELECT COUNT(*) FROM benutzer')->fetchColumn());
         $this->sitzungAnmelden($this->sitzung, $admin);
         $this->assertStringContainsString('2 Anfragen auf neues Kennwort', $this->get('/admin/benutzer')->body);
         $anfrage = (int) $this->pdo->query("SELECT id FROM kennwort_anfrage WHERE erledigt_am IS NULL AND benutzer_id = $anna")->fetchColumn();

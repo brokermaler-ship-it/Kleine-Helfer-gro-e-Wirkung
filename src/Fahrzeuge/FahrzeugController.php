@@ -187,10 +187,18 @@ final class FahrzeugController
     public function loeschen(Request $r, array $p): Response
     {
         $fz = $this->lade($p);
-        $this->wartung?->entferneFuerObjekt('fahrzeug', (int) $fz['id']);
-        $this->reparatur?->entferneFuerObjekt('fahrzeug', (int) $fz['id']);
-        $this->dokumente->entferneVonObjekt('fahrzeug', (int) $fz['id']);
-        $this->fahrzeuge->loeschen((int) $fz['id']);
+        $id = (int) $fz['id'];
+        // Unter der Sperre des Fahrzeugs: eine gleichzeitige Defektmeldung wird mitgelöscht oder bekommt 404.
+        $dienst = $this->reparatur ?? throw new \LogicException('FahrzeugController braucht den ReparaturDienst zum Löschen.');
+        $geloescht = $dienst->loescheObjekt('fahrzeug', $id, function () use ($id): array {
+            $pfade = $this->wartung?->entferneFuerObjektInTransaktion('fahrzeug', $id) ?? [];
+            array_push($pfade, ...$this->dokumente->loeseVonObjekt('fahrzeug', $id));
+            $this->fahrzeuge->loeschen($id); // Decoder, Funktionen, CVs per CASCADE
+            return $pfade;
+        });
+        if (!$geloescht) {
+            throw new HttpFehler(404); // zwischenzeitlich gelöscht
+        }
         // Lösch-Aufträge für die OneDrive-Dateien gleich nebenbei ausführen (ohne Cronjob sonst erst später).
         $this->uebertragung?->nebenbei();
         $alt = $this->vergleichswerte($fz);

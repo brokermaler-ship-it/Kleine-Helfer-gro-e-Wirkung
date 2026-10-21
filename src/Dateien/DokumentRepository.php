@@ -185,6 +185,32 @@ final class DokumentRepository
         }
     }
 
+    /**
+     * Wie entferneVonObjekt(), aber in der Transaktion des Aufrufers und ohne Dateien anzufassen: Dokumente ohne weitere
+     * Zuordnung verlieren ihren Datensatz (loescheDatensatz), geteilte nur diese Zuordnung. Sperrende Lesungen, damit eine
+     * gleichzeitig angelegte Zuordnung weder übersehen noch ohne ihr Dokument gelöscht wird.
+     *
+     * @return list<string> relative Pfade, die der Aufrufer nach seinem Commit mit entferneDateien() entfernt
+     */
+    public function loeseVonObjekt(string $objektTyp, int $objektId): array
+    {
+        $st = $this->pdo->prepare('SELECT dokument_id FROM dokument_zuordnung WHERE objekt_typ = ? AND objekt_id = ? ORDER BY dokument_id FOR UPDATE');
+        $st->execute([$objektTyp, $objektId]);
+        $andere = $this->pdo->prepare('SELECT COUNT(*) FROM dokument_zuordnung WHERE dokument_id = ? AND NOT (objekt_typ = ? AND objekt_id = ?) FOR UPDATE');
+        $pfade = [];
+        foreach (array_map('intval', $st->fetchAll(\PDO::FETCH_COLUMN)) as $id) {
+            $andere->execute([$id, $objektTyp, $objektId]);
+            if ((int) $andere->fetchColumn() === 0) {
+                $pfad = $this->loescheDatensatz($id);
+                if ($pfad !== null) {
+                    $pfade[] = $pfad;
+                }
+            }
+        }
+        $this->pdo->prepare('DELETE FROM dokument_zuordnung WHERE objekt_typ = ? AND objekt_id = ?')->execute([$objektTyp, $objektId]);
+        return $pfade;
+    }
+
     /** Absoluter Pfad innerhalb des Speicherordners; null bei verdächtigem Pfad. */
     public function absoluterPfad(string $relativ): ?string
     {

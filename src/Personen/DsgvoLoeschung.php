@@ -186,12 +186,22 @@ final class DsgvoLoeschung
         $pfade = [];
         $this->pdo->beginTransaction();
         try {
-            // 0. ZUERST die eigenen Fahrzeuge sperren (vor jeder anderen Lesung), dann Person und Konto, zuletzt die
-            //    Reparaturzeilen – dieselbe Reihenfolge wie beim Speichern einer Reparatur (ReparaturDienst::inTransaktion:
-            //    Objekt, dann zuständige Person, dann Reparatur). So wartet die Löschung auf ein gleichzeitiges Speichern,
-            //    ohne vorher etwas zu halten, worauf dieses wartet (kein Deadlock), und sieht danach dessen Meldungen.
-            //    Die sperrende Lesung über eigentuemer_person_id hält auch neu zugeordnete Fahrzeuge fern.
+            // 0. ZUERST die Objekte sperren (vor jeder anderen Lesung), dann Person und Konto, zuletzt die Reparaturzeilen –
+            //    dieselbe Reihenfolge wie beim Speichern einer Reparatur (ReparaturDienst::inTransaktion: Objekt, dann
+            //    zuständige Person, dann Reparatur). So wartet die Löschung auf ein gleichzeitiges Speichern, ohne vorher
+            //    etwas zu halten, worauf dieses wartet, und sieht danach dessen Meldungen.
+            //    a) Die eigenen Fahrzeuge; die sperrende Lesung über eigentuemer_person_id hält auch neu zugeordnete
+            //       Fahrzeuge fern.
+            //    b) Vereinsobjekte, die die Löschung später über Fremdschlüssel ändert (ON DELETE SET NULL): Fahrzeuge, die
+            //       das Konto angelegt hat, und Fahrzeuge bzw. Anlagen mit Reparaturen, für die die Person zuständig ist oder
+            //       die das Konto gemeldet hat. Sonst hielte ein Speichern dort das Objekt und wartete auf die Person,
+            //       während die Löschung die Person hält und beim Leeren am Objekt wartet (Deadlock, 2c-Review M1).
+            //    Ausgeschlossen ist ein Deadlock damit nur in diesen Fällen. Ein Rest bleibt (z. B. eine Reparatur, die
+            //    erst nach der Lesung in b) der Person zugewiesen wird, oder Sperren im Änderungsprotokoll): Dann bricht
+            //    MySQL bzw. MariaDB eine der beiden Transaktionen mit Fehler 1213 ab, nichts ist halb gelöscht, und die
+            //    DSGVO-Seite meldet „Bitte erneut versuchen“ (PersonController::DSGVO_ERNEUT, Test in DsgvoHttpTest).
             $eigene = array_map(fn(array $fz): int => (int) $fz['id'], $this->eigeneFahrzeuge($personId, true));
+            $this->sperreVereinsobjekte($personId);
 
             // 1. Verweigerungsgründe – Admin-Zugänge gesperrt, damit nicht gleichzeitig der letzte Admin verschwindet;
             //    entschieden wird mit genau den gesperrten IDs (kein späterer Snapshot-Read).
@@ -558,6 +568,46 @@ final class DsgvoLoeschung
         $st->execute([$personId]);
         $benutzer = $st->fetch(\PDO::FETCH_ASSOC);
         return $benutzer === false ? null : $benutzer;
+    }
+
+    /**
+     * Schritt 0 b) in loesche(): sperrt (FOR UPDATE, nach ID) Fahrzeuge, die das Konto der Person angelegt hat, und die
+     * Fahrzeuge und Anlagen der Reparaturen, für die die Person zuständig ist oder die das Konto gemeldet hat. Die
+     * Reparaturen selbst werden hier nur gelesen, nicht gesperrt (ihre Sperre käme sonst vor der des Objekts).
+     */
+    private function sperreVereinsobjekte(int $personId): void
+    {
+        $st = $this->pdo->prepare('SELECT id FROM benutzer WHERE person_id = ?');
+        $st->execute([$personId]);
+        $konten = array_map('intval', $st->fetchAll(\PDO::FETCH_COLUMN));
+        if ($konten !== []) {
+            $platz = implode(', ', array_fill(0, count($konten), '?'));
+            $this->pdo->prepare("SELECT id FROM fahrzeug WHERE angelegt_von_benutzer_id IN ($platz) ORDER BY id FOR UPDATE")->execute($konten);
+        }
+        try {
+            $st = $this->pdo->prepare(
+                'SELECT DISTINCT objekt_typ, objekt_id FROM reparatur WHERE zustaendig_person_id = ?'
+                . ($konten === [] ? '' : ' OR gemeldet_von_benutzer_id IN (' . implode(', ', array_fill(0, count($konten), '?')) . ')')
+            );
+            $st->execute([$personId, ...$konten]);
+            $objekte = $st->fetchAll(\PDO::FETCH_ASSOC);
+        } catch (\PDOException $e) {
+            if ((string) $e->getCode() === '42S02') {
+                return; // vor Migration 014 gibt es keine Reparaturen
+            }
+            throw $e;
+        }
+        foreach (['fahrzeug', 'anlage'] as $typ) {
+            $ids = array_values(array_unique(array_map(
+                fn(array $o): int => (int) $o['objekt_id'],
+                array_filter($objekte, fn(array $o): bool => $o['objekt_typ'] === $typ)
+            )));
+            sort($ids);
+            if ($ids !== []) {
+                $this->pdo->prepare("SELECT id FROM $typ WHERE id IN (" . implode(', ', array_fill(0, count($ids), '?')) . ') ORDER BY id FOR UPDATE')
+                    ->execute($ids);
+            }
+        }
     }
 
     /** @return list<array<string,mixed>> */

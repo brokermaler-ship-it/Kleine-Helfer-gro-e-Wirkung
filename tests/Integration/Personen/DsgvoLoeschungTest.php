@@ -816,4 +816,58 @@ final class DsgvoLoeschungTest extends DbTestCase
         $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM fahrzeug'));
         $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM person WHERE id = ?', [$s['person']]));
     }
+
+    /**
+     * Wie oben, aber an einem Vereinsfahrzeug, das die Person angelegt hat und an dem sie für eine Reparatur zuständig ist
+     * (2c-Review M1): Das Speichern hält das Fahrzeug und sperrt danach die Person. Die Löschung sperrt solche
+     * Vereinsobjekte ebenfalls zuerst, wartet also am Fahrzeug, ohne die Person zu halten – sonst warteten beide
+     * aufeinander (Löschen des Kontos leert angelegt_von am gesperrten Fahrzeug) und einer bekäme einen Deadlock.
+     */
+    public function test_gleichzeitiges_speichern_am_vereinsfahrzeug_kein_deadlock(): void
+    {
+        if (!function_exists('proc_open')) {
+            $this->markTestSkipped('proc_open fehlt');
+        }
+        $s = $this->szenario();
+        $verein = $this->fahrzeug('EMC-0010', null, $s['konto']);
+        $alt = $this->reparatur('fahrzeug', $verein, null, $s['person']);
+        $beobachter = self::verbindung();
+        // Wartet die Löschung gerade an einer Sperre? (PROCESSLIST: eine Anweisung läuft seit mindestens 0,2 s.)
+        $wartet = fn(): bool => (int) $beobachter->query(
+            "SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE ID <> CONNECTION_ID() AND TIME_MS >= 200 "
+            . "AND INFO IS NOT NULL AND INFO NOT LIKE '%PROCESSLIST%'"
+        )->fetchColumn() > 0;
+
+        $b = self::verbindung();
+        $b->exec('SET SESSION innodb_lock_wait_timeout = 5');
+        $repB = new ReparaturRepository($b);
+        $dienstB = new \Emc\Reparatur\ReparaturDienst($b, $repB, new FahrzeugRepository($b), new \Emc\Anlagen\AnlageRepository($b), new DokumentRepository($b, $this->speicher), new Aenderungsprotokoll($b));
+        $prozess = null;
+        $rohre = [];
+        $dienstB->inTransaktion('fahrzeug', $verein, null, function () use ($repB, $b, $s, $alt, &$prozess, &$rohre, $wartet): void {
+            $prozess = proc_open(
+                [PHP_BINARY, __DIR__ . '/dsgvo_loeschung_prozess.php', (string) $s['person'], (string) $this->admin, $this->speicher],
+                [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+                $rohre
+            );
+            $this->assertIsResource($prozess);
+            $bis = microtime(true) + 15;
+            while (!$wartet()) {
+                $this->assertLessThan($bis, microtime(true), 'Die Löschung wartet nicht auf eine Sperre.');
+                $this->assertTrue(proc_get_status($prozess)['running'], 'Die Löschung lief durch, ohne auf das Vereinsfahrzeug zu warten.');
+                usleep(20000);
+            }
+            // Die Löschung steht an der Sperre des Vereinsfahrzeugs und hält die Person noch nicht.
+            $this->assertTrue($repB->sperrePerson($s['person']));
+            $b->prepare("UPDATE reparatur SET beschreibung = 'Motor brummt laut' WHERE id = ?")->execute([$alt]);
+        });
+        $ausgabe = stream_get_contents($rohre[1]) . stream_get_contents($rohre[2]);
+        $code = proc_close($prozess);
+
+        $this->assertSame(0, $code, $ausgabe);
+        $this->assertSame('OK', trim($ausgabe));
+        $this->assertSame(1, $this->zaehle("SELECT COUNT(*) FROM reparatur WHERE id = ? AND beschreibung = 'Motor brummt laut' AND zustaendig_person_id IS NULL", [$alt]));
+        $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM fahrzeug WHERE id = ? AND angelegt_von_benutzer_id IS NULL', [$verein]));
+        $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM person WHERE id = ?', [$s['person']]));
+    }
 }

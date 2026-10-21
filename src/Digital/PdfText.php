@@ -36,6 +36,8 @@ final class PdfText
     public const MAX_OBJEKTE = 200000;
     /** Tiefste Verschachtelung von Formularen (Form-XObjects), die noch gelesen wird. */
     public const MAX_FORMTIEFE = 10;
+    /** Höchstens so viele Einträge in allen ToUnicode-Zeichentabellen zusammen (BegrenzterParser). */
+    public const MAX_ZEICHEN = 8 * 65536;
     /** Speicher, den das Auslesen mindestens bekommt (falls der Webspace erlaubt, ihn anzuheben). */
     private const SPEICHER = 512 * 1048576;
     /** Kürzester sinnvoller Text (ohne Leerraum); darunter gilt das PDF als Scan. */
@@ -127,9 +129,12 @@ final class PdfText
             throw new DomainFehler(self::NICHT_LESBAR);
         }
         try {
-            $parser = new BegrenzterParser(self::bibliotheksConfig($grenzen['strom']), $grenzen['budget'], $grenzen['objekte']);
+            $parser = new BegrenzterParser(self::bibliotheksConfig($grenzen['strom']), $grenzen['budget'], $grenzen['objekte'], $grenzen['zeichen']);
             $dokument = $parser->parseContent($inhalt);
             unset($inhalt);
+            if ($parser->uebersprungeneTabellen > 0) {
+                error_log('PDF-Import: ' . $parser->uebersprungeneTabellen . ' zu große Zeichentabelle(n) (ToUnicode) übersprungen.');
+            }
             if ($parser->filter->ueber) {
                 throw new GrenzeUeberschritten('Entpack-Budget überschritten');
             }
@@ -182,9 +187,10 @@ final class PdfText
 
     /**
      * Grenzen aus der tatsächlich geltenden Speichergrenze: Datei höchstens 1/25, alles Entpackte höchstens 1/5,
-     * ein Strom höchstens 1/16 davon, Objekte je 2,5 KB (gemessen: rund 1,5 KB je Objekt).
+     * ein Strom höchstens 1/16 davon, Objekte je 2,5 KB (gemessen: rund 1,5 KB je Objekt), Einträge in Zeichentabellen
+     * (ToUnicode) je 1 KB (gemessen: rund 90 Bytes je Eintrag), höchstens MAX_ZEICHEN.
      *
-     * @return array{datei:int, budget:int, strom:int, objekte:int}
+     * @return array{datei:int, budget:int, strom:int, objekte:int, zeichen:int}
      */
     private function grenzen(): array
     {
@@ -197,6 +203,7 @@ final class PdfText
             'budget' => min(self::DECODE_GESAMT, intdiv($speicher, 5)),
             'strom' => min(self::DECODE_LIMIT, intdiv($speicher, 16)),
             'objekte' => min(self::MAX_OBJEKTE, intdiv($speicher, 2560)),
+            'zeichen' => min(self::MAX_ZEICHEN, intdiv($speicher, 1024)),
         ];
     }
 

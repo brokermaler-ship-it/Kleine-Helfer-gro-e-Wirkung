@@ -119,10 +119,17 @@ final class AnlageController
     {
         $anlage = $this->lade($p);
         $id = (int) $anlage['id'];
-        $this->wartung?->entferneFuerObjekt('anlage', $id);
-        $this->reparatur?->entferneFuerObjekt('anlage', $id);
-        $this->dokumente->entferneVonObjekt('anlage', $id);
-        $this->anlagen->loeschen($id);
+        // Unter der Sperre der Anlage: eine gleichzeitige Defektmeldung wird mitgelöscht oder bekommt 404.
+        $dienst = $this->reparatur ?? throw new \LogicException('AnlageController braucht den ReparaturDienst zum Löschen.');
+        $geloescht = $dienst->loescheObjekt('anlage', $id, function () use ($id): array {
+            $pfade = $this->wartung?->entferneFuerObjektInTransaktion('anlage', $id) ?? [];
+            array_push($pfade, ...$this->dokumente->loeseVonObjekt('anlage', $id));
+            $this->anlagen->loeschen($id);
+            return $pfade;
+        });
+        if (!$geloescht) {
+            throw new HttpFehler(404); // zwischenzeitlich gelöscht
+        }
         // Lösch-Aufträge für die OneDrive-Dateien gleich nebenbei ausführen (ohne Cronjob sonst erst später).
         $this->uebertragung?->nebenbei();
         $alt = $this->vergleichswerte($anlage);

@@ -45,8 +45,36 @@ abstract class DbTestCase extends TestCase
         return array_map('strval', $pdo->query('SHOW FULL TABLES WHERE Table_type = \'BASE TABLE\'')->fetchAll(\PDO::FETCH_COLUMN));
     }
 
+    /** Verbindung, die für den ganzen Testlauf die Sperre auf die Testdatenbank hält (siehe sperreTestdatenbank). */
+    private static ?\PDO $laufSperre = null;
+
+    /**
+     * Zwei Testläufe auf derselben Datenbank (z. B. zwei Prüfungen gleichzeitig mit TEST_DB_DSN auf emc_rv) leeren
+     * sich gegenseitig die Tabellen; das ergab vereinzelte, nicht nachstellbare Fehler (einmal KennwortHttpTest:
+     * „2 Anfragen“ fehlte, weil das Konto mitten im Test verschwunden war). Deshalb hält der erste Testlauf eine
+     * benannte Sperre je Datenbank bis zum Ende; ein zweiter bricht sofort mit klarer Meldung ab.
+     */
+    private static function sperreTestdatenbank(): void
+    {
+        if (self::$laufSperre !== null) {
+            return;
+        }
+        $pdo = self::verbindung();
+        $name = 'emc_testlauf_' . substr((string) $pdo->query('SELECT DATABASE()')->fetchColumn(), 0, 48);
+        $st = $pdo->prepare('SELECT GET_LOCK(?, 0)');
+        $st->execute([$name]);
+        if ((int) $st->fetchColumn() !== 1) {
+            throw new \RuntimeException(
+                'Die Testdatenbank wird gerade von einem anderen Testlauf benutzt (Sperre „' . $name . '“). '
+                . 'Bitte warten oder mit TEST_DB_DSN eine eigene Datenbank wählen.'
+            );
+        }
+        self::$laufSperre = $pdo;
+    }
+
     public static function setUpBeforeClass(): void
     {
+        self::sperreTestdatenbank();
         $pdo = self::verbindung();
         self::alleTabellenLoeschen($pdo);
         (new Migrator($pdo, dirname(__DIR__, 2) . '/migrations'))->ausfuehren();

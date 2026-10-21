@@ -41,6 +41,15 @@ final class ReparaturRepository
         . "LEFT JOIN anlage a ON r.objekt_typ = 'anlage' AND a.id = r.objekt_id "
         . 'LEFT JOIN spurweite fs ON fs.id = f.spurweite_id LEFT JOIN spurweite asw ON asw.id = a.spurweite_id ';
 
+    /**
+     * Nur Reparaturen, deren Objekt es noch gibt (passend zu OBJEKT_JOIN). Verwaiste Reparaturen (Objekt gelöscht, aus
+     * Versionen vor 0.7.0 möglich) lassen sich weder öffnen noch verwerfen und zählen deshalb nirgends mit.
+     */
+    private const OBJEKT_DA = '(f.id IS NOT NULL OR a.id IS NOT NULL) ';
+    /** Wie OBJEKT_DA, ohne OBJEKT_JOIN (für reine Zählungen). */
+    private const OBJEKT_DA_EXISTS = "((r.objekt_typ = 'fahrzeug' AND EXISTS (SELECT 1 FROM fahrzeug fx WHERE fx.id = r.objekt_id)) "
+        . "OR (r.objekt_typ = 'anlage' AND EXISTS (SELECT 1 FROM anlage ax WHERE ax.id = r.objekt_id))) ";
+
     public function __construct(private \PDO $pdo)
     {
     }
@@ -132,7 +141,7 @@ final class ReparaturRepository
             'SELECT r.id, r.objekt_typ, r.objekt_id, r.beschreibung, r.wo_bauteil, r.prioritaet, r.status, r.gemeldet_am, '
             . self::OBJEKT_SPALTEN
             . 'FROM reparatur r ' . self::OBJEKT_JOIN
-            . 'WHERE r.gemeldet_von_benutzer_id = ? ORDER BY r.gemeldet_am DESC, r.id DESC'
+            . 'WHERE r.gemeldet_von_benutzer_id = ? AND ' . self::OBJEKT_DA . 'ORDER BY r.gemeldet_am DESC, r.id DESC'
         );
         $st->execute([$benutzerId]);
         return array_map(self::mitKennung(...), $st->fetchAll(\PDO::FETCH_ASSOC));
@@ -147,7 +156,7 @@ final class ReparaturRepository
      */
     public function suche(ReparaturFilter $f): array
     {
-        $wo = [];
+        $wo = [self::OBJEKT_DA];
         $p = [];
         $status = $f->status ?? ReparaturFilter::OFFEN;
         if ($status === ReparaturFilter::OFFEN) {
@@ -166,7 +175,7 @@ final class ReparaturRepository
         }
         $st = $this->pdo->prepare(
             self::SPALTEN . ', ' . self::OBJEKT_SPALTEN . 'FROM reparatur r ' . self::PERSONEN_JOIN . self::OBJEKT_JOIN
-            . ($wo === [] ? '' : 'WHERE ' . implode(' AND ', $wo) . ' ')
+            . 'WHERE ' . implode(' AND ', $wo) . ' '
             . "ORDER BY FIELD(r.prioritaet, 'dringend', 'normal', 'niedrig'), r.gemeldet_am DESC, r.id DESC"
         );
         $st->execute($p);
@@ -277,7 +286,7 @@ final class ReparaturRepository
             "SELECT COUNT(*) FROM reparatur r WHERE r.status = 'gemeldet' "
             . 'AND r.objekt_typ IN (' . implode(', ', array_fill(0, count($typen), '?')) . ') '
             . 'AND (r.gemeldet_von_benutzer_id IS NULL OR r.gemeldet_von_benutzer_id <> ?) '
-            . 'AND NOT EXISTS (SELECT 1 FROM reparatur_gesehen g WHERE g.reparatur_id = r.id)'
+            . 'AND NOT EXISTS (SELECT 1 FROM reparatur_gesehen g WHERE g.reparatur_id = r.id) AND ' . self::OBJEKT_DA_EXISTS
         );
         $st->execute([...$typen, $ausserBenutzerId]);
         return (int) $st->fetchColumn();
@@ -292,12 +301,13 @@ final class ReparaturRepository
     public function offeneDefekte(int $max = 5): array
     {
         $summe = $this->pdo->query(
-            "SELECT COUNT(*) AS anzahl, COALESCE(SUM(prioritaet = 'dringend'), 0) AS dringend FROM reparatur WHERE status IN " . ReparaturStatus::OFFEN_SQL
+            "SELECT COUNT(*) AS anzahl, COALESCE(SUM(r.prioritaet = 'dringend'), 0) AS dringend FROM reparatur r WHERE r.status IN " . ReparaturStatus::OFFEN_SQL
+            . ' AND ' . self::OBJEKT_DA_EXISTS
         )->fetch(\PDO::FETCH_ASSOC);
         $st = $this->pdo->prepare(
             'SELECT r.id, r.objekt_typ, r.objekt_id, r.beschreibung, r.prioritaet, r.status, r.gemeldet_am, ' . self::OBJEKT_SPALTEN
             . 'FROM reparatur r ' . self::OBJEKT_JOIN
-            . 'WHERE r.status IN ' . ReparaturStatus::OFFEN_SQL . ' '
+            . 'WHERE r.status IN ' . ReparaturStatus::OFFEN_SQL . ' AND ' . self::OBJEKT_DA
             . "ORDER BY FIELD(r.prioritaet, 'dringend', 'normal', 'niedrig'), r.gemeldet_am, r.id LIMIT " . max(1, $max)
         );
         $st->execute();

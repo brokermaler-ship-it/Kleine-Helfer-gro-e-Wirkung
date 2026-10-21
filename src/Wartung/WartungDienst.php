@@ -95,33 +95,46 @@ final class WartungDienst
 
     /**
      * Vor dem Löschen eines Fahrzeugs bzw. einer Anlage: Wartungen samt nur ihnen zugeordneter Fotos und die
-     * Ausnahmen des Objekts entfernen. Die Fotos zuerst (DokumentRepository::loeschen hat eigene Transaktionen),
-     * danach Wartungen und Ausnahmen gemeinsam.
+     * Ausnahmen des Objekts entfernen – gemeinsam in einer Transaktion, die Fotodateien danach.
      */
     public function entferneFuerObjekt(string $objektTyp, int $objektId): void
     {
-        try {
-            $ids = $this->wartungen->idsFuerObjekt($objektTyp, $objektId);
-        } catch (\PDOException $e) {
-            if ((string) $e->getCode() === '42S02') {
-                return; // Migration 013 noch nicht ausgeführt: es gibt keine Wartungen.
-            }
-            throw $e;
-        }
-        foreach ($ids as $wartungId) {
-            $this->dokumente->entferneVonObjekt('wartung', $wartungId);
-        }
         $this->pdo->beginTransaction();
         try {
-            foreach ($ids as $wartungId) {
-                $this->wartungen->loeschen($wartungId);
-            }
-            $this->ausnahmen->loescheFuerObjekt($objektTyp, $objektId);
+            $pfade = $this->entferneFuerObjektInTransaktion($objektTyp, $objektId);
             $this->pdo->commit();
         } catch (\Throwable $t) {
             $this->pdo->rollBack();
             throw $t;
         }
+        foreach ($pfade as $pfad) {
+            $this->dokumente->entferneDateien($pfad);
+        }
+    }
+
+    /**
+     * Wie entferneFuerObjekt(), aber in der Transaktion des Aufrufers (Löschen des Objekts unter seiner Sperre,
+     * ReparaturDienst::loescheObjekt) und ohne Dateien anzufassen.
+     *
+     * @return list<string> relative Pfade der gelöschten Fotos, die der Aufrufer nach seinem Commit entfernt
+     */
+    public function entferneFuerObjektInTransaktion(string $objektTyp, int $objektId): array
+    {
+        try {
+            $ids = $this->wartungen->idsFuerObjekt($objektTyp, $objektId);
+        } catch (\PDOException $e) {
+            if ((string) $e->getCode() === '42S02') {
+                return []; // Migration 013 noch nicht ausgeführt: es gibt keine Wartungen.
+            }
+            throw $e;
+        }
+        $pfade = [];
+        foreach ($ids as $wartungId) {
+            array_push($pfade, ...$this->dokumente->loeseVonObjekt('wartung', $wartungId));
+            $this->wartungen->loeschen($wartungId);
+        }
+        $this->ausnahmen->loescheFuerObjekt($objektTyp, $objektId);
+        return $pfade;
     }
 
     /** Text für Protokoll und Anzeige: „21.10.2026: Räder und Radschleifer reinigen, Kupplungen prüfen“. */
