@@ -53,12 +53,15 @@ use Emc\Personen\PersonController;
 use Emc\Personen\PersonRepository;
 use Emc\Stammdaten\SpurweiteController;
 use Emc\Stammdaten\SpurweiteRepository;
+use Emc\Start\StartController;
 use Emc\Wartung\AusnahmeRepository;
+use Emc\Wartung\UebersichtController;
 use Emc\Wartung\WartungController;
 use Emc\Wartung\WartungDienst;
 use Emc\Wartung\WartungRepository;
 use Emc\Wartung\WartungsartController;
 use Emc\Wartung\WartungsartRepository;
+use Emc\Wartung\Wartungsplan;
 use Emc\Protokoll\Aenderungsprotokoll;
 
 final class App
@@ -223,7 +226,23 @@ final class App
             $c->get(AusnahmeRepository::class),
             $c->get(WartungsartRepository::class),
             $c->get(PersonRepository::class),
-            $c->get(DokumentRepository::class)
+            $c->get(DokumentRepository::class),
+            $c->get(Wartungsplan::class)
+        ));
+        $this->container->set(Wartungsplan::class, fn(Container $c) => new Wartungsplan(
+            $c->get('pdo'),
+            $c->get(WartungsartRepository::class),
+            $c->get(WartungRepository::class),
+            $c->get(AusnahmeRepository::class)
+        ));
+        $this->container->set(UebersichtController::class, fn(Container $c) => new UebersichtController(
+            $this->view,
+            $c->get(Wartungsplan::class),
+            $c->get(SpurweiteRepository::class)
+        ));
+        $this->container->set(StartController::class, fn(Container $c) => new StartController(
+            $this->view,
+            $c->get(Wartungsplan::class)
         ));
         $this->container->set(WartungController::class, fn(Container $c) => new WartungController(
             $this->view,
@@ -522,8 +541,9 @@ final class App
                 $this->container->get('session')->meldung('warnung', 'Bitte zuerst das Datenbank-Update ausführen; bis dahin ruht die OneDrive-Übertragung.');
                 return Response::redirect(url('/admin/update'));
             }
-            // 3c. Anlagen und Wartungsarten brauchen die Tabellen aus Migration 011/012 (Nicht-Administratoren sehen schon die Wartungsseite).
-            if (($pfad === '/anlagen' || str_starts_with($pfad, '/anlagen/')
+            // 3c. Anlagen, Wartungsarten und die Übersicht „Wartung“ brauchen die Tabellen aus Migration 011–013
+            //     (Nicht-Administratoren sehen schon die Wartungsseite).
+            if (($pfad === '/anlagen' || str_starts_with($pfad, '/anlagen/') || $pfad === '/wartung'
                     || $pfad === '/admin/wartungsarten' || str_starts_with($pfad, '/admin/wartungsarten/'))
                 && $this->container->get(Migrator::class)->ausstehend() !== []
             ) {

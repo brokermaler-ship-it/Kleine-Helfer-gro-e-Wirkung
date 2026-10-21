@@ -8,7 +8,6 @@ use Emc\Auth\InstallController;
 use Emc\Auth\KennwortController;
 use Emc\Core\App;
 use Emc\Core\Request;
-use Emc\Core\Response;
 use Emc\Core\Router;
 use Emc\Betrieb\SicherungController;
 use Emc\Betrieb\TestdatenController;
@@ -24,6 +23,8 @@ use Emc\Personen\BenutzerController;
 use Emc\Personen\KontoController;
 use Emc\Personen\PersonController;
 use Emc\Stammdaten\SpurweiteController;
+use Emc\Start\StartController;
+use Emc\Wartung\UebersichtController;
 use Emc\Wartung\WartungController;
 use Emc\Wartung\WartungsartController;
 
@@ -37,7 +38,7 @@ use Emc\Wartung\WartungsartController;
 return function (Router $router, App $app): void {
     $c = $app->container();
 
-    $router->add('GET', '/', fn() => Response::redirect(url('/fahrzeuge')));
+    $router->add('GET', '/', $app->erfordert('lesen', fn(Request $r) => $c->get(StartController::class)->start($r)));
 
     $router->add('GET', '/login', fn(Request $r) => $c->get(AuthController::class)->loginForm($r));
     $router->add('POST', '/login', fn(Request $r) => $c->get(AuthController::class)->login($r));
@@ -77,6 +78,7 @@ return function (Router $router, App $app): void {
     $wtg = fn(string $m) => fn(Request $r, array $p = []) => $c->get(WartungController::class)->$m($r, $p);
     $router->add('POST', '/fahrzeuge/{id}/wartungen', $app->erfordert('lesen', $wtg('eintragenFahrzeug')));
     $router->add('POST', '/anlagen/{id}/wartungen', $app->erfordert('lesen', $wtg('eintragenAnlage')));
+    $router->add('GET', '/wartung', $app->erfordert('lesen', fn(Request $r) => $c->get(UebersichtController::class)->uebersicht($r)));
     $router->add('POST', '/wartungen/{id}/loeschen', $app->erfordert('lesen', $wtg('loeschen')));
     $router->add('POST', '/fahrzeuge/{id}/wartungsplan', $app->erfordert('lesen', $wtg('planFahrzeug')));
     $router->add('POST', '/anlagen/{id}/wartungsplan', $app->erfordert('lesen', $wtg('planAnlage')));

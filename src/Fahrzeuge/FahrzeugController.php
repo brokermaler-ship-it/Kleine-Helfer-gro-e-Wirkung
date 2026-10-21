@@ -113,7 +113,7 @@ final class FahrzeugController
             'decoderListe' => $this->decoderMitPruefung($fz),
             'dateien' => $this->dokumente->fuerObjekt('fahrzeug', (int) $fz['id']),
             'onedriveKonfiguriert' => $this->onedriveKonfiguriert,
-            'wartung' => $this->wartung?->blockDaten('fahrzeug', $fz, $this->auth->benutzer()),
+            'wartung' => $this->wartung?->blockDaten('fahrzeug', $fz, $this->auth->benutzer(), heute: new \DateTimeImmutable('today')),
         ]);
     }
 

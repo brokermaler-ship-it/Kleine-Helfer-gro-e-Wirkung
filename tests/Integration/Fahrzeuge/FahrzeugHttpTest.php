@@ -50,10 +50,16 @@ final class FahrzeugHttpTest extends DbTestCase
         return $u + ['bezeichnung' => 'BR 218', 'spurweite_id' => (string) $this->spurweite, 'gattung' => 'lok', 'stromsystem' => '2L', 'status' => 'einsatzbereit'];
     }
 
-    public function test_startseite_leitet_zur_liste(): void
+    public function test_startseite_zeigt_kacheln(): void
     {
         $this->anmelden('mitglied');
-        $this->assertSame('/fahrzeuge', $this->get('/')->headers['Location']);
+        $r = $this->get('/');
+        $this->assertSame(200, $r->status);
+        $this->assertStringContainsString('Wartung', $r->body);
+        $this->assertStringContainsString('0 überfällig', $r->body);
+        $this->assertStringContainsString('href="/wartung"', $r->body);
+        $this->assertStringContainsString('href="/fahrzeuge"', $r->body);
+        $this->assertStringContainsString('href="/anlagen"', $r->body);
     }
 
     public function test_mitglied_darf_lesen_und_anlegen_aber_fremde_nicht_aendern_oder_loeschen(): void

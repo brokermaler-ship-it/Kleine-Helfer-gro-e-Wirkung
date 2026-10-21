@@ -22,6 +22,7 @@ final class WartungDienst
         private WartungsartRepository $arten,
         private PersonRepository $personen,
         private DokumentRepository $dokumente,
+        private ?Wartungsplan $plan = null,
     ) {
     }
 
@@ -59,12 +60,14 @@ final class WartungDienst
      * @param array<string,string> $fehler
      * @param array<string,mixed> $planWerte Formularwerte „Wartungsplan anpassen“ (nach Fehlern)
      * @param array<int,string> $planFehler Meldung je Wartungsart-ID
+     * @param ?\DateTimeImmutable $heute Stichtag der Fälligkeiten (Standard: heute)
      * @return ?array<string,mixed>
      */
-    public function blockDaten(string $objektTyp, array $objekt, ?Benutzer $b, array $werte = [], array $fehler = [], array $planWerte = [], array $planFehler = []): ?array
+    public function blockDaten(string $objektTyp, array $objekt, ?Benutzer $b, array $werte = [], array $fehler = [], array $planWerte = [], array $planFehler = [], ?\DateTimeImmutable $heute = null): ?array
     {
         try {
             $id = (int) $objekt['id'];
+            $heute ??= new \DateTimeImmutable('today');
             $ausnahmen = $this->ausnahmen->fuerObjekt($objektTyp, $id);
             return [
                 'objektTyp' => $objektTyp,
@@ -72,10 +75,12 @@ final class WartungDienst
                 'wartungen' => $this->wartungen->fuerObjekt($objektTyp, $id),
                 'arten' => $this->passendeArten($objektTyp, $objekt),
                 'ausnahmen' => $ausnahmen,
+                'plan' => $this->plan?->fuerObjekt($objektTyp, $objekt, $heute) ?? [],
+                'ausgemustert' => $objektTyp === 'fahrzeug' && ($objekt['status'] ?? null) === 'ausgemustert',
                 'personen' => $this->personen->alle(true),
                 'darfEintragen' => Berechtigung::darfWartungEintragen($b, $objektTyp, $objekt),
                 'darfPlan' => Berechtigung::darfWartungsplanAendern($b, $objektTyp),
-                'werte' => $werte + ['datum' => (new \DateTimeImmutable('today'))->format('Y-m-d'), 'arten' => [], 'betriebsstunden' => '', 'ausgefuehrt_von' => $b === null ? '' : (string) $b->personId, 'notiz' => ''],
+                'werte' => $werte + ['datum' => $heute->format('Y-m-d'), 'arten' => [], 'betriebsstunden' => '', 'ausgefuehrt_von' => $b === null ? '' : (string) $b->personId, 'notiz' => ''],
                 'fehler' => $fehler,
                 'planWerte' => $planWerte,
                 'planFehler' => $planFehler,

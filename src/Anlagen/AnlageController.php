@@ -61,7 +61,7 @@ final class AnlageController
             'verlauf' => $this->protokoll->fuerObjekt('anlage', (int) $anlage['id']),
             'dateien' => $this->dokumente->fuerObjekt('anlage', (int) $anlage['id']),
             'onedriveKonfiguriert' => $this->onedriveKonfiguriert,
-            'wartung' => $this->wartung?->blockDaten('anlage', $anlage, $this->auth->benutzer()),
+            'wartung' => $this->wartung?->blockDaten('anlage', $anlage, $this->auth->benutzer(), heute: new \DateTimeImmutable('today')),
         ]);
     }
 

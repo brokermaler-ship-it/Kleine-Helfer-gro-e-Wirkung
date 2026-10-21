@@ -154,5 +154,12 @@ final class VorMigrationTest extends DbTestCase
         $r = $app->handle(new \Emc\Core\Request('GET', '/fahrzeuge/' . $fz));
         self::assertSame(200, $r->status);
         self::assertStringNotContainsString('id="tab-wartung"', $r->body);
+        // Startseite ohne Wartungs-Kachel, die Übersicht führt zum Update.
+        $start = $app->handle(new \Emc\Core\Request('GET', '/'));
+        self::assertSame(200, $start->status);
+        self::assertStringNotContainsString('Alle Fälligkeiten', $start->body);
+        $uebersicht = $app->handle(new \Emc\Core\Request('GET', '/wartung'));
+        self::assertSame(303, $uebersicht->status);
+        self::assertSame('/admin/update', $uebersicht->headers['Location']);
     }
 }

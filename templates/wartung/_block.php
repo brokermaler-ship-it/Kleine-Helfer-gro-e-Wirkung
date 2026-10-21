@@ -1,12 +1,45 @@
 <?php
 /**
- * Wartungsblock auf Fahrzeug- und Anlagenseiten: Formular „Wartung eintragen“, Verlauf, „Wartungsplan anpassen“.
+ * Wartungsblock auf Fahrzeug- und Anlagenseiten: Fälligkeiten mit Ampel, Formular „Wartung eintragen“, Verlauf, „Wartungsplan anpassen“.
  *
  * @var array<string,mixed> $block Daten aus WartungDienst::blockDaten (objektTyp, objekt, wartungen, arten, ausnahmen,
- *      personen, darfEintragen, darfPlan, werte, fehler, planWerte, planFehler)
+ *      plan, ausgemustert, personen, darfEintragen, darfPlan, werte, fehler, planWerte, planFehler)
  */
 include __DIR__ . '/_daten.php';
 ?>
+<h3 class="h6">Fälligkeiten</h3>
+<?php if ($ausgemustert): ?>
+    <p class="text-muted">Ausgemusterte Fahrzeuge werden im Wartungsplan nicht berücksichtigt.</p>
+<?php elseif ($plan === []): ?>
+    <p class="text-muted">Für dieses Objekt sind keine Wartungsarten vorgesehen.</p>
+<?php else: ?>
+    <div class="table-responsive mb-4">
+        <table class="table table-sm align-middle wartung-faelligkeiten">
+            <thead>
+            <tr>
+                <th scope="col">Wartungsart</th>
+                <th scope="col">Ampel</th>
+                <th scope="col">Intervall</th>
+                <th scope="col">Letzte Wartung</th>
+                <th scope="col">Fällig am / bei</th>
+            </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($plan as $pz): $faelligkeit = $pz['faelligkeit']; ?>
+                <tr>
+                    <td><?= e((string) $pz['art']['name']) ?></td>
+                    <td><?php include __DIR__ . '/_ampel.php'; ?></td>
+                    <td><?= e(\Emc\Wartung\WartungsartValidator::intervallText($pz['monate'], $pz['stunden'])) ?>
+                        <?php if ($pz['eigenes_intervall']): ?><span class="badge text-bg-light border">eigenes Intervall</span><?php endif; ?></td>
+                    <td><?php if ($pz['letzte'] === null): ?>–<?php else: ?><?= e(date('d.m.Y', (int) strtotime($pz['letzte']['datum']))) ?><?php if ($pz['letzte']['stundenstand'] !== null): ?> · <?= e($stundenText($pz['letzte']['stundenstand'])) ?><?php endif; ?><?php endif; ?></td>
+                    <td><?php include __DIR__ . '/_faellig.php'; ?></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+<?php endif; ?>
+
 <?php if ($darfEintragen) { include __DIR__ . '/_eintragen.php'; } ?>
 
 <h3 class="h6">Wartungsverlauf</h3>

@@ -1,7 +1,7 @@
 <?php
 /**
  * Entpackt die Daten des Wartungsblocks (WartungDienst::blockDaten) in die Variablen der Teil-Templates:
- * $objektTyp, $objekt, $wartungen, $arten, $ausnahmen, $personen, $darfEintragen, $darfPlan,
+ * $objektTyp, $objekt, $wartungen, $arten, $ausnahmen, $plan, $ausgemustert, $personen, $darfEintragen, $darfPlan,
  * $werte, $fehler, $planWerte, $planFehler.
  *
  * @var array<string,mixed> $block
@@ -11,6 +11,8 @@ $objekt = $block['objekt'];
 $wartungen = $block['wartungen'];
 $arten = $block['arten'];
 $ausnahmen = $block['ausnahmen'];
+$plan = $block['plan'] ?? [];
+$ausgemustert = (bool) ($block['ausgemustert'] ?? false);
 $personen = $block['personen'];
 $darfEintragen = (bool) $block['darfEintragen'];
 $darfPlan = (bool) $block['darfPlan'];
