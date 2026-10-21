@@ -222,7 +222,8 @@ final class App
             $c->get(Auftraege::class), // immer: Lösch-Aufträge auch, wenn OneDrive gerade nicht konfiguriert ist
             $c->get(Uebertragung::class),
             $c->get(WartungRepository::class),
-            $c->get(AusnahmeRepository::class)
+            $c->get(AusnahmeRepository::class),
+            $c->get(ReparaturRepository::class)
         ));
         $this->container->set(SpurweiteRepository::class, fn(Container $c) => new SpurweiteRepository($c->get('pdo')));
         $this->container->set(SpurweiteController::class, fn(Container $c) => new SpurweiteController(

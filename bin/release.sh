@@ -26,6 +26,20 @@ mkdir -p build/storage/sitzungen
 
 # Composer arbeitet nur im Verzeichnis build/ und fasst das Repository nicht an.
 composer install --no-dev --optimize-autoloader --prefer-dist --no-interaction --working-dir=build
+# Ohne GitHub-Zugang lädt Composer Pakete per git clone (source) statt als ZIP. Dann jedes geklonte Paket durch
+# „git archive“ seines installierten Stands ersetzen: wie beim ZIP-Download ohne .git und ohne die per export-ignore
+# ausgeschlossenen Teile (Tests, Beispiele, Doku des Pakets). Das Repository der App wird dabei nicht angefasst.
+find build/vendor -name .git -prune -print | while IFS= read -r gitordner; do
+    paket="$(dirname "$gitordner")"
+    sauber="${paket}.archiv"
+    rm -rf "$sauber"
+    mkdir -p "$sauber"
+    git -C "$paket" archive HEAD | tar -x -C "$sauber"
+    rm -rf "$paket"
+    mv "$sauber" "$paket"
+done
+# Sicherheitsnetz: keine .git-Ordner im Paket.
+find build -name .git -prune -exec rm -rf {} +
 
-(cd build && zip -qr "../${ZIEL}" . -x '.git/*')
+(cd build && zip -qr "../${ZIEL}" . -x '.git/*' '*/.git/*')
 echo "Fertig: ${ZIEL}"

@@ -1,6 +1,6 @@
 # EMC 78 Lokschuppen
 
-Webanwendung „EMC 78 Lokschuppen“ des Eisenbahn Modellbahn Clubs 78 e.V. Halle („Die Modellbahnfamilie“) zur Verwaltung des Fahrzeugbestands: Fahrzeuge, Decoder (Adressen, Funktionstasten, CVs), Fotos und Dokumente, Anlagen, Wartung mit Fälligkeits-Ampel, Personen und Benutzer. Die Anwendung läuft auf normalem PHP-Webspace und ist für PC, Tablet und Handy gedacht.
+Webanwendung „EMC 78 Lokschuppen“ des Eisenbahn Modellbahn Clubs 78 e.V. Halle („Die Modellbahnfamilie“) zur Verwaltung des Fahrzeugbestands: Fahrzeuge, Decoder (Adressen, Funktionstasten, CVs), Fotos und Dokumente, Anlagen, Wartung mit Fälligkeits-Ampel, Defektmeldungen und Reparaturen, kurze Codes mit QR-Etiketten, Personen und Benutzer. Die Anwendung läuft auf normalem PHP-Webspace und ist für PC, Tablet und Handy gedacht.
 
 ## Rollen und Rechte
 
@@ -8,9 +8,9 @@ Die Rollen bauen aufeinander auf; jede höhere Rolle darf alles, was die darunte
 
 | Rolle | Darf |
 |---|---|
-| **Mitglied** | alles lesen (Fahrzeuge, Decoder, Funktionen, CVs, Dateien, Anlagen, Wartungen und Fälligkeiten); **Wartungen an eigenen Fahrzeugen eintragen** (Eigentümer oder selbst angelegt); **eigene Fahrzeuge anlegen** (der Eigentümer ist immer das Mitglied selbst); die **selbst angelegten Fahrzeuge bearbeiten**, einschließlich Status (auch „ausgemustert“), Decoder, Funktionstasten (Formular, CSV-Import, Vorlagen), CVs sowie Fotos und Dateien dieses Fahrzeugs. Nicht erlaubt: Eigentümer ändern, Fahrzeuge löschen, Fahrzeuge anderer bearbeiten (auch nicht als Eigentümer), Personen verwalten |
-| **Fahrzeugwart** | zusätzlich **alles rund um alle Fahrzeuge, auch die privaten**: anlegen (Eigentümer frei wählbar), bearbeiten, **löschen**, Decoder, Funktionstasten, CVs sowie Fotos und Dokumente an Fahrzeugen; **Wartungen an allen Fahrzeugen** eintragen und löschen, den Wartungsplan der Fahrzeuge anpassen und die **Wartungsarten** pflegen (Verwaltung → Wartungsarten). Nicht erlaubt: Personen, Benutzer, Stammdaten und Betrieb (Sicherung, Update, OneDrive); eine Datei, die mehreren Objekten zugeordnet ist, löscht nur ein Bearbeiter |
-| **Bearbeiter** | zusätzlich Personen verwalten, **alle** Dateien (auch geteilte) löschen, **Anlagen** anlegen, bearbeiten und löschen sowie Wartungen und Wartungsplan der Anlagen |
+| **Mitglied** | alles lesen (Fahrzeuge, Decoder, Funktionen, CVs, Dateien, Anlagen, Wartungen und Fälligkeiten, Reparaturen); **Defekte melden** an jedem Fahrzeug und jeder Anlage; **Wartungen eintragen und Reparaturen bearbeiten an eigenen Fahrzeugen** (Eigentümer oder selbst angelegt); **eigene Fahrzeuge anlegen** (der Eigentümer ist immer das Mitglied selbst); die **selbst angelegten Fahrzeuge bearbeiten**, einschließlich Status (auch „ausgemustert“), Decoder, Funktionstasten (Formular, CSV-Import, Vorlagen), CVs sowie Fotos und Dateien dieses Fahrzeugs. Nicht erlaubt: Eigentümer ändern, Fahrzeuge löschen, Fahrzeuge anderer bearbeiten (auch nicht als Eigentümer), Personen verwalten |
+| **Fahrzeugwart** | zusätzlich **alles rund um alle Fahrzeuge, auch die privaten**: anlegen (Eigentümer frei wählbar), bearbeiten, **löschen**, Decoder, Funktionstasten, CVs sowie Fotos und Dokumente an Fahrzeugen; **Wartungen an allen Fahrzeugen** eintragen und löschen, den Wartungsplan der Fahrzeuge anpassen und die **Wartungsarten** pflegen (Verwaltung → Wartungsarten); **Reparaturen an allen Fahrzeugen** bearbeiten, sieht den Hinweis auf neue Defektmeldungen an Fahrzeugen; **Etiketten drucken** (Verwaltung → Etiketten). Nicht erlaubt: Personen, Benutzer, Stammdaten und Betrieb (Sicherung, Update, OneDrive); eine Datei, die mehreren Objekten zugeordnet ist, löscht nur ein Bearbeiter |
+| **Bearbeiter** | zusätzlich Personen verwalten, **alle** Dateien (auch geteilte) löschen, **Anlagen** anlegen, bearbeiten und löschen sowie Wartungen, Wartungsplan und **Reparaturen der Anlagen** (mit Hinweis auf neue Defektmeldungen an Anlagen) |
 | **Administrator** | zusätzlich Benutzer und Rollen, Stammdaten (Spurweiten), Datensicherung, Update und OneDrive-Anbindung |
 
 Jedes Fahrzeug merkt sich, wer es angelegt hat. Fahrzeuge, die schon vor Version 0.2.0 vorhanden waren, gelten als von einem Bearbeiter angelegt; Mitglieder können sie nicht ändern. Alle Rechte werden auf dem Server für jedes einzelne Fahrzeug geprüft, nicht nur durch ausgeblendete Schaltflächen. Eine Datei, die mehreren Objekten zugeordnet ist, kann nur ein Bearbeiter löschen. Ausgemusterte Fahrzeuge stehen auf dem **Abstellgleis** (siehe dort); sie verschwinden aus „Meine Fahrzeuge“ und der Fahrzeugliste. Gespeicherte Funktionsvorlagen sind für alle sichtbar.
@@ -24,6 +24,8 @@ Version 0.3.1 verbessert die OneDrive-Ablage: Jede übertragene Datei merkt sich
 Version 0.4.0 bringt die Rolle **Fahrzeugwart**, die **Löschung einer Person nach DSGVO** (siehe „Person nach DSGVO löschen“) und das **Abstellgleis** für ausgemusterte Fahrzeuge (siehe „Abstellgleis“). Beim Update auf 0.4.0 unter **Verwaltung → Update** einmal „Datenbank jetzt aktualisieren“ wählen; dabei laufen die Migrationen `008_rolle_fahrzeugwart` und `009_abstellgleis`. Bestehende Zugänge behalten ihre Rolle; bereits ausgemusterte Fahrzeuge bekommen als Abstelldatum den Tag ihrer letzten Änderung. Wer von 0.3.x oder älter kommt, bekommt alle fehlenden Migrationen (bis 009) in einem Schritt.
 
 Version 0.5.0 bringt **„Kennwort vergessen?“** auf der Anmeldeseite (siehe „Kennwort vergessen“), eine einfache **Anlagenliste** (siehe „Anlagen“), die **Wartung** mit Wartungsarten, Wartungsplan, Wartungsprotokoll und Fälligkeits-Ampel (siehe „Wartung“) und eine neue **Startseite** mit der Kachel „Wartung“. Beim Update auf 0.5.0 unter **Verwaltung → Update** einmal „Datenbank jetzt aktualisieren“ wählen; dabei laufen die Migrationen `010_kennwort_vergessen`, `011_anlage`, `012_wartungsart` (legt acht Wartungsarten als Startbestand an) und `013_wartung`. Vorhandene Daten bleiben unverändert. Wer von 0.4.0 oder älter kommt, bekommt alle fehlenden Migrationen (bis 013) in einem Schritt. Der E-Mail-Versand ist freiwillig: Ohne die neuen `mail_*`-Einträge in der `config.php` landen Anfragen bei den Administratoren.
+
+Version 0.6.0 bringt **„Defekt melden“** am Handy (siehe „Defekt melden“), **Reparaturen** mit Ersatzteilen, Kosten und automatischem Fahrzeug- bzw. Anlagenstatus (siehe „Reparaturen“), den Hinweis „neue Defektmeldungen“ und die Kachel „Offene Defekte“, kurze **Codes** `F12`/`A3` mit dem Feld „Code“ in der Kopfzeile und dem Kurzlink `/c/<Code>` (siehe „Codes“) sowie **Etiketten** zum Drucken (siehe „Etiketten“). Beim Update auf 0.6.0 zuerst **alle Dateien** hochladen (auch den Ordner `vendor/` – er enthält die neue Bibliothek für die QR-Codes), dann unter **Verwaltung → Update** einmal „Datenbank jetzt aktualisieren“ wählen; dabei laufen die Migrationen `014_reparatur` (Reparaturen, Ersatzteile, „gesehen“-Vermerke, Kennzeichen „Status automatisch“ an Fahrzeugen und Anlagen) und `015_etikett` („Etikett gedruckt am“). Vorhandene Daten bleiben unverändert; alle vorhandenen Status gelten als von Hand gesetzt, und alle Fahrzeuge und Anlagen stehen bei den Etiketten unter „noch nicht gedruckt“. Wer von 0.5.0 oder älter kommt, bekommt alle fehlenden Migrationen (bis 015) in einem Schritt. Für die QR-Codes auf den Anlagen-Etiketten in der `config.php` `oeffentliche_url` setzen (siehe „Etiketten“).
 
 ## Voraussetzungen
 
@@ -124,13 +126,67 @@ Monate werden auf das Monatsende begrenzt (letzte Wartung am 31.08. + 6 Monate �
 
 ## Startseite
 
-Nach der Anmeldung erscheint die **Startseite** mit der Kachel **„Wartung“**: Anzahl „überfällig“, „bald fällig“ und „noch nie erfasst“, die fünf dringendsten Fälligkeiten mit Link aufs Objekt und „Alle Fälligkeiten“. Daneben führen Schnellzugriffe zu den Fahrzeugen und Anlagen.
+Nach der Anmeldung erscheint die **Startseite** mit der Kachel **„Offene Defekte“** (Anzahl offen und dringend, die fünf wichtigsten Meldungen, dringende zuerst, und „Alle Reparaturen“) und der Kachel **„Wartung“**: Anzahl „überfällig“, „bald fällig“ und „noch nie erfasst“, die fünf dringendsten Fälligkeiten mit Link aufs Objekt und „Alle Fälligkeiten“. Daneben führen Schnellzugriffe zu den Fahrzeugen, den Anlagen und zu „Defekt melden“.
 
 ## Abstellgleis
 
 Ausgemusterte Fahrzeuge stehen auf dem **Abstellgleis** (Menü **Fahrzeuge → Abstellgleis**, dort mit Anzahl). Sie bleiben mit Decodern, Funktionen, CVs, Fotos und Dokumenten erhalten, erscheinen aber nicht mehr in der Fahrzeugliste und in „Meine Fahrzeuge“ und zählen bei der Adressprüfung nicht mit: Ihre Decoder-Adressen sind frei für andere Fahrzeuge. Die Seite zeigt je Fahrzeug, seit wann es abgestellt ist, und lässt sich wie die Fahrzeugliste nach Spurweite, Gattung und Eigentum filtern. Die Textsuche der Fahrzeugliste findet ausgemusterte Fahrzeuge trotzdem (z. B. über die Inventarnummer); sie sind dort als „Abstellgleis“ gekennzeichnet.
 
 Auf der Seite eines Fahrzeugs stellt **„Aufs Abstellgleis“** es ab (Status „ausgemustert“, Datum heute), **„Zurück in Betrieb“** holt es wieder zurück (Status „einsatzbereit“). Beides darf, wer das Fahrzeug auch bearbeiten darf: ein Mitglied an selbst angelegten Fahrzeugen, Fahrzeugwart und höher an allen. Wird der Status im Bearbeiten-Formular auf „ausgemustert“ gesetzt oder davon weg geändert, wird das Datum genauso gesetzt bzw. entfernt. Beide Aktionen stehen im Verlauf des Fahrzeugs.
+
+## Defekt melden
+
+Jedes Mitglied kann einen Defekt melden, am besten direkt am Handy:
+
+1. Objekt wählen: im Menü **„Defekt melden“** (bzw. auf der Startseite im Schnellzugriff) den **Code** eingeben (z. B. `F12`, `A3`, die Digitaladresse oder einen Teil der Bezeichnung), den **QR-Code an der Anlage** scannen und dort „Defekt melden“ wählen, oder auf der Seite eines Fahrzeugs bzw. einer Anlage auf **„Defekt melden“** tippen.
+2. **Was ist los?** beschreiben (Pflicht); bei Anlagen zusätzlich **„Wo/Bauteil“** (z. B. „W12 Antrieb brummt“).
+3. Einstufen: **„fährt nicht mehr“** (= dringend) oder **„fährt, aber …“** (= normal), optional Fotos direkt aus der Kamera. Fotos werden vor dem Hochladen im Browser verkleinert (längste Seite 2000 Pixel); ohne JavaScript gilt die Upload-Grenze des Webspace.
+4. **Absenden.** Die Meldung bekommt den Status „gemeldet“; unter **„Meine Meldungen“** sieht jede und jeder die eigenen Meldungen mit dem aktuellen Stand.
+
+Es werden keine E-Mails verschickt. Fahrzeugwarte (Fahrzeuge), Bearbeiter (Anlagen) und Administratoren (beides) sehen oben auf jeder Seite **„N neue Defektmeldungen“** und eine Zahl am Menüpunkt „Reparaturen“. Eine Meldung ist nicht mehr neu, sobald jemand mit diesen Rechten sie geöffnet hat oder ihr Status nicht mehr „gemeldet“ ist; die eigene Meldung zählt dabei nicht (wer selbst meldet, sieht sie nicht als neu, und das Öffnen der eigenen Meldung nimmt sie den anderen nicht weg). Wird ein Konto gelöscht, das eine Meldung als einziges geöffnet hatte, gilt sie wieder als neu, solange sie noch „gemeldet“ ist. Die Startseite zeigt allen die Kachel **„Offene Defekte“** (dringende zuerst).
+
+## Reparaturen
+
+Aus jeder Meldung wird eine **Reparatur**; sie steht auf der Seite des Fahrzeugs (Tab „Reparaturen“) bzw. der Anlage und unter **Reparaturen** (Hauptmenü, mit Filtern nach Status, Objekt und zuständig). Bearbeiten dürfen Fahrzeugwarte an allen Fahrzeugen, Bearbeiter an Anlagen und Mitglieder an eigenen Fahrzeugen (Eigentümer oder selbst angelegt).
+
+- **Status:** gemeldet → geplant → in Arbeit → wartet auf Teile → erledigt, außerdem „verworfen“. **Priorität** dringend, normal oder niedrig; dazu zuständig (Person), geplanter Termin, Notizen, Fotos und beim Erledigen „Was wurde gemacht“.
+- **Ersatzteile** mit Bezeichnung, Artikelnummer, Bezugsquelle, Kosten (z. B. `12,50` oder `12.50`, höchstens zwei Nachkommastellen, keine Tausenderpunkte) und „bestellt“; **Kosten gesamt** ist die Summe.
+- **Verwerfen statt Löschen:** Reparaturen lassen sich nicht löschen, nur verwerfen (z. B. Fehlmeldung). Sie verschwinden nur mit dem Fahrzeug bzw. der Anlage selbst oder bei der DSGVO-Löschung eigener Fahrzeuge.
+- Speichern zwei Personen gleichzeitig, bekommt die zweite einen Hinweis und ihre Eingaben bleiben im Formular stehen.
+
+**Automatischer Status:** Eine offene, **dringende** Reparatur setzt das Fahrzeug auf **„defekt“** (Anlage „defekt“), eine Reparatur **„in Arbeit“** auf **„in Wartung“** (Anlage „in Arbeit“); „defekt“ hat Vorrang. Ist die letzte offene Reparatur erledigt oder verworfen (oder die dringende herabgestuft), kommt das Objekt zurück auf „einsatzbereit“ bzw. „in Ordnung“ – **aber nur, wenn der Status zuletzt automatisch gesetzt wurde.** Grenzen, die man kennen sollte:
+
+- „ausgeliehen“ und „ausgemustert“ werden nie automatisch geändert.
+- Wer einen automatisch gesetzten Status **von Hand** ändert (z. B. zurück auf „einsatzbereit“), behält ihn – bis zum nächsten Speichern einer Reparatur an diesem Objekt: Ist dann noch eine dringende Reparatur offen, steht es wieder auf „defekt“. Wer das nicht möchte, stuft die Reparatur herab oder schließt sie ab.
+- Ein von Hand gesetztes **„in Wartung“** (z. B. für eine geplante Wartung) bleibt bei einer Reparatur „in Arbeit“ von Hand stehen. Kommt aber eine dringende Meldung dazu, wird daraus automatisch „defekt“ und nach dem Erledigen „einsatzbereit“ – das frühere „in Wartung“ merkt sich die App nicht. Umgekehrt wird ein von Hand gesetztes „defekt“ automatisch zu „in Wartung“, wenn nur noch eine Reparatur „in Arbeit“ offen ist. Im Zweifel den Status nach dem Erledigen kurz prüfen.
+- Ein Fahrzeug, das mit offener dringender Reparatur vom Abstellgleis zurückgeholt wird, steht sofort wieder auf „defekt“.
+
+Jede automatische Änderung steht im Verlauf des Objekts mit dem Zusatz „(automatisch durch Reparatur)“.
+
+## Codes
+
+Jedes Fahrzeug mit einer Inventarnummer `EMC-<Zahl>` hat den Code **`F<Zahl>`** (ohne führende Nullen: `EMC-0012` → `F12`), jede Anlage den Code **`A<n>`**. Andere Inventarnummern haben keinen Code; die Fahrzeuge findet man über die Suche.
+
+Das Feld **„Code“** steht in der Kopfzeile jeder Seite, auch am Handy:
+
+- `F12` bzw. `A3` öffnet das Objekt direkt (Groß-/Kleinschreibung und Leerzeichen egal, `f 012` geht auch). Ausgemusterte Fahrzeuge werden gefunden und als „Abstellgleis“ gekennzeichnet.
+- Eine **reine Zahl** wird als **Digitaladresse** gesucht: ein Treffer öffnet das Fahrzeug, mehrere zeigen eine Auswahl mit Foto, Spurweite und Bezeichnung. So findet man z. B. Spur-N-Loks, bei denen das Klebchen auf der Verpackung sitzt.
+- Alles andere wird als Suche über Bezeichnung, Baureihe und Inventarnummer behandelt.
+
+**Kurzlink:** `<Adresse der App>/c/<Code>`, z. B. `https://mitglieder.emc78.de/c/A3`. Ohne Anmeldung kommt zuerst die Anmeldeseite, danach direkt das Objekt. Die QR-Codes auf den Anlagen-Etiketten enthalten genau diesen Kurzlink.
+
+## Etiketten
+
+Unter **Verwaltung → Etiketten** (ab Fahrzeugwart, auch über „Etikett drucken“ auf der Seite eines Fahrzeugs bzw. einer Anlage) entstehen Druckseiten für Etikettenbögen, gedruckt direkt aus dem Browser:
+
+- **Fahrzeug-Klebchen:** nur der Code (z. B. `F12`, fett, etwa 3 mm hoch), Bogen 25,4 × 10 mm, 189 Etiketten je A4-Bogen (z. B. Avery Zweckform **L4731**). Variante **Verpackung** auf demselben Bogen mit Code und Bezeichnung (für Spur N gedacht: Klebchen auf die Verpackung, die Lok selbst findet man über die Digitaladresse).
+- **Anlagen-Etikett:** 70 × 37 mm, 24 je A4-Bogen (randlos) mit QR-Code (Kurzlink), Name und Code `A3`.
+- **Auswahl:** einzeln, alle einer Spurweite, alle Loks und Triebwagen oder **„noch nicht gedruckt“** (ohne ausgemusterte Fahrzeuge; die gibt es nur einzeln). **Startposition** auf dem Bogen frei wählbar (für angebrochene Bögen); was nicht mehr passt, kommt auf weitere Bögen.
+- **Drucken:** im Druckdialog **„Tatsächliche Größe“ bzw. 100 %** und Ränder „Keine“ wählen, nicht „An Seite anpassen“. Bei einem neuen Bogen oder Drucker **zuerst einen Probedruck auf Normalpapier** machen und gegen den Bogen halten. Viele Drucker bedrucken die äußeren 3–5 mm nicht; bei den randlosen Anlagen-Etiketten liegt der QR-Code deshalb mit Abstand zum Rand.
+- Nach dem Drucken **„Als gedruckt vermerken“** klicken; erst das nimmt die Etiketten aus „noch nicht gedruckt“ (das bloße Anzeigen der Druckseite nicht).
+- **QR-Codes:** Sie enthalten `<oeffentliche_url><basis_url>/c/<Code>`. Dafür in der `config.php` **`oeffentliche_url`** setzen (z. B. `'https://mitglieder.emc78.de'`); fehlt sie, nimmt die App die Adresse der aktuellen Anfrage und weist auf der Seite darauf hin.
+
+Die QR-Codes erzeugt der Server als SVG mit der Bibliothek [`chillerlan/php-qrcode`](https://github.com/chillerlan/php-qrcode) (Lizenz MIT oder Apache-2.0, dazu `chillerlan/php-settings-container`, MIT). Beide sind im Release-ZIP im Ordner `vendor/` enthalten; auf dem Webspace ist kein Composer nötig.
 
 ## Testumgebung test.emc78.de
 
@@ -145,7 +201,7 @@ Neuerungen und Beispieldaten lassen sich gefahrlos auf einer eigenen Testinstanz
    - im Browser als Administrator unter **Verwaltung → Testdaten** mit „Beispieldaten neu laden“ oder
    - per SSH (falls das STRATO-Paket SSH bietet) im Verzeichnis `/test/`: `php bin/demo-daten.php --zuruecksetzen`
 
-   Beides **löscht alle vorhandenen Daten der Testinstanz** und legt neu an: 7 erfundene Personen, 12 Fahrzeuge in H0 und N (Verein und Mitglieder, ein ausgemustertes), Decoder mit Funktionstasten und CVs, Beispielfotos, absichtlich **eine doppelte DCC-Adresse in H0**, an der man die Warnung der Adressprüfung sieht, die Anlage **A1 „Clubanlage H0“** und einige Wartungen (eine überfällige, eine bald fällige, eine in Ordnung; der Rest „noch nie erfasst“). Die Wartungsarten der Testinstanz bleiben dabei erhalten. Nach dem Laden im Browser wird man abgemeldet.
+   Beides **löscht alle vorhandenen Daten der Testinstanz** und legt neu an: 7 erfundene Personen, 12 Fahrzeuge in H0 und N (Verein und Mitglieder, ein ausgemustertes), Decoder mit Funktionstasten und CVs, Beispielfotos, absichtlich **eine doppelte DCC-Adresse in H0**, an der man die Warnung der Adressprüfung sieht, die Anlage **A1 „Clubanlage H0“**, einige Wartungen (eine überfällige, eine bald fällige, eine in Ordnung; der Rest „noch nie erfasst“) und drei Reparaturen: eine dringende Meldung an der BR 01 (die Lok steht dadurch automatisch auf „defekt“), „W12 Antrieb brummt“ an der Anlage in Arbeit (Anlage „in Arbeit“) und eine erledigte Reparatur an der V 200 mit zwei Ersatzteilen. Vier Fahrzeuge gelten als schon beschriftet, die übrigen stehen bei den Etiketten unter „noch nicht gedruckt“. Die Wartungsarten der Testinstanz bleiben dabei erhalten. Nach dem Laden im Browser wird man abgemeldet.
 7. Als Mitglied (Carla) kannst du die E 94 279 und den Eilzugwagen Bymb 421 bearbeiten – die hat Carla selbst angelegt; andere Fahrzeuge siehst du nur.
 8. Anmelden mit `bearbeiter@test.emc78.de`, `fahrzeugwart@test.emc78.de` (Greta Wagner) oder `mitglied@test.emc78.de` (Passwort `Test-EMC78!`) oder als Administrator mit `admin@test.emc78.de` und dem Passwort aus `testumgebung_admin_passwort`. Den Admin-Zugang erfahren Tester beim Vorstand; er steht bewusst nicht auf der Anmeldeseite.
 
@@ -222,8 +278,9 @@ Eine Sicherung des Echtbetriebs **nie in die Testinstanz** einspielen, solange d
 Verlangt ein Mitglied die Löschung seiner Daten, öffnet ein **Administrator** die Person unter **Personen → Bearbeiten** und wählt **„Person endgültig löschen (DSGVO)“**. Die Vorschau zeigt, was passiert:
 
 - Die Person (Name, E-Mail, Telefon, Notiz) und ihr Benutzerkonto werden gelöscht, ebenso ihre Anmeldeversuche (außer bei einer E-Mail-Adresse, die auch eine andere Person nutzt).
-- **Eigene Fahrzeuge** der Person werden samt Fotos und Dokumenten (Webspace und OneDrive), Decodern, Funktionstasten, CVs, **Wartungen (mit Fotos) und Wartungsplan-Ausnahmen** mitgelöscht. Fahrzeuge, die in der Vorschau mit **„an den Verein übergeben“** angehakt werden, bleiben samt Wartungen erhalten; Eigentümer wird der Verein.
-- Bezüge in Vereinsdaten (z. B. „angelegt von“, „hochgeladen von“, bei Wartungen „ausgeführt von“ und „eingetragen von“) werden entfernt und als „ehemaliges Mitglied“ angezeigt. Wartungen an Vereinsfahrzeugen, fremden Fahrzeugen und Anlagen bleiben erhalten; die Vorschau nennt ihre Zahl.
+- **Eigene Fahrzeuge** der Person werden samt Fotos und Dokumenten (Webspace und OneDrive), Decodern, Funktionstasten, CVs, **Wartungen (mit Fotos), Wartungsplan-Ausnahmen und Reparaturen (mit Ersatzteilen und Fotos)** mitgelöscht. Fahrzeuge, die in der Vorschau mit **„an den Verein übergeben“** angehakt werden, bleiben samt Wartungen und Reparaturen erhalten; Eigentümer wird der Verein. Die Vorschau nennt je Fahrzeug die Zahl der Dokumente, Wartungen und Reparaturen.
+- Bezüge in Vereinsdaten (z. B. „angelegt von“, „hochgeladen von“, bei Wartungen „ausgeführt von“ und „eingetragen von“, bei Reparaturen „gemeldet von“ und „zuständig“) werden entfernt und als „ehemaliges Mitglied“ angezeigt (bei „zuständig“ bleibt das Feld danach leer). Wartungen und Reparaturen an Vereinsfahrzeugen, fremden Fahrzeugen und Anlagen bleiben erhalten; die Vorschau nennt ihre Zahl. Die „gesehen“-Vermerke des Kontos verschwinden mit ihm.
+- Speichert gerade jemand eine Reparatur an einem Fahrzeug der Person, wartet die Löschung kurz darauf und löscht die Reparatur dann mit.
 - „Kennwort vergessen“: Links und Anfragen der Person verschwinden mit dem Konto, ihre gezählten Anfragen ebenfalls.
 - Im Änderungsprotokoll verschwinden die Einträge zur Person und zu ihren Zugängen; in allen übrigen Einträgen werden Name, E-Mail und Telefon (auch frühere Werte) durch „ehemaliges Mitglied“ ersetzt (außer einer E-Mail-Adresse, die auch eine andere Person nutzt, z. B. eine Familienadresse). Übrig bleibt genau ein Nachweis „Person Nr. N nach DSGVO gelöscht“ mit dem ausführenden Administrator.
 
@@ -231,7 +288,7 @@ Zur Bestätigung den **Nachnamen** eingeben. Der Datenbankteil läuft ganz oder 
 
 **Von Hand prüfen** (die Löschung kann das nicht):
 
-- Freitexte in den Daten selbst (Notizen an Fahrzeugen, Decoder- und CV-Felder, Dateititel) werden nicht durchsucht.
+- Freitexte in den Daten selbst (Notizen an Fahrzeugen, Decoder- und CV-Felder, Dateititel, Beschreibung, Notizen und „Was wurde gemacht“ bei Reparaturen, Wartungsnotizen) werden nicht durchsucht.
 - An den Verein übergebene Fahrzeuge behalten alle Dokumente. **Rechnungen** mit Name oder Adresse vorher löschen.
 - Telefonnummern werden nur in der gespeicherten Schreibweise ersetzt.
 - Läuft die OneDrive-Verbindung über das persönliche Microsoft-Konto der Person, unter **Verwaltung → OneDrive** mit dem Vereinskonto neu verbinden.
@@ -382,6 +439,6 @@ Umgebungsvariablen für die Tests: `TEST_DB_DSN` (Standard `mysql:host=127.0.0.1
 bash bin/release.sh
 ```
 
-Das Skript baut aus dem aktuellen Stand von `HEAD` (nur eingecheckte Dateien) im Ordner `build/` ein Paket ohne Tests (nur die Beispielfotos der Testumgebung liegen bei) und Entwicklungsdateien, installiert die Produktions-Abhängigkeiten und erzeugt `dist/emc78-verwaltung-<Version>.zip`. Die Version steht in der Datei `VERSION`.
+Das Skript baut aus dem aktuellen Stand von `HEAD` (nur eingecheckte Dateien) im Ordner `build/` ein Paket ohne Tests (nur die Beispielfotos der Testumgebung liegen bei) und Entwicklungsdateien, installiert die Produktions-Abhängigkeiten (derzeit nur `chillerlan/php-qrcode` mit `chillerlan/php-settings-container`; `.git`-Ordner, die Composer beim Installieren aus den Quellen anlegt, werden entfernt) und erzeugt `dist/emc78-verwaltung-<Version>.zip`. Die Version steht in der Datei `VERSION`.
 
 Die App-Symbole (`public/assets/icons/`, aus dem Vereinslogo) und die Beispielfotos (`tests/fixtures/demo/`, Platzhalter) sind mit `php bin/erzeuge-bilder.php` erzeugt und eingecheckt; das Skript muss nur laufen, wenn sich das Aussehen ändern soll.

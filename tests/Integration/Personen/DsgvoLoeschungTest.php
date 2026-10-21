@@ -12,6 +12,7 @@ use Emc\Fahrzeuge\FahrzeugRepository;
 use Emc\OneDrive\Auftraege;
 use Emc\Personen\DsgvoLoeschung;
 use Emc\Protokoll\Aenderungsprotokoll;
+use Emc\Reparatur\ReparaturRepository;
 use Emc\Tests\Integration\Dateien\UploadServiceTest;
 use Emc\Tests\Integration\DbTestCase;
 use Emc\Wartung\AusnahmeRepository;
@@ -110,6 +111,24 @@ final class DsgvoLoeschungTest extends DbTestCase
         return $id;
     }
 
+    /**
+     * Reparatur an einem Objekt (gemeldet vom Konto, zuständig die Person), mit einem Ersatzteil, optional einem Foto
+     * (nur dieser Reparatur zugeordnet) und einer Gesehen-Zeile des Admins.
+     */
+    private function reparatur(string $typ, int $objektId, ?int $benutzerId, ?int $personId, ?string $foto = null): int
+    {
+        $id = (new ReparaturRepository($this->pdo))->anlegen($typ, $objektId, ['beschreibung' => 'Motor brummt', 'prioritaet' => 'dringend'], $benutzerId);
+        $this->pdo->prepare('UPDATE reparatur SET zustaendig_person_id = ? WHERE id = ?')->execute([$personId, $id]);
+        $this->pdo->prepare("INSERT INTO ersatzteil (reparatur_id, bezeichnung, kosten) VALUES (?, 'Haftreifen', 4.90)")->execute([$id]);
+        $this->pdo->prepare('INSERT INTO reparatur_gesehen (benutzer_id, reparatur_id, gesehen_am) VALUES (?, ?, NOW())')->execute([$this->admin, $id]);
+        $this->protokoll->schreibe($this->admin, 'reparatur', $id, 'angelegt', ['beschreibung' => ['alt' => null, 'neu' => 'Motor brummt']]);
+        if ($foto !== null) {
+            $dok = $this->dokument($foto, []);
+            $this->dokumente->zuordnen($dok, 'reparatur', $id);
+        }
+        return $id;
+    }
+
     private function dateienDa(string $name): bool
     {
         foreach (['', '.anzeige.jpg', '.vorschau.jpg'] as $endung) {
@@ -161,8 +180,8 @@ final class DsgvoLoeschungTest extends DbTestCase
         $this->assertSame('carla@verein.de', $v['benutzer']['email']);
         $this->assertArrayNotHasKey('passwort_hash', $v['benutzer']);
         $this->assertSame([
-            ['id' => $s['fz1'], 'inventarnummer' => 'EMC-0001', 'bezeichnung' => 'Lok EMC-0001', 'dokumente' => 1, 'rechnungen' => 0, 'wartungen' => 0],
-            ['id' => $s['fz2'], 'inventarnummer' => 'EMC-0002', 'bezeichnung' => 'Lok EMC-0002', 'dokumente' => 1, 'rechnungen' => 0, 'wartungen' => 0],
+            ['id' => $s['fz1'], 'inventarnummer' => 'EMC-0001', 'bezeichnung' => 'Lok EMC-0001', 'dokumente' => 1, 'rechnungen' => 0, 'wartungen' => 0, 'reparaturen' => 0],
+            ['id' => $s['fz2'], 'inventarnummer' => 'EMC-0002', 'bezeichnung' => 'Lok EMC-0002', 'dokumente' => 1, 'rechnungen' => 0, 'wartungen' => 0, 'reparaturen' => 0],
         ], $v['fahrzeuge']);
         $this->assertFalse($v['onedrive_konto_der_person']);
         $this->assertSame(1, $v['protokolleintraege']);
@@ -424,6 +443,8 @@ final class DsgvoLoeschungTest extends DbTestCase
         $this->protokoll->schreibe($s['konto'], 'person', $s['person'], 'angelegt', ['nachname' => ['alt' => null, 'neu' => 'Beispiel']]);
         $wartung = $this->wartung('fahrzeug', $s['fz2'], $s['person'], $s['konto'], 'rollback-wartung.jpg');
         (new AusnahmeRepository($this->pdo))->speichere('fahrzeug', $s['fz2'], $this->zaehle("SELECT id FROM wartungsart WHERE name = 'Kupplungen prüfen'"), 'aus', null, null);
+        $reparatur = $this->reparatur('fahrzeug', $s['fz2'], $s['konto'], $s['person'], 'rollback-reparatur.jpg');
+        $vereinsReparatur = $this->reparatur('fahrzeug', $this->fahrzeug('EMC-0010', null), $s['konto'], $s['person']);
         $vorher = $this->zaehle('SELECT COUNT(*) FROM aenderungsprotokoll');
         // Scheitert im letzten Schritt (Person löschen) – alles davor muss zurückgerollt werden.
         $this->pdo->exec("CREATE TRIGGER test_person_sperre BEFORE DELETE ON person FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'gesperrt'");
@@ -456,6 +477,14 @@ final class DsgvoLoeschungTest extends DbTestCase
         $this->assertSame(1, $this->zaehle("SELECT COUNT(*) FROM dokument_zuordnung WHERE objekt_typ = 'wartung' AND objekt_id = ?", [$wartung]));
         $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM wartungsplan_ausnahme'));
         $this->assertTrue($this->dateienDa('rollback-wartung.jpg'));
+        // Reparaturen samt Ersatzteilen, Gesehen-Zeilen, Fotos und Bezügen unverändert.
+        foreach ([$reparatur, $vereinsReparatur] as $r) {
+            $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM reparatur WHERE id = ? AND gemeldet_von_benutzer_id = ? AND zustaendig_person_id = ?', [$r, $s['konto'], $s['person']]));
+            $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM ersatzteil WHERE reparatur_id = ?', [$r]));
+            $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM reparatur_gesehen WHERE reparatur_id = ?', [$r]));
+        }
+        $this->assertSame(1, $this->zaehle("SELECT COUNT(*) FROM dokument_zuordnung WHERE objekt_typ = 'reparatur' AND objekt_id = ?", [$reparatur]));
+        $this->assertTrue($this->dateienDa('rollback-reparatur.jpg'));
     }
 
     public function test_eigene_person_und_letzter_admin_verweigert(): void
@@ -635,5 +664,156 @@ final class DsgvoLoeschungTest extends DbTestCase
         $this->assertStringNotContainsString('carla@privat.de', $notiz);
         // Das frühere Konto 77 der Person verschwindet trotzdem aus dem Protokoll.
         $this->assertSame(0, $this->zaehle("SELECT COUNT(*) FROM aenderungsprotokoll WHERE objekt_typ = 'benutzer' AND objekt_id = 77"));
+    }
+
+    public function test_eigene_fahrzeuge_mit_reparaturen_geloescht(): void
+    {
+        $s = $this->szenario();
+        $r1 = $this->reparatur('fahrzeug', $s['fz1'], $s['konto'], $s['person'], 'reparatur.jpg');
+        $r2 = $this->reparatur('fahrzeug', $s['fz2'], null, null);
+        // Foto, das auch an einem Vereinsfahrzeug hängt: verliert nur die Zuordnung zur Reparatur.
+        $verein = $this->fahrzeug('EMC-0010', null);
+        $geteilt = $this->dokument('geteilt.jpg', [$verein]);
+        $this->dokumente->zuordnen($geteilt, 'reparatur', $r2);
+        $this->assertTrue($this->dateienDa('reparatur.jpg'));
+
+        $this->dienst->loesche($s['person'], [], $this->admin);
+
+        $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM reparatur'));
+        $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM ersatzteil'));
+        $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM reparatur_gesehen'));
+        $this->assertSame(0, $this->zaehle("SELECT COUNT(*) FROM dokument_zuordnung WHERE objekt_typ = 'reparatur'"));
+        $this->assertTrue($this->dateienWeg('reparatur.jpg'));
+        $this->assertTrue($this->dateienDa('geteilt.jpg'));
+        $this->assertNotNull($this->dokumente->finde($geteilt));
+        $this->assertSame(0, $this->zaehle("SELECT COUNT(*) FROM aenderungsprotokoll WHERE objekt_typ = 'reparatur' AND objekt_id IN (?, ?)", [$r1, $r2]));
+    }
+
+    public function test_reparatur_am_vereinsfahrzeug_bleibt_bezuege_geleert(): void
+    {
+        $s = $this->szenario();
+        $verein = $this->fahrzeug('EMC-0010', null);
+        $this->pdo->exec("INSERT INTO anlage (nummer, name, spurweite_id) SELECT 1, 'Clubanlage', id FROM spurweite ORDER BY id LIMIT 1");
+        $anlage = (int) $this->pdo->lastInsertId();
+        $r1 = $this->reparatur('fahrzeug', $verein, $s['konto'], $s['person'], 'verein-reparatur.jpg');
+        $r2 = $this->reparatur('anlage', $anlage, $s['konto'], $s['person']);
+        $this->pdo->prepare('INSERT INTO reparatur_gesehen (benutzer_id, reparatur_id, gesehen_am) VALUES (?, ?, NOW())')->execute([$s['konto'], $r1]);
+
+        $this->dienst->loesche($s['person'], [], $this->admin);
+
+        foreach ([$r1, $r2] as $r) {
+            $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM reparatur WHERE id = ? AND gemeldet_von_benutzer_id IS NULL AND zustaendig_person_id IS NULL', [$r]));
+            $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM ersatzteil WHERE reparatur_id = ?', [$r]));
+        }
+        // Gesehen-Zeile des gelöschten Kontos weg, die des Admins bleibt.
+        $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM reparatur_gesehen WHERE benutzer_id = ?', [$s['konto']]));
+        $this->assertSame(2, $this->zaehle('SELECT COUNT(*) FROM reparatur_gesehen WHERE benutzer_id = ?', [$this->admin]));
+        $this->assertTrue($this->dateienDa('verein-reparatur.jpg'));
+
+        // Detailseite: „ehemaliges Mitglied“ bei gemeldet von und zuständig.
+        $sitzung = [];
+        $this->sitzungAnmelden($sitzung, $this->admin);
+        $body = App::erzeuge(self::testConfig(), new Session($sitzung))->handle(new \Emc\Core\Request('GET', "/reparaturen/$r1"))->body;
+        // „gemeldet von“ zeigt „ehemaliges Mitglied“; „zuständig“ ist nach dem Leeren nicht von „niemand“ zu unterscheiden.
+        $this->assertStringContainsString('von ' . Aenderungsprotokoll::EHEMALIGES_MITGLIED, $body);
+        $this->assertStringNotContainsString('Beispiel', $body);
+    }
+
+    public function test_uebergebenes_fahrzeug_behaelt_reparaturen(): void
+    {
+        $s = $this->szenario();
+        $r = $this->reparatur('fahrzeug', $s['fz1'], $s['konto'], $s['person'], 'uebergeben-reparatur.jpg');
+
+        $this->dienst->loesche($s['person'], [$s['fz1']], $this->admin);
+
+        $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM reparatur WHERE id = ? AND gemeldet_von_benutzer_id IS NULL AND zustaendig_person_id IS NULL', [$r]));
+        $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM ersatzteil WHERE reparatur_id = ?', [$r]));
+        $this->assertSame(1, $this->zaehle("SELECT COUNT(*) FROM dokument_zuordnung WHERE objekt_typ = 'reparatur' AND objekt_id = ?", [$r]));
+        $this->assertTrue($this->dateienDa('uebergeben-reparatur.jpg'));
+    }
+
+    public function test_vorschau_zaehlt_reparaturen(): void
+    {
+        $s = $this->szenario();
+        $this->reparatur('fahrzeug', $s['fz1'], null, null);
+        $this->reparatur('fahrzeug', $s['fz1'], $s['konto'], null);
+        $this->reparatur('fahrzeug', $s['fz1'], null, null);
+        $verein = $this->fahrzeug('EMC-0010', null);
+        $this->reparatur('fahrzeug', $verein, $s['konto'], null);
+        $this->reparatur('fahrzeug', $verein, null, $s['person']);
+        $this->reparatur('fahrzeug', $verein, $s['konto'], $s['person']);
+        $this->reparatur('fahrzeug', $verein, null, null); // nicht von ihr
+
+        $v = $this->dienst->vorschau($s['person'], $this->admin);
+
+        $this->assertSame(3, $v['fahrzeuge'][0]['reparaturen']);
+        $this->assertSame(0, $v['fahrzeuge'][1]['reparaturen']);
+        $this->assertSame(3, $v['reparaturen_in_vereinsdaten']);
+
+        // Die Vorschau-Seite nennt beide Zahlen.
+        $sitzung = [];
+        $this->sitzungAnmelden($sitzung, $this->admin);
+        $body = App::erzeuge(self::testConfig(), new Session($sitzung))->handle(new \Emc\Core\Request('GET', '/personen/' . $s['person'] . '/dsgvo'))->body;
+        $this->assertStringContainsString('3 Reparaturen', $body);
+        $this->assertMatchesRegularExpression('~Reparaturen an Vereinsfahrzeugen[^<]*\(3\)~', $body);
+    }
+
+    /**
+     * Gleichzeitig speichert jemand eine Reparatur am eigenen Fahrzeug der Person (ReparaturDienst::inTransaktion: Objekt
+     * gesperrt, neue Meldung, dann die Person als zuständig gesperrt). Die DSGVO-Löschung läuft in einem zweiten Prozess:
+     * Sie sperrt zuerst die eigenen Fahrzeuge und wartet; sie hält bis dahin nichts, worauf das Speichern wartet (kein
+     * Deadlock), und löscht danach auch die eben festgeschriebene Meldung (keine verwaiste Reparatur).
+     */
+    public function test_gleichzeitiges_speichern_keine_verwaiste_reparatur_kein_deadlock(): void
+    {
+        if (!function_exists('proc_open')) {
+            $this->markTestSkipped('proc_open fehlt');
+        }
+        $s = $this->szenario();
+        $alt = $this->reparatur('fahrzeug', $s['fz1'], null, null);
+        $beobachter = self::verbindung();
+        // Wartet die Löschung gerade an der sperrenden Lesung der eigenen Fahrzeuge? (PROCESSLIST: läuft seit mindestens
+        // 0,2 s; INNODB_TRX ist nicht überall lesbar.)
+        $wartetAmFahrzeug = fn(): bool => (int) $beobachter->query(
+            "SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE ID <> CONNECTION_ID() AND TIME_MS >= 200 "
+            . "AND INFO LIKE 'SELECT id, inventarnummer, bezeichnung FROM fahrzeug WHERE eigentuemer_person_id = % FOR UPDATE'"
+        )->fetchColumn() > 0;
+
+        $b = self::verbindung();
+        $b->exec('SET SESSION innodb_lock_wait_timeout = 5');
+        $repB = new ReparaturRepository($b);
+        $dienstB = new \Emc\Reparatur\ReparaturDienst($b, $repB, new FahrzeugRepository($b), new \Emc\Anlagen\AnlageRepository($b), new DokumentRepository($b, $this->speicher), new Aenderungsprotokoll($b));
+        $prozess = null;
+        $rohre = [];
+        $neu = $dienstB->inTransaktion('fahrzeug', $s['fz1'], null, function () use ($repB, $b, $s, $alt, &$prozess, &$rohre, $wartetAmFahrzeug): int {
+            $neu = $repB->anlegen('fahrzeug', $s['fz1'], ['beschreibung' => 'Gleichzeitig gemeldet', 'prioritaet' => 'dringend'], null);
+            $b->prepare("INSERT INTO ersatzteil (reparatur_id, bezeichnung) VALUES (?, 'Schleifer')")->execute([$neu]);
+            $prozess = proc_open(
+                [PHP_BINARY, __DIR__ . '/dsgvo_loeschung_prozess.php', (string) $s['person'], (string) $this->admin, $this->speicher],
+                [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+                $rohre
+            );
+            $this->assertIsResource($prozess);
+            // Warten, bis die Löschung an der Sperre des Fahrzeugs steht.
+            $bis = microtime(true) + 15;
+            while (!$wartetAmFahrzeug()) {
+                $this->assertLessThan($bis, microtime(true), 'Die Löschung wartet nicht auf die Sperre des Fahrzeugs.');
+                $this->assertTrue(proc_get_status($prozess)['running'], 'Die Löschung lief durch, ohne auf das Fahrzeug zu warten.');
+                usleep(20000);
+            }
+            // Erst jetzt die Person (zuständig) – hielte die Löschung sie schon, gäbe es hier einen Deadlock.
+            $this->assertTrue($repB->sperrePerson($s['person']));
+            $b->prepare('UPDATE reparatur SET zustaendig_person_id = ? WHERE id = ?')->execute([$s['person'], $alt]);
+            return $neu;
+        });
+        $ausgabe = stream_get_contents($rohre[1]) . stream_get_contents($rohre[2]);
+        $code = proc_close($prozess);
+
+        $this->assertSame(0, $code, $ausgabe);
+        $this->assertSame('OK', trim($ausgabe));
+        $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM reparatur WHERE id IN (?, ?)', [$alt, $neu]));
+        $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM ersatzteil'));
+        $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM fahrzeug'));
+        $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM person WHERE id = ?', [$s['person']]));
     }
 }

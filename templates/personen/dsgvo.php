@@ -1,6 +1,6 @@
 <?php
 /** @var array<string,mixed> $person */
-/** @var array{person: array<string,mixed>, benutzer: ?array<string,mixed>, fahrzeuge: list<array{id:int, inventarnummer:string, bezeichnung:string, dokumente:int, rechnungen:int, wartungen:int}>, wartungen_in_vereinsdaten:int, protokolleintraege:int, verweigert:?string, onedrive_konto_der_person:bool} $vorschau */
+/** @var array{person: array<string,mixed>, benutzer: ?array<string,mixed>, fahrzeuge: list<array{id:int, inventarnummer:string, bezeichnung:string, dokumente:int, rechnungen:int, wartungen:int, reparaturen:int}>, wartungen_in_vereinsdaten:int, reparaturen_in_vereinsdaten:int, protokolleintraege:int, verweigert:?string, onedrive_konto_der_person:bool} $vorschau */
 /** @var list<int> $uebergeben */ /** @var ?string $fehler */
 $name = trim($person['vorname'] . ' ' . $person['nachname']);
 $verweigert = $vorschau['verweigert'];
@@ -38,7 +38,7 @@ $konto = $vorschau['benutzer'];
                                 <?php if ($fahrzeuge === []): ?>
                                     keine
                                 <?php else: ?>
-                                    <strong>mitgelöscht</strong> samt Fotos und Dokumenten (Webspace und OneDrive), Decodern, Funktionstasten und CVs, Wartungen (mit Fotos) und Wartungsplan –
+                                    <strong>mitgelöscht</strong> samt Fotos und Dokumenten (Webspace und OneDrive), Decodern, Funktionstasten und CVs, Wartungen (mit Fotos), Wartungsplan und Reparaturen (mit Ersatzteilen und Fotos) –
                                     außer den angehakten, die an den Verein übergeben werden:
                                     <ul class="list-unstyled mt-2 mb-0">
                                         <?php foreach ($fahrzeuge as $fz): ?>
@@ -48,7 +48,7 @@ $konto = $vorschau['benutzer'];
                                                            id="uebergeben-<?= e((string) $fz['id']) ?>"<?= in_array($fz['id'], $uebergeben, true) ? ' checked' : '' ?>>
                                                     <label class="form-check-label" for="uebergeben-<?= e((string) $fz['id']) ?>">
                                                         <strong><?= e($fz['inventarnummer']) ?></strong> <?= e($fz['bezeichnung']) ?>
-                                                        <span class="text-muted">(<?= e((string) $fz['dokumente']) ?> <?= $fz['dokumente'] === 1 ? 'Dokument' : 'Dokumente' ?><?php if ($fz['rechnungen'] > 0): ?>, davon <?= e((string) $fz['rechnungen']) ?> <?= $fz['rechnungen'] === 1 ? 'Rechnung' : 'Rechnungen' ?><?php endif; ?>, <?= e((string) $fz['wartungen']) ?> <?= $fz['wartungen'] === 1 ? 'Wartung' : 'Wartungen' ?>)</span>
+                                                        <span class="text-muted">(<?= e((string) $fz['dokumente']) ?> <?= $fz['dokumente'] === 1 ? 'Dokument' : 'Dokumente' ?><?php if ($fz['rechnungen'] > 0): ?>, davon <?= e((string) $fz['rechnungen']) ?> <?= $fz['rechnungen'] === 1 ? 'Rechnung' : 'Rechnungen' ?><?php endif; ?>, <?= e((string) $fz['wartungen']) ?> <?= $fz['wartungen'] === 1 ? 'Wartung' : 'Wartungen' ?>, <?= e((string) ($fz['reparaturen'] ?? 0)) ?> <?= ($fz['reparaturen'] ?? 0) === 1 ? 'Reparatur' : 'Reparaturen' ?>)</span>
                                                         – an den Verein übergeben
                                                     </label>
                                                 </div>
@@ -61,6 +61,10 @@ $konto = $vorschau['benutzer'];
                         <tr>
                             <td>Wartungen an Vereinsfahrzeugen, fremden Fahrzeugen und Anlagen, die die Person ausgeführt oder eingetragen hat (<?= e((string) $vorschau['wartungen_in_vereinsdaten']) ?>)</td>
                             <td>bleiben erhalten, Anzeige „<?= e(\Emc\Protokoll\Aenderungsprotokoll::EHEMALIGES_MITGLIED) ?>“</td>
+                        </tr>
+                        <tr>
+                            <td>Reparaturen an Vereinsfahrzeugen, fremden Fahrzeugen und Anlagen, die die Person gemeldet hat oder für die sie zuständig ist (<?= e((string) ($vorschau['reparaturen_in_vereinsdaten'] ?? 0)) ?>)</td>
+                            <td>bleiben erhalten, „gemeldet von“ und „zuständig“ zeigen „<?= e(\Emc\Protokoll\Aenderungsprotokoll::EHEMALIGES_MITGLIED) ?>“; Freitexte (Beschreibung, Notizen) werden nicht durchsucht</td>
                         </tr>
                         <tr>
                             <td>Bezüge in Vereinsdaten (z. B. „angelegt von“, „hochgeladen von“)</td>

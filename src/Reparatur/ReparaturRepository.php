@@ -309,10 +309,10 @@ final class ReparaturRepository
         return ['anzahl' => (int) $summe['anzahl'], 'dringend' => (int) $summe['dringend'], 'liste' => $liste];
     }
 
-    /** @return list<int> alle Reparaturen des Objekts, aufsteigend */
-    public function idsFuerObjekt(string $objektTyp, int $objektId): array
+    /** @return list<int> alle Reparaturen des Objekts, aufsteigend; mit $sperren als sperrende Lesung (aktueller Stand, FOR UPDATE) */
+    public function idsFuerObjekt(string $objektTyp, int $objektId, bool $sperren = false): array
     {
-        $st = $this->pdo->prepare('SELECT id FROM reparatur WHERE objekt_typ = ? AND objekt_id = ? ORDER BY id');
+        $st = $this->pdo->prepare('SELECT id FROM reparatur WHERE objekt_typ = ? AND objekt_id = ? ORDER BY id' . ($sperren ? ' FOR UPDATE' : ''));
         $st->execute([$objektTyp, $objektId]);
         return array_map('intval', $st->fetchAll(\PDO::FETCH_COLUMN));
     }

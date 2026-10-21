@@ -11,13 +11,15 @@ use Emc\Fahrzeuge\FahrzeugRepository;
 use Emc\OneDrive\Auftraege;
 use Emc\OneDrive\Uebertragung;
 use Emc\Protokoll\Aenderungsprotokoll;
+use Emc\Reparatur\ReparaturRepository;
 use Emc\Wartung\AusnahmeRepository;
 use Emc\Wartung\WartungRepository;
 
 /**
  * Löscht eine Person nach DSGVO vollständig: Konto (auch frühere Konten im Protokoll), eigene Fahrzeuge samt Dateien,
- * Wartungen (mit Fotos) und Wartungsplan-Ausnahmen (außer an den Verein übergebene), Bezüge in Vereinsdaten (auch
- * „ausgeführt von“/„erfasst von“ an Wartungen, Anzeige „ehemaliges Mitglied“) und Personendaten im Änderungsprotokoll.
+ * Wartungen (mit Fotos), Wartungsplan-Ausnahmen und Reparaturen (mit Ersatzteilen und Fotos) – außer an den Verein
+ * übergebene –, Bezüge in Vereinsdaten (auch „ausgeführt von“/„erfasst von“ an Wartungen, „gemeldet von“/„zuständig“ an
+ * Reparaturen, Anzeige „ehemaliges Mitglied“) und Personendaten im Änderungsprotokoll.
  * „Kennwort vergessen“: Tokens und Anfragen per CASCADE mit dem Konto, Versuche über den E-Mail-Hash.
  * Datenbankteil in einer Transaktion, Dateien vom Webspace erst nach dem Commit.
  */
@@ -37,9 +39,11 @@ final class DsgvoLoeschung
         private ?Uebertragung $uebertragung = null,
         private ?WartungRepository $wartungen = null,
         private ?AusnahmeRepository $ausnahmen = null,
+        private ?ReparaturRepository $reparaturen = null,
     ) {
         $this->wartungen ??= new WartungRepository($pdo);
         $this->ausnahmen ??= new AusnahmeRepository($pdo);
+        $this->reparaturen ??= new ReparaturRepository($pdo);
     }
 
     /**
@@ -50,7 +54,10 @@ final class DsgvoLoeschung
      * `wartungen_in_vereinsdaten`: Wartungen an anderen Objekten (Vereins- und fremde Fahrzeuge, Anlagen), die die Person
      * ausgeführt oder eingetragen hat – sie bleiben, der Bezug wird „ehemaliges Mitglied“.
      *
-     * @return array{person: array<string,mixed>, benutzer: ?array<string,mixed>, fahrzeuge: list<array{id:int, inventarnummer:string, bezeichnung:string, dokumente:int, rechnungen:int, wartungen:int}>, wartungen_in_vereinsdaten:int, protokolleintraege:int, verweigert:?string, onedrive_konto_der_person:bool}
+     * `reparaturen_in_vereinsdaten`: ebenso Reparaturen an anderen Objekten, die die Person gemeldet hat (über ihr Konto)
+     * oder für die sie zuständig ist.
+     *
+     * @return array{person: array<string,mixed>, benutzer: ?array<string,mixed>, fahrzeuge: list<array{id:int, inventarnummer:string, bezeichnung:string, dokumente:int, rechnungen:int, wartungen:int, reparaturen:int}>, wartungen_in_vereinsdaten:int, reparaturen_in_vereinsdaten:int, protokolleintraege:int, verweigert:?string, onedrive_konto_der_person:bool}
      */
     public function vorschau(int $personId, int $ausfuehrenderBenutzerId): array
     {
@@ -65,6 +72,7 @@ final class DsgvoLoeschung
                 'dokumente' => count($this->dokumente->idsFuerObjekt('fahrzeug', (int) $fz['id'])),
                 'rechnungen' => $this->rechnungen((int) $fz['id']),
                 'wartungen' => count($this->wartungIds((int) $fz['id'])),
+                'reparaturen' => count($this->reparaturIds((int) $fz['id'])),
             ];
         }
         $k = $this->kennungen($personId, $person, $benutzer);
@@ -85,6 +93,7 @@ final class DsgvoLoeschung
             'benutzer' => $benutzer,
             'fahrzeuge' => $fahrzeuge,
             'wartungen_in_vereinsdaten' => $this->wartungenInVereinsdaten($personId, $benutzer === null ? null : (int) $benutzer['id']),
+            'reparaturen_in_vereinsdaten' => $this->reparaturenInVereinsdaten($personId, $benutzer === null ? null : (int) $benutzer['id']),
             'protokolleintraege' => $this->protokoll->zaehleBetroffene($k['begriffe'], $k['konten'], $k['objekte']),
             'verweigert' => $verweigert,
             'onedrive_konto_der_person' => $onedriveKonto !== '' && in_array($onedriveKonto, $mails, true),
@@ -99,6 +108,41 @@ final class DsgvoLoeschung
         } catch (\PDOException $e) {
             if ((string) $e->getCode() === '42S02') {
                 return [];
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * Reparaturen am Fahrzeug; vor Migration 014 keine. Mit $sperren als sperrende Lesung (in loesche(): aktueller Stand,
+     * auch eine eben von jemand anderem festgeschriebene Meldung).
+     *
+     * @return list<int>
+     */
+    private function reparaturIds(int $fahrzeugId, bool $sperren = false): array
+    {
+        try {
+            return $this->reparaturen->idsFuerObjekt('fahrzeug', $fahrzeugId, $sperren);
+        } catch (\PDOException $e) {
+            if ((string) $e->getCode() === '42S02') {
+                return [];
+            }
+            throw $e;
+        }
+    }
+
+    private function reparaturenInVereinsdaten(int $personId, ?int $benutzerId): int
+    {
+        try {
+            $st = $this->pdo->prepare(
+                'SELECT COUNT(*) FROM reparatur r WHERE (r.zustaendig_person_id = ? OR r.gemeldet_von_benutzer_id = ?) '
+                . "AND NOT (r.objekt_typ = 'fahrzeug' AND r.objekt_id IN (SELECT f.id FROM fahrzeug f WHERE f.eigentuemer_person_id = ?))"
+            );
+            $st->execute([$personId, $benutzerId ?? 0, $personId]);
+            return (int) $st->fetchColumn();
+        } catch (\PDOException $e) {
+            if ((string) $e->getCode() === '42S02') {
+                return 0;
             }
             throw $e;
         }
@@ -142,6 +186,13 @@ final class DsgvoLoeschung
         $pfade = [];
         $this->pdo->beginTransaction();
         try {
+            // 0. ZUERST die eigenen Fahrzeuge sperren (vor jeder anderen Lesung), dann Person und Konto, zuletzt die
+            //    Reparaturzeilen – dieselbe Reihenfolge wie beim Speichern einer Reparatur (ReparaturDienst::inTransaktion:
+            //    Objekt, dann zuständige Person, dann Reparatur). So wartet die Löschung auf ein gleichzeitiges Speichern,
+            //    ohne vorher etwas zu halten, worauf dieses wartet (kein Deadlock), und sieht danach dessen Meldungen.
+            //    Die sperrende Lesung über eigentuemer_person_id hält auch neu zugeordnete Fahrzeuge fern.
+            $eigene = array_map(fn(array $fz): int => (int) $fz['id'], $this->eigeneFahrzeuge($personId, true));
+
             // 1. Verweigerungsgründe – Admin-Zugänge gesperrt, damit nicht gleichzeitig der letzte Admin verschwindet;
             //    entschieden wird mit genau den gesperrten IDs (kein späterer Snapshot-Read).
             $admins = array_map('intval', $this->pdo->query("SELECT id FROM benutzer WHERE rolle = 'admin' AND aktiv = 1 FOR UPDATE")->fetchAll(\PDO::FETCH_COLUMN));
@@ -151,7 +202,6 @@ final class DsgvoLoeschung
             if ($grund !== null) {
                 throw new DomainFehler($grund);
             }
-            $eigene = array_map(fn(array $fz): int => (int) $fz['id'], $this->eigeneFahrzeuge($personId, true));
             if (array_diff($uebergeben, $eigene) !== []) {
                 throw new DomainFehler('Es können nur Fahrzeuge dieser Person an den Verein übergeben werden.');
             }
@@ -174,7 +224,20 @@ final class DsgvoLoeschung
             //    Vorher Wartungen (Fotos wie Dokumente, wartung_art per CASCADE) und Ausnahmen des Fahrzeugs.
             //    Wartungen an übergebenen und Vereinsfahrzeugen bleiben; „ausgeführt von“ (Person) und „erfasst von“
             //    (Konto) leeren die Fremdschlüssel ON DELETE SET NULL in den Schritten 4 und 6.
+            //    Ebenso Reparaturen: Fotos wie Dokumente, Ersatzteile und Gesehen-Zeilen per CASCADE; an anderen Objekten
+            //    leeren sich „gemeldet von“ (Konto, Schritt 4) und „zuständig“ (Person, Schritt 6) per ON DELETE SET NULL.
             foreach (array_diff($eigene, $uebergeben) as $fzId) {
+                foreach ($this->reparaturIds($fzId, true) as $reparaturId) {
+                    foreach ($this->dokumenteNurHier($reparaturId, 'reparatur') as $dokId) {
+                        $pfad = $this->loescheDokument($dokId);
+                        if ($pfad !== null) {
+                            $pfade[$dokId] = $pfad;
+                        }
+                    }
+                    $this->pdo->prepare("DELETE FROM dokument_zuordnung WHERE objekt_typ = 'reparatur' AND objekt_id = ?")->execute([$reparaturId]);
+                    $this->reparaturen->loeschen($reparaturId);
+                    $eigeneObjekte[] = ['reparatur', $reparaturId];
+                }
                 foreach ($this->wartungIds($fzId) as $wartungId) {
                     foreach ($this->dokumenteNurHier($wartungId, 'wartung') as $dokId) {
                         $pfad = $this->loescheDokument($dokId);
@@ -264,7 +327,7 @@ final class DsgvoLoeschung
     }
 
     /**
-     * Dokumente, die nur diesem Objekt (Fahrzeug bzw. Wartung) zugeordnet sind – mit sperrenden Reads, damit eine
+     * Dokumente, die nur diesem Objekt (Fahrzeug, Wartung bzw. Reparatur) zugeordnet sind – mit sperrenden Reads, damit eine
      * gleichzeitig angelegte Zuordnung weder übersehen noch ohne ihr Dokument gelöscht wird.
      *
      * @return list<int>

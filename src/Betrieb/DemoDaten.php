@@ -19,6 +19,9 @@ use Emc\Digital\FunktionsvorlageRepository;
 use Emc\Fahrzeuge\FahrzeugRepository;
 use Emc\Personen\BenutzerRepository;
 use Emc\Personen\PersonRepository;
+use Emc\Protokoll\Aenderungsprotokoll;
+use Emc\Reparatur\ReparaturDienst;
+use Emc\Reparatur\ReparaturRepository;
 use Emc\Wartung\Faelligkeitsrechner;
 use Emc\Wartung\WartungRepository;
 
@@ -103,18 +106,102 @@ final class DemoDaten
 
         $this->funktionenUndCvs($ids);
         $this->fotos($ids);
-        $this->anlageUndWartungen($ids, $personen, $spur['H0']);
+        $anlage = $this->anlageUndWartungen($ids, $personen, $spur['H0']);
+        $this->reparaturen($ids, $anlage, $personen);
+        $this->etiketten($ids);
+    }
+
+    /**
+     * Drei Reparaturen relativ zu heute, angelegt wie echte Eingaben über ReparaturDienst::inTransaktion (Objekt gesperrt,
+     * danach der automatische Status): eine dringende Meldung von Carla an der BR 01 (Lok dadurch automatisch „defekt“),
+     * eine Anlagen-Meldung „W12 Antrieb brummt“ in Arbeit bei Bernd (Anlage automatisch „in Arbeit“) und eine erledigte
+     * Reparatur an der V 200 mit zwei Ersatzteilen. Die von Hand „in Wartung“ gestellte BR 64 bleibt unberührt.
+     *
+     * @param array<string,int> $ids
+     * @param array<string,int> $personen
+     */
+    private function reparaturen(array $ids, int $anlage, array $personen): void
+    {
+        $c = $this->app->container();
+        $dienst = $c->get(ReparaturDienst::class);
+        $repo = $c->get(ReparaturRepository::class);
+        $protokoll = $c->get(Aenderungsprotokoll::class);
+        $konto = fn(string $email): ?int => ((int) $this->pdo->query('SELECT id FROM benutzer WHERE email = ' . $this->pdo->quote($email))->fetchColumn()) ?: null;
+        $heute = new \DateTimeImmutable('today');
+        $vorTagen = fn(int $tage, string $uhrzeit): string => $heute->modify("-$tage days")->format('Y-m-d') . ' ' . $uhrzeit;
+
+        /**
+         * @param array{beschreibung:string, wo_bauteil?:?string, prioritaet:string} $meldung
+         * @param ?array<string,mixed> $bearbeitung Felder für aktualisieren() (ohne die aus der Meldung)
+         * @param list<array<string,mixed>> $teile
+         */
+        $lege = function (string $typ, int $objektId, string $email, array $meldung, string $gemeldetAm, ?array $bearbeitung = null, array $teile = [], ?string $abgeschlossenAm = null) use ($dienst, $repo, $protokoll, $konto): void {
+            $benutzer = $konto($email);
+            $dienst->inTransaktion($typ, $objektId, $benutzer, function () use ($typ, $objektId, $benutzer, $meldung, $gemeldetAm, $bearbeitung, $teile, $abgeschlossenAm, $repo, $protokoll): void {
+                $id = $repo->anlegen($typ, $objektId, $meldung, $benutzer);
+                $this->pdo->prepare('UPDATE reparatur SET gemeldet_am = ? WHERE id = ?')->execute([$gemeldetAm, $id]);
+                $protokoll->schreibe($benutzer, 'reparatur', $id, 'angelegt', Aenderungsprotokoll::diff([], [
+                    'beschreibung' => $meldung['beschreibung'],
+                    'wo_bauteil' => $meldung['wo_bauteil'] ?? null,
+                    'prioritaet' => $meldung['prioritaet'],
+                ]));
+                if ($bearbeitung !== null) {
+                    $stand = (string) $this->pdo->query('SELECT geaendert_am FROM reparatur WHERE id = ' . $id)->fetchColumn();
+                    $repo->aktualisieren($id, $bearbeitung + $meldung + ['wo_bauteil' => null, 'zustaendig_person_id' => null, 'termin' => null, 'notizen' => null, 'was_gemacht' => null], $teile, $stand);
+                }
+                if ($abgeschlossenAm !== null) {
+                    $this->pdo->prepare('UPDATE reparatur SET abgeschlossen_am = ? WHERE id = ?')->execute([$abgeschlossenAm, $id]);
+                }
+            });
+        };
+
+        $lege('fahrzeug', $ids['v200'], 'fahrzeugwart@test.emc78.de', [
+            'beschreibung' => 'Ruckelt in langsamer Fahrt, Haftreifen hinten abgefahren.', 'prioritaet' => 'normal',
+        ], $vorTagen(21, '18:30:00'), [
+            'status' => 'erledigt',
+            'zustaendig_person_id' => $personen['wart'],
+            'was_gemacht' => 'Beide Haftreifen und den Schleifer erneuert, Räder gereinigt. Läuft wieder ruhig.',
+        ], [
+            ['bezeichnung' => 'Haftreifen', 'artikelnummer' => '40070', 'bezugsquelle' => 'Modellbahnladen', 'kosten' => '4.90', 'bestellt' => 1],
+            ['bezeichnung' => 'Schleifer', 'artikelnummer' => '40090', 'bezugsquelle' => 'Modellbahnladen', 'kosten' => '7.50', 'bestellt' => 1],
+        ], $vorTagen(10, '20:15:00'));
+        $lege('anlage', $anlage, 'fahrzeugwart@test.emc78.de', [
+            'beschreibung' => 'Weiche schaltet nur noch zögerlich, Antrieb brummt laut.', 'wo_bauteil' => 'W12 Antrieb brummt', 'prioritaet' => 'normal',
+        ], $vorTagen(5, '19:45:00'), [
+            'status' => 'in_arbeit',
+            'zustaendig_person_id' => $personen['bernd'],
+            'termin' => $heute->modify('+7 days')->format('Y-m-d'),
+            'notizen' => 'Antrieb ausgebaut, Ersatz wird beim nächsten Clubabend eingebaut.',
+        ]);
+        $lege('fahrzeug', $ids['br01'], 'mitglied@test.emc78.de', [
+            'beschreibung' => 'Lok bleibt auf der Weiche stehen, Motor brummt', 'prioritaet' => 'dringend',
+        ], $vorTagen(1, '20:05:00'));
+    }
+
+    /**
+     * Einige Fahrzeuge gelten als schon beschriftet (vor einem Monat), damit die Auswahl „noch nicht gedruckt“ auf der
+     * Seite Etiketten etwas zeigt; wie „Als gedruckt vermerken“, ohne den Bearbeitungsstand zu ändern.
+     *
+     * @param array<string,int> $ids
+     */
+    private function etiketten(array $ids): void
+    {
+        $am = (new \DateTimeImmutable('today'))->modify('-1 month')->format('Y-m-d') . ' 19:00:00';
+        $st = $this->pdo->prepare('UPDATE fahrzeug SET etikett_gedruckt_am = ?, geaendert_am = geaendert_am WHERE id = ?');
+        foreach (['v200', 'br01', 'br218', 'silberling'] as $schluessel) {
+            $st->execute([$am, $ids[$schluessel]]);
+        }
     }
 
     /**
      * Eine Anlage und einige Wartungen relativ zu heute: Gleise der Anlage überfällig, Räder der V 200 in Ordnung,
-     * Getriebe der BR 01 bald fällig, alles andere „noch nie erfasst“. Wartungsarten werden über den Namen gesucht;
+     * Getriebe der BR 01 bald fällig, alles andere „noch nie erfasst“. Liefert die ID der Anlage. Wartungsarten werden über den Namen gesucht;
      * fehlt eine (umbenannt oder gelöscht – die Stammliste bleibt beim Zurücksetzen erhalten), entfällt nur diese Wartung.
      *
      * @param array<string,int> $ids
      * @param array<string,int> $personen
      */
-    private function anlageUndWartungen(array $ids, array $personen, int $h0): void
+    private function anlageUndWartungen(array $ids, array $personen, int $h0): int
     {
         $c = $this->app->container();
         $anlage = $c->get(AnlageRepository::class)->anlegen([
@@ -149,6 +236,7 @@ final class DemoDaten
                 'notiz' => $notiz,
             ], [$arten[$art]], $konto($email));
         }
+        return $anlage;
     }
 
     /**

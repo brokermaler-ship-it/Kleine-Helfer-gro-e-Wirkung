@@ -223,6 +223,63 @@ final class DemoDatenTest extends DbTestCase
         $this->assertSame('1', (string) $this->pdo->query('SELECT nummer FROM anlage')->fetchColumn());
     }
 
+    public function test_reparaturen_mit_automatischem_status(): void
+    {
+        $app = $this->app();
+        (new DemoDaten($app))->erzeuge(true);
+        $wert = fn(string $sql): mixed => $this->pdo->query($sql)->fetchColumn();
+
+        $this->assertSame(3, $this->zaehle('reparatur'));
+        $defekte = $app->container()->get(\Emc\Reparatur\ReparaturRepository::class)->offeneDefekte();
+        $this->assertGreaterThanOrEqual(1, $defekte['dringend']);
+        $this->assertSame(2, $defekte['anzahl']);
+
+        // Dringende Meldung eines Demo-Mitglieds an einer Demo-Lok: Lok automatisch „defekt“.
+        $dringend = $this->pdo->query("SELECT r.*, b.email FROM reparatur r JOIN benutzer b ON b.id = r.gemeldet_von_benutzer_id WHERE r.prioritaet = 'dringend'")->fetch(\PDO::FETCH_ASSOC);
+        $this->assertSame('Lok bleibt auf der Weiche stehen, Motor brummt', $dringend['beschreibung']);
+        $this->assertSame('gemeldet', $dringend['status']);
+        $this->assertSame('mitglied@test.emc78.de', $dringend['email']);
+        $this->assertSame('fahrzeug', $dringend['objekt_typ']);
+        $lok = $this->pdo->query('SELECT gattung, status, status_automatisch FROM fahrzeug WHERE id = ' . (int) $dringend['objekt_id'])->fetch(\PDO::FETCH_ASSOC);
+        $this->assertSame(['gattung' => 'lok', 'status' => 'defekt', 'status_automatisch' => 1], ['gattung' => $lok['gattung'], 'status' => $lok['status'], 'status_automatisch' => (int) $lok['status_automatisch']]);
+
+        // Anlage: „W12 Antrieb brummt“, in Arbeit, zuständig der Demo-Bearbeiter, Termin in 7 Tagen → Anlage „in Arbeit“.
+        $anl = $this->pdo->query("SELECT r.*, CONCAT(p.vorname, ' ', p.nachname) AS zustaendig FROM reparatur r JOIN person p ON p.id = r.zustaendig_person_id WHERE r.objekt_typ = 'anlage'")->fetch(\PDO::FETCH_ASSOC);
+        $this->assertSame('W12 Antrieb brummt', $anl['wo_bauteil']);
+        $this->assertSame('normal', $anl['prioritaet']);
+        $this->assertSame('in_arbeit', $anl['status']);
+        $this->assertSame('Bernd Probemeier', $anl['zustaendig']);
+        $this->assertSame((new \DateTimeImmutable('today'))->modify('+7 days')->format('Y-m-d'), $anl['termin']);
+        $this->assertSame(['in_arbeit', 1], [(string) $wert('SELECT status FROM anlage'), (int) $wert('SELECT status_automatisch FROM anlage')]);
+
+        // Erledigte Reparatur mit zwei Ersatzteilen (Summe exakt 12,40 €) und „Was wurde gemacht“; Fahrzeug einsatzbereit.
+        $erledigt = $this->pdo->query("SELECT * FROM reparatur WHERE status = 'erledigt'")->fetch(\PDO::FETCH_ASSOC);
+        $this->assertNotEmpty($erledigt['was_gemacht']);
+        $this->assertNotNull($erledigt['abgeschlossen_am']);
+        $this->assertSame(['Haftreifen' => '4.90', 'Schleifer' => '7.50'], $this->pdo->query('SELECT bezeichnung, kosten FROM ersatzteil WHERE reparatur_id = ' . (int) $erledigt['id'] . ' ORDER BY sortierung')->fetchAll(\PDO::FETCH_KEY_PAIR));
+        $this->assertSame('12.40', (string) $wert('SELECT SUM(kosten) FROM ersatzteil'));
+        $this->assertSame('einsatzbereit', (string) $wert('SELECT status FROM fahrzeug WHERE id = ' . (int) $erledigt['objekt_id']));
+        // Meldungen liegen in der Vergangenheit (relativ zu heute), die erledigte vor der dringenden.
+        $this->assertLessThan($dringend['gemeldet_am'], $erledigt['gemeldet_am']);
+        $this->assertLessThanOrEqual(date('Y-m-d H:i:s'), $dringend['gemeldet_am']);
+
+        // Das von Hand „in Wartung“ gestellte Fahrzeug bleibt unberührt.
+        $this->assertSame(['in_wartung', 0], [(string) $wert("SELECT status FROM fahrzeug WHERE bezeichnung = 'BR 64 419'"), (int) $wert("SELECT status_automatisch FROM fahrzeug WHERE bezeichnung = 'BR 64 419'")]);
+        // Statuswechsel stehen im Protokoll (wie bei echten Eingaben).
+        $this->assertGreaterThanOrEqual(2, (int) $wert("SELECT COUNT(*) FROM aenderungsprotokoll WHERE aenderungen LIKE '%automatisch%'"));
+    }
+
+    /** Etiketten: einige Fahrzeuge gelten als schon beschriftet, damit „noch nicht gedruckt“ etwas auswählt. */
+    public function test_etiketten_teils_gedruckt(): void
+    {
+        (new DemoDaten($this->app()))->erzeuge(true);
+        $gedruckt = (int) $this->pdo->query('SELECT COUNT(*) FROM fahrzeug WHERE etikett_gedruckt_am IS NOT NULL')->fetchColumn();
+        $this->assertGreaterThan(0, $gedruckt);
+        $this->assertLessThan(12, $gedruckt);
+        $this->assertSame(0, (int) $this->pdo->query("SELECT COUNT(*) FROM fahrzeug WHERE etikett_gedruckt_am IS NOT NULL AND status = 'ausgemustert'")->fetchColumn());
+        $this->assertNull($this->pdo->query('SELECT etikett_gedruckt_am FROM anlage')->fetchColumn());
+    }
+
     public function test_fehlende_wartungsart_wird_uebersprungen(): void
     {
         $this->pdo->exec("UPDATE wartungsart SET name = 'Gleise putzen' WHERE name = 'Gleise reinigen'");
