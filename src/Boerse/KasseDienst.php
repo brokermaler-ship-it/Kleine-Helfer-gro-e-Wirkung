@@ -35,6 +35,7 @@ final class KasseDienst
     public const SCHON_STORNIERT = 'Der Verkauf ist schon storniert.';
     public const VERKAUF_FEHLT = 'Diesen Verkauf gibt es nicht.';
     public const AUSZAHLUNG_VERMERKT = 'Für ein Mitglied in diesem Verkauf ist schon eine Auszahlung vermerkt. Bitte den Haken zuerst entfernen.';
+    public const STORNO_ANGEBOT_GEAENDERT = 'Die Sammlung bzw. der Artikel ist inzwischen anders im Angebot – Storno nicht möglich.';
     public const GRUND_MAX = 300;
     /** Zahlarten der Datenbank mit Anzeigetext. */
     public const ZAHLARTEN = ['bar' => 'bar', 'karte_ueberweisung' => 'Karte/Überweisung'];
@@ -282,9 +283,8 @@ final class KasseDienst
             foreach (self::aufsteigend(array_map(fn(array $p) => (int) $p['angebot_id'], $positionen)) as $id) {
                 $gesperrt[$id] = $this->angebote->sperre($id) ?? throw new DomainFehler(self::ANGEBOT_FEHLT);
             }
-            foreach (self::aufsteigend(array_filter(array_map(fn(array $a) => $a['magazin_sammlung_id'], $gesperrt), fn($s) => $s !== null)) as $sid) {
-                $this->magazinRep->sperreSammlung($sid);
-            }
+            $buchungen = $this->verkaeufe->buchungen($verkaufId); // nach Artikel-id aufsteigend
+            $this->verlangeUnveraendertesAngebot($gesperrt, $positionen, $buchungen);
             foreach ($gesperrt as $id => $a) {
                 $this->angebote->setzeStatus($id, 'angeboten');
                 $this->protokoll->schreibe($benutzerId, AngebotDienst::OBJEKT, $id, 'geaendert', [
@@ -292,11 +292,85 @@ final class KasseDienst
                     'storno' => ['alt' => null, 'neu' => 'Verkauf Nr. ' . $verkaufId . ': ' . $grund],
                 ]);
             }
-            foreach ($this->verkaeufe->buchungen($verkaufId) as $b) { // nach Artikel-id aufsteigend
+            foreach ($buchungen as $b) {
                 $this->magazin->gegenbuchungInLaufenderTransaktion($b['id'], $benutzerId);
             }
             $this->verkaeufe->storniere($verkaufId, $grund, $jetzt, $benutzerId);
         });
+    }
+
+    /**
+     * Storno, Angebote schon gesperrt: sperrt die betroffenen Sammlungen (aufsteigend), dann alle betroffenen Artikel
+     * (aufsteigend) und prüft, dass das Wiederanbieten keine Exklusivität verletzt. Eine verkaufte Sammlung ist nach dem
+     * Verkauf nicht mehr „offen“ – inzwischen kann sie neu angeboten, ihr Inhalt geändert oder einer ihrer Artikel einzeln
+     * angeboten worden sein; ein verkaufter Einzelartikel kann inzwischen in einer angebotenen Sammlung stecken. Dann wird
+     * das Storno abgelehnt (nichts geändert).
+     *
+     * @param array<int, array<string,mixed>> $gesperrt Angebote nach id
+     * @param list<array<string,mixed>> $positionen
+     * @param list<array{id:int, artikel_id:int, verkauf_position_id:int}> $buchungen
+     */
+    private function verlangeUnveraendertesAngebot(array $gesperrt, array $positionen, array $buchungen): void
+    {
+        $positionVon = [];
+        foreach ($positionen as $p) {
+            $positionVon[(int) $p['id']] = (int) $p['angebot_id'];
+        }
+        $gebucht = []; // Angebot → Artikel mit Kassen-Ausgang
+        foreach ($buchungen as $b) {
+            $gebucht[$positionVon[$b['verkauf_position_id']] ?? 0][] = $b['artikel_id'];
+        }
+        // Sammlungen: die verkauften und die, in denen verkaufte Einzelartikel inzwischen stecken (ungesperrt gelesen,
+        // nach der Sperre erneut geprüft)
+        $sammlungen = [];
+        foreach ($gesperrt as $a) {
+            if ($a['magazin_sammlung_id'] !== null) {
+                $sammlungen[] = (int) $a['magazin_sammlung_id'];
+            } elseif ($a['magazin_artikel_id'] !== null) {
+                $s = $this->magazinRep->sammlungVonArtikel((int) $a['magazin_artikel_id']);
+                if ($s !== null) {
+                    $sammlungen[] = (int) $s['id'];
+                }
+            }
+        }
+        $inhalt = [];
+        foreach (self::aufsteigend($sammlungen) as $sid) {
+            $this->magazinRep->sperreSammlung($sid);
+            $inhalt[$sid] = $this->magazinRep->artikelDerSammlung($sid);
+        }
+        $artikel = array_column($buchungen, 'artikel_id');
+        foreach ($gesperrt as $a) {
+            if ($a['magazin_sammlung_id'] !== null) {
+                array_push($artikel, ...($inhalt[(int) $a['magazin_sammlung_id']] ?? []));
+            } elseif ($a['magazin_artikel_id'] !== null) {
+                $artikel[] = (int) $a['magazin_artikel_id'];
+            }
+        }
+        foreach (self::aufsteigend($artikel) as $aid) {
+            $this->magazinRep->sperreArtikel($aid);
+        }
+        $meldungen = [];
+        foreach ($gesperrt as $id => $a) {
+            $geaendert = false;
+            if ($a['magazin_sammlung_id'] !== null) {
+                $sid = (int) $a['magazin_sammlung_id'];
+                $jetzt = $inhalt[$sid] ?? [];
+                $verkauft = $gebucht[$id] ?? [];
+                $geaendert = $this->angebote->offenFuerSammlung($sid, $id)
+                    || array_diff($verkauft, $jetzt) !== []
+                    || array_filter(array_diff($jetzt, $verkauft), fn(int $aid): bool => $this->magazinRep->bestand($aid) > 0) !== []
+                    || array_filter($jetzt, fn(int $aid): bool => $this->angebote->offeneMengeFuerArtikel($aid) > 0) !== [];
+            } elseif ($a['magazin_artikel_id'] !== null) {
+                $s = $this->magazinRep->sammlungVonArtikel((int) $a['magazin_artikel_id']);
+                $geaendert = $s !== null && $this->angebote->offenFuerSammlung((int) $s['id']);
+            }
+            if ($geaendert) {
+                $meldungen[] = self::nummer($a) . ': ' . self::STORNO_ANGEBOT_GEAENDERT;
+            }
+        }
+        if ($meldungen !== []) {
+            throw new DomainFehler(implode(' ', $meldungen));
+        }
     }
 
     /** Darf am Tag $jetzt storniert werden (Anzeige der Verkaufsliste; verbindlich prüft storniere())? */

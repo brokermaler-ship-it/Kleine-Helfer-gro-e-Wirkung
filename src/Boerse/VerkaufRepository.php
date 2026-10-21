@@ -64,16 +64,16 @@ final class VerkaufRepository
      * Magazinbuchungen (Ausgänge) der Kasse zu diesem Verkauf, ohne Gegenbuchungen; nach Artikel-id aufsteigend
      * (Sperrreihenfolge).
      *
-     * @return list<array{id:int, artikel_id:int}>
+     * @return list<array{id:int, artikel_id:int, verkauf_position_id:int}>
      */
     public function buchungen(int $verkaufId): array
     {
         $st = $this->pdo->prepare(
-            'SELECT b.id, b.artikel_id FROM magazin_buchung b JOIN boerse_verkauf_position p ON p.id = b.verkauf_position_id '
+            'SELECT b.id, b.artikel_id, b.verkauf_position_id FROM magazin_buchung b JOIN boerse_verkauf_position p ON p.id = b.verkauf_position_id '
             . 'WHERE p.verkauf_id = ? AND b.gegenbuchung_zu_id IS NULL ORDER BY b.artikel_id, b.id'
         );
         $st->execute([$verkaufId]);
-        return array_map(fn(array $z): array => ['id' => (int) $z['id'], 'artikel_id' => (int) $z['artikel_id']], $st->fetchAll(\PDO::FETCH_ASSOC));
+        return array_map(fn(array $z): array => ['id' => (int) $z['id'], 'artikel_id' => (int) $z['artikel_id'], 'verkauf_position_id' => (int) $z['verkauf_position_id']], $st->fetchAll(\PDO::FETCH_ASSOC));
     }
 
     /** @param list<int> $personIds */

@@ -265,5 +265,38 @@
             summe.textContent = anzeige(gesamt);
         }
         felder.forEach(function (f) { f.addEventListener('input', rechne); });
+        // 0,00 € beim Abschluss nachfragen (der Server verlangt nullpreis_ok=1)
+        form.addEventListener('submit', function (e) {
+            var knopf = e.submitter;
+            if (!knopf || !knopf.hasAttribute('data-kasse-abschluss')) { return; }
+            var haken = form.querySelector('[data-nullpreis-ok]');
+            if (haken && haken.checked) { return; }
+            var null0 = Array.prototype.some.call(felder, function (f) { return cent(f.value) === 0; });
+            if (!null0) { return; }
+            if (!window.confirm('Ein Stück hat den Verkaufspreis 0,00 €. Trotzdem so verkaufen?')) { e.preventDefault(); return; }
+            var feld = document.createElement('input');
+            feld.type = 'hidden'; feld.name = 'nullpreis_ok'; feld.value = '1';
+            form.appendChild(feld);
+        });
+    });
+
+    // Formulare mit data-senden nur einmal absenden (Doppeltipp am Handy); Knöpfe erst nach dem Absenden sperren, damit
+    // Name und Wert des gedrückten Knopfes mitgehen. Zurück-Taste (bfcache) gibt sie wieder frei.
+    document.querySelectorAll('form[data-senden]').forEach(function (form) {
+        form.addEventListener('submit', function (e) {
+            if (e.defaultPrevented) { return; }
+            if (form.getAttribute('data-gesendet') === '1') { e.preventDefault(); return; }
+            form.setAttribute('data-gesendet', '1');
+            window.setTimeout(function () {
+                form.querySelectorAll('button[type=submit]').forEach(function (b) { b.disabled = true; });
+            }, 0);
+        });
+    });
+    window.addEventListener('pageshow', function (e) {
+        if (!e.persisted) { return; }
+        document.querySelectorAll('form[data-senden]').forEach(function (form) {
+            form.removeAttribute('data-gesendet');
+            form.querySelectorAll('button[type=submit]').forEach(function (b) { b.disabled = false; });
+        });
     });
 })();

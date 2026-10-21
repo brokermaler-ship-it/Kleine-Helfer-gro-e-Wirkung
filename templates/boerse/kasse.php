@@ -12,6 +12,7 @@
  * @var list<int> $imKorb
  * @var string $nummer
  * @var string $zahlart
+ * @var bool $nullpreis ein Stück im Warenkorb hat 0,00 €
  */
 use Emc\Boerse\KasseDienst;
 
@@ -29,7 +30,7 @@ $basis = '/boersen/' . $id . '/kasse';
     <?php if (!$laeuft): ?>
         <div class="alert alert-warning"><?= e(KasseDienst::LAEUFT_NICHT) ?> <a class="alert-link" href="<?= e(url('/boersen/' . $id)) ?>">Zur Börse</a></div>
     <?php else: ?>
-        <form method="post" action="<?= e(url($basis . '/hinzu')) ?>" class="mb-3">
+        <form method="post" action="<?= e(url($basis . '/hinzu')) ?>" class="mb-3" data-senden>
             <?php include dirname(__DIR__) . '/partials/csrf.php'; ?>
             <label for="kasse-nummer" class="form-label fw-semibold">Angebotsnummer</label>
             <div class="d-flex gap-2">
@@ -84,7 +85,7 @@ $basis = '/boersen/' . $id . '/kasse';
     <?php if ($karten === []): ?>
         <p class="text-muted">Noch nichts im Warenkorb. Nummer vom Preisschild eintippen und „Hinzufügen“.</p>
     <?php else: ?>
-        <form method="post" action="<?= e(url($basis . '/abschliessen')) ?>" data-kasse-korb>
+        <form method="post" action="<?= e(url($basis . '/abschliessen')) ?>" data-kasse-korb data-senden>
             <?php include dirname(__DIR__) . '/partials/csrf.php'; ?>
             <?php // Eingabetaste in einem Preisfeld: Preise übernehmen (nicht „Entfernen“ der ersten Karte). ?>
             <button type="submit" class="visually-hidden" formaction="<?= e(url($basis . '/preis')) ?>" tabindex="-1" aria-hidden="true">Preise übernehmen</button>
@@ -137,7 +138,13 @@ $basis = '/boersen/' . $id . '/kasse';
                         <?php endforeach; ?>
                     </div>
                 </fieldset>
-                <button type="submit" class="btn btn-success btn-lg w-100 kasse-knopf kasse-abschluss">Verkauf abschließen</button>
+                <?php if ($nullpreis): ?>
+                    <div class="form-check kasse-check mb-3">
+                        <input class="form-check-input" type="checkbox" name="nullpreis_ok" value="1" id="nullpreis-ok" data-nullpreis-ok>
+                        <label class="form-check-label" for="nullpreis-ok">Ja, Stücke mit Verkaufspreis 0,00 € so abgeben</label>
+                    </div>
+                <?php endif; ?>
+                <button type="submit" class="btn btn-success btn-lg w-100 kasse-knopf kasse-abschluss" data-kasse-abschluss>Verkauf abschließen</button>
             <?php endif; ?>
         </form>
     <?php endif; ?>

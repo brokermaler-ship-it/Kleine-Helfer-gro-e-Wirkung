@@ -44,7 +44,7 @@ foreach ($gueltig as $v) {
                 <?php elseif ($v['stornierbar']): ?>
                     <details class="mt-2">
                         <summary class="text-danger">Stornieren</summary>
-                        <form method="post" action="<?= e(url('/verkaeufe/' . $vid . '/storno')) ?>" class="mt-2">
+                        <form method="post" action="<?= e(url('/verkaeufe/' . $vid . '/storno')) ?>" class="mt-2" data-senden>
                             <?php include dirname(__DIR__) . '/partials/csrf.php'; ?>
                             <label for="grund-<?= $vid ?>" class="form-label small mb-1">Grund (Pflicht)</label>
                             <input type="text" class="form-control kasse-feld mb-2" id="grund-<?= $vid ?>" name="grund" maxlength="<?= KasseDienst::GRUND_MAX ?>" required>

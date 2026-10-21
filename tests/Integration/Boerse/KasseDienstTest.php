@@ -419,6 +419,98 @@ final class KasseDienstTest extends DbTestCase
         $this->assertSame('angeboten', $this->angebotStatus($angebot));
     }
 
+    /** @return array{0:int,1:int,2:int,3:int,4:int} Börse, Artikel eins (3), zwei (1), Sammlung, verkauftes Sammlungsangebot … und Verkauf */
+    private function verkaufteSammlung(): array
+    {
+        $b = $this->boerse();
+        $eins = $this->artikel(3, 'Gleise');
+        $zwei = $this->artikel(1, 'Weichen');
+        $sammlung = $this->magazin->legeSammlungAn('Nachlass', null, [$eins, $zwei], $this->wart->id);
+        $angebot = $this->angebot($b, ['magazin_sammlung_id' => $sammlung, 'herkunft' => 'verein', 'person_id' => null], $this->wart);
+        $v = $this->kasse->abschliessen($b, [['angebot_id' => $angebot, 'preis' => '40.00']], 'bar', null, $this->jetzt());
+        return [$b, $eins, $zwei, $sammlung, $angebot, $v];
+    }
+
+    private function eingang(int $artikelId, int $menge = 1): void
+    {
+        $this->magazin->buche($artikelId, 'eingang', ['menge' => $menge, 'herkunft' => 'spende', 'datum' => '2026-10-21'], $this->wart->id);
+    }
+
+    /** Storno abgelehnt, nichts geändert. */
+    private function assertStornoAbgelehnt(int $verkauf, int $angebot, array $bestaende): void
+    {
+        $buchungen = $this->zahl('SELECT COUNT(*) FROM magazin_buchung');
+        try {
+            $this->kasse->storniere($verkauf, 'Irrtum', null, $this->jetzt());
+            $this->fail('Storno hätte abgelehnt werden müssen');
+        } catch (DomainFehler $e) {
+            $this->assertSame($this->nummer($angebot) . ': ' . KasseDienst::STORNO_ANGEBOT_GEAENDERT, $e->getMessage());
+        }
+        $this->assertSame('verkauft', $this->angebotStatus($angebot));
+        $this->assertNull($this->pdo->query("SELECT storniert_am FROM boerse_verkauf WHERE id = $verkauf")->fetchColumn());
+        $this->assertSame($buchungen, $this->zahl('SELECT COUNT(*) FROM magazin_buchung'));
+        foreach ($bestaende as $artikel => $bestand) {
+            $this->assertSame($bestand, $this->magazinRep->bestand($artikel));
+        }
+    }
+
+    public function test_storno_sammlung_artikel_inzwischen_einzeln_angeboten(): void
+    {
+        [$b, $eins, $zwei, , $angebot, $v] = $this->verkaufteSammlung();
+        $this->eingang($eins);
+        $einzeln = $this->vereinsAngebot($b, $eins, '2.00');
+        $this->assertStornoAbgelehnt($v, $angebot, [$eins => 1, $zwei => 0]);
+        $this->assertSame('angeboten', $this->angebotStatus($einzeln));
+    }
+
+    public function test_storno_sammlung_inzwischen_neu_angeboten(): void
+    {
+        [$b, $eins, $zwei, $sammlung, $angebot, $v] = $this->verkaufteSammlung();
+        $this->eingang($zwei);
+        $this->angebot($b, ['magazin_sammlung_id' => $sammlung, 'herkunft' => 'verein', 'person_id' => null], $this->wart);
+        $this->assertStornoAbgelehnt($v, $angebot, [$eins => 0, $zwei => 1]);
+    }
+
+    public function test_storno_sammlung_inhalt_geaendert(): void
+    {
+        [, $eins, $zwei, $sammlung, $angebot, $v] = $this->verkaufteSammlung();
+        $drei = $this->artikel(2, 'Signale');
+        $stand = (string) $this->magazinRep->sammlung($sammlung)['geaendert_am'];
+        $this->magazin->aktualisiereSammlung($sammlung, 'Nachlass', null, [$eins, $zwei, $drei], $stand, $this->wart->id);
+        $this->assertStornoAbgelehnt($v, $angebot, [$eins => 0, $zwei => 0, $drei => 2]);
+
+        // Artikel entfernt (bekäme sonst die Gegenbuchung außerhalb der Sammlung)
+        $stand = (string) $this->magazinRep->sammlung($sammlung)['geaendert_am'];
+        $this->magazin->aktualisiereSammlung($sammlung, 'Nachlass', null, [$eins], $stand, $this->wart->id);
+        $this->assertStornoAbgelehnt($v, $angebot, [$eins => 0, $zwei => 0]);
+    }
+
+    public function test_storno_einzelstueck_inzwischen_in_angebotener_sammlung(): void
+    {
+        $b = $this->boerse();
+        $artikel = $this->artikel(1);
+        $angebot = $this->vereinsAngebot($b, $artikel);
+        $v = $this->kasse->abschliessen($b, [['angebot_id' => $angebot, 'preis' => '20.00']], 'bar', null, $this->jetzt());
+        $this->eingang($artikel);
+        $sammlung = $this->magazin->legeSammlungAn('Kiste', null, [$artikel], $this->wart->id);
+        $this->angebot($b, ['magazin_sammlung_id' => $sammlung, 'herkunft' => 'verein', 'person_id' => null], $this->wart);
+        $this->assertStornoAbgelehnt($v, $angebot, [$artikel => 1]);
+    }
+
+    public function test_storno_einzelstueck_mit_neuem_einzelangebot_geht(): void
+    {
+        // Einzelangebote binden nur ihre Menge: nach Eingang und neuem Einzelangebot bleibt das Storno möglich.
+        $b = $this->boerse();
+        $artikel = $this->artikel(1);
+        $angebot = $this->vereinsAngebot($b, $artikel);
+        $v = $this->kasse->abschliessen($b, [['angebot_id' => $angebot, 'preis' => '20.00']], 'bar', null, $this->jetzt());
+        $this->eingang($artikel);
+        $this->vereinsAngebot($b, $artikel);
+        $this->kasse->storniere($v, 'Irrtum', null, $this->jetzt());
+        $this->assertSame(2, $this->magazinRep->bestand($artikel));
+        $this->assertSame('angeboten', $this->angebotStatus($angebot));
+    }
+
     public function test_aufsteigend(): void
     {
         $this->assertSame([1, 3, 7], KasseDienst::aufsteigend([7, 3, 1, 3]));

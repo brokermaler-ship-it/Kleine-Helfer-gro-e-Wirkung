@@ -16,12 +16,19 @@ use Emc\Reparatur\ReparaturValidator;
 
 /**
  * Kasse am Handy (nur Börsenwart, sonst 403): Börse wählen, Warenkorb in der Sitzung (Warenkorb), Verkauf abschließen,
- * Verkaufsliste mit Storno am selben Tag. Fehler beim Abschließen zeigen die Kassenseite mit 422 und rot markierten
- * Karten, der Warenkorb bleibt; Erfolg leitet um (303) und leert ihn. Käuferdaten gibt es nicht.
+ * Verkaufsliste mit Storno am selben Tag. Jeder POST leitet um (303, Post/Redirect/Get): Fehler legen Meldungen, rot zu
+ * markierende Karten und Eingaben einmalig in die Sitzung, der Warenkorb bleibt; Erfolg leert ihn. Käuferdaten gibt es nicht.
  */
 final class KasseController
 {
     private const TREFFER_MAX = 30;
+    public const NULLPREIS = 'Verkaufspreis 0,00 € – bitte bestätigen oder den Preis ändern.';
+
+    /** Sitzungsschlüssel für Markierungen nach einem Fehler (einmal angezeigt, Muster Post/Redirect/Get). */
+    private static function merkSchluessel(int $boerseId): string
+    {
+        return 'kasse_merk_' . $boerseId;
+    }
 
     public function __construct(
         private View $view,
@@ -49,7 +56,18 @@ final class KasseController
     public function anzeigen(Request $r, array $p): Response
     {
         $this->verlangeBoersenwart();
-        return $this->kassenSeite($this->lade($p), $r->text('q'));
+        $b = $this->lade($p);
+        $merk = $this->session->hole(self::merkSchluessel((int) $b['id']));
+        $this->session->entferne(self::merkSchluessel((int) $b['id']));
+        $merk = is_array($merk) ? $merk : [];
+        return $this->kassenSeite(
+            $b,
+            $r->text('q'),
+            array_values(array_filter(array_map('intval', (array) ($merk['ids'] ?? [])), fn(int $i): bool => $i > 0)),
+            is_string($merk['nummer'] ?? null) ? $merk['nummer'] : '',
+            array_filter((array) ($merk['preise'] ?? []), 'is_string'),
+            is_string($merk['zahlart'] ?? null) ? $merk['zahlart'] : '',
+        );
     }
 
     /** POST /boersen/{id}/kasse/hinzu: nummer (z. B. „118“) oder angebot_id (aus der Suche) */
@@ -117,6 +135,15 @@ final class KasseController
             return $this->fehlerSeite($b, [AngebotValidator::KEIN_PREIS], $fehlerIds, '', $roh);
         }
         $zahlart = $r->text('zahlart');
+        // 0,00 € ist meist ein Vertipper („0“ statt „10“): nur mit ausdrücklicher Bestätigung.
+        $nullpreis = array_values(array_map(fn(array $p): int => $p['angebot_id'], array_filter($korb->positionen(), fn(array $p): bool => $p['preis'] === '0.00')));
+        if ($nullpreis !== [] && $r->text('nullpreis_ok') !== '1') {
+            $meldungen = [];
+            foreach ($nullpreis as $aid) {
+                $meldungen[] = ($this->angebote->finde($aid)['nummer'] ?? (string) $aid) . ': ' . self::NULLPREIS;
+            }
+            return $this->fehlerSeite($b, $meldungen, $nullpreis, '', [], $zahlart);
+        }
         $summe = $korb->summeCent();
         try {
             $this->kasse->abschliessen($id, $korb->positionen(), $zahlart, $this->auth->benutzer()?->id, new \DateTimeImmutable());
@@ -206,17 +233,25 @@ final class KasseController
      */
     private function fehlerSeite(array $b, array $meldungen, array $fehlerIds, string $nummer, array $preisEingaben = [], string $zahlart = ''): Response
     {
+        // Post/Redirect/Get: Meldungen, rote Karten und Eingaben über die Sitzung auf die Kassenseite – so fragt
+        // „Neu laden“ am Handy nicht, ob das Formular (der Abschluss) noch einmal gesendet werden soll.
         foreach ($meldungen as $m) {
             $this->session->meldung('fehler', $m);
         }
-        return $this->kassenSeite($b, '', 422, $fehlerIds, $nummer, $preisEingaben, $zahlart);
+        $this->session->setze(self::merkSchluessel((int) $b['id']), [
+            'ids' => array_values($fehlerIds),
+            'nummer' => mb_substr($nummer, 0, 30),
+            'preise' => $preisEingaben,
+            'zahlart' => $zahlart,
+        ]);
+        return Response::redirect(url('/boersen/' . (int) $b['id'] . '/kasse'));
     }
 
     /**
      * @param list<int> $fehlerIds
      * @param array<int,string> $preisEingaben
      */
-    private function kassenSeite(array $b, string $q, int $status = 200, array $fehlerIds = [], string $nummer = '', array $preisEingaben = [], string $zahlart = ''): Response
+    private function kassenSeite(array $b, string $q, array $fehlerIds = [], string $nummer = '', array $preisEingaben = [], string $zahlart = ''): Response
     {
         $id = (int) $b['id'];
         $korb = new Warenkorb($this->session, $id);
@@ -250,7 +285,8 @@ final class KasseController
             'imKorb' => array_map(fn(array $k): int => $k['angebot_id'], $karten),
             'nummer' => $nummer,
             'zahlart' => isset(KasseDienst::ZAHLARTEN[$zahlart]) ? $zahlart : '',
-        ], $status);
+            'nullpreis' => in_array('0.00', array_column($korb->positionen(), 'preis'), true),
+        ]);
     }
 
     /** @param array<string,mixed> $daten */

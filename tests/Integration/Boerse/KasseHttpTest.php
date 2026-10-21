@@ -114,6 +114,72 @@ final class KasseHttpTest extends DbTestCase
         return (int) $this->pdo->query($sql)->fetchColumn();
     }
 
+    /** Fehler nach POST: 303 zurück auf die Kassenseite (PRG), die Seite zeigt Meldungen und Markierungen einmal. */
+    private function folge(Response $r, int $boerseId): Response
+    {
+        $this->assertSame(303, $r->status, $r->body);
+        $this->assertSame(url("/boersen/$boerseId/kasse"), $r->headers['Location']);
+        return $this->get("/boersen/$boerseId/kasse");
+    }
+
+    public function test_nullpreis_braucht_bestaetigung(): void
+    {
+        $b = $this->boerse();
+        $a = $this->angebot($b);
+        $this->anmelden($this->wart);
+        $this->post("/boersen/$b/kasse/hinzu", ['angebot_id' => (string) $a]);
+        $r = $this->folge($this->post("/boersen/$b/kasse/abschliessen", ['zahlart' => 'bar', 'preis' => [(string) $a => '0']]), $b);
+        $this->assertStringContainsString(e($this->nummer($a) . ': Verkaufspreis 0,00 € – bitte bestätigen oder den Preis ändern.'), $r->body);
+        $this->assertStringContainsString('name="nullpreis_ok"', $r->body);
+        $this->assertMatchesRegularExpression('/kasse-karte-fehler[^>]*data-angebot="' . $a . '"/', $r->body);
+        $this->assertSame(0, $this->zahl('SELECT COUNT(*) FROM boerse_verkauf'));
+        $this->assertSame('0.00', $this->sitzung['kasse_' . $b][0]['preis']);
+
+        $r = $this->post("/boersen/$b/kasse/abschliessen", ['zahlart' => 'bar', 'nullpreis_ok' => '1', 'preis' => [(string) $a => '0']]);
+        $this->assertSame(303, $r->status);
+        $this->assertSame(['Verkauf über 0,00 € abgeschlossen (bar).'], $this->meldungen());
+        $this->assertSame('0.00', $this->pdo->query('SELECT preis FROM boerse_verkauf_position')->fetchColumn());
+    }
+
+    public function test_korb_mit_stueck_einer_anderen_boerse(): void
+    {
+        $b = $this->boerse();
+        $andere = $this->boerse('laeuft', 'Sommerbörse');
+        $fremd = $this->angebot($andere);
+        $this->anmelden($this->wart);
+        // An der Oberfläche vorbei in den Korb dieser Börse gelegt (z. B. veraltete Sitzung)
+        $this->sitzung['kasse_' . $b] = [['angebot_id' => $fremd, 'preis' => '12.50']];
+        $r = $this->folge($this->post("/boersen/$b/kasse/abschliessen", ['zahlart' => 'bar']), $b);
+        $this->assertStringContainsString(e($this->nummer($fremd) . ' gehört nicht zu dieser Börse.'), $r->body);
+        $this->assertSame(0, $this->zahl('SELECT COUNT(*) FROM boerse_verkauf'));
+        $this->assertSame('angeboten', $this->pdo->query("SELECT status FROM boerse_angebot WHERE id = $fremd")->fetchColumn());
+        // Hinzufügen über die id ist ebenso abgelehnt
+        $this->sitzung['kasse_' . $b] = [];
+        $r = $this->folge($this->post("/boersen/$b/kasse/hinzu", ['angebot_id' => (string) $fremd]), $b);
+        $this->assertStringContainsString(e($this->nummer($fremd) . ' gehört nicht zu dieser Börse.'), $r->body);
+        $this->assertSame([], $this->sitzung['kasse_' . $b]);
+    }
+
+    public function test_storno_fremder_und_unbekannter_verkauf(): void
+    {
+        $b = $this->boerse();
+        $andere = $this->boerse('laeuft', 'Sommerbörse');
+        $a = $this->angebot($andere);
+        $v = $this->kasse->abschliessen($andere, [['angebot_id' => $a, 'preis' => '12.50']], 'bar', null, new \DateTimeImmutable());
+        $this->anmelden($this->carla);
+        $this->assertSame(403, $this->post("/verkaeufe/$v/storno", ['grund' => 'x'])->status);
+        $this->assertSame(403, $this->post("/boersen/$b/kasse/preis", ['preis' => ['1' => '1']])->status);
+        $this->assertSame(403, $this->post("/boersen/$b/kasse/entfernen", ['angebot_id' => '1'])->status);
+        $this->anmelden($this->wart);
+        $this->assertSame(404, $this->post('/verkaeufe/abc/storno', ['grund' => 'x'])->status);
+        $this->assertSame(404, $this->post('/verkaeufe/0/storno', ['grund' => 'x'])->status);
+        $this->assertSame(404, $this->post('/boersen/999/kasse/abschliessen', ['zahlart' => 'bar'])->status);
+        // Verkauf einer anderen Börse: zurück auf deren Verkaufsliste, nicht auf die gerade offene Kasse
+        $r = $this->post("/verkaeufe/$v/storno", ['grund' => 'Irrtum']);
+        $this->assertSame(url("/boersen/$andere/verkaeufe"), $r->headers['Location']);
+        $this->assertSame('angeboten', $this->pdo->query("SELECT status FROM boerse_angebot WHERE id = $a")->fetchColumn());
+    }
+
     public function test_ohne_haekchen_403(): void
     {
         $b = $this->boerse();
@@ -162,7 +228,7 @@ final class KasseHttpTest extends DbTestCase
         $this->assertSame(303, $r->status, $r->body);
         $this->assertSame([['angebot_id' => $erstes, 'preis' => '12.50']], $this->sitzung['kasse_' . $b]);
         $r = $this->post("/boersen/$b/kasse/hinzu", ['nummer' => (string) $this->lauf($erstes)]);
-        $this->assertSame(422, $r->status);
+        $r = $this->folge($r, $b);
         $this->assertStringContainsString(e($this->nummer($erstes) . ' ist schon im Warenkorb.'), $r->body);
 
         // Suche in offenen Angeboten dieser Börse und dauerhaften, Hinzufügen per angebot_id
@@ -188,13 +254,17 @@ final class KasseHttpTest extends DbTestCase
         $this->assertSame(303, $this->post("/boersen/$b/kasse/preis", ['preis' => [(string) $zweites => '10']])->status);
         $this->assertStringContainsString('22,50 €', $this->get("/boersen/$b/kasse")->body);
         $r = $this->post("/boersen/$b/kasse/preis", ['preis' => [(string) $zweites => 'zehn']]);
-        $this->assertSame(422, $r->status);
+        $r = $this->folge($r, $b);
         $this->assertStringContainsString('Bitte den Betrag angeben, z. B. 12,50.', $r->body);
+        $this->assertStringContainsString('value="zehn"', $r->body, 'Eingabe bleibt stehen');
+        $this->assertMatchesRegularExpression('/kasse-karte-fehler[^>]*data-angebot="' . $zweites . '"/', $r->body);
+        $this->assertStringNotContainsString('kasse-karte-fehler', $this->get("/boersen/$b/kasse")->body, 'Markierung nur einmal');
 
         // ohne Zahlart
         $r = $this->post("/boersen/$b/kasse/abschliessen", ['preis' => [(string) $erstes => '12,50', (string) $zweites => '10,00']]);
-        $this->assertSame(422, $r->status);
+        $r = $this->folge($r, $b);
         $this->assertStringContainsString('Bitte die Zahlart wählen.', $r->body);
+        $this->assertStringContainsString('data-senden', $r->body, 'Doppeltipp-Schutz');
         $this->assertCount(2, $this->sitzung['kasse_' . $b]);
 
         $r = $this->post("/boersen/$b/kasse/abschliessen", ['zahlart' => 'bar', 'preis' => [(string) $erstes => '12,50', (string) $zweites => '10,00']]);
@@ -217,7 +287,7 @@ final class KasseHttpTest extends DbTestCase
         $this->kasse->abschliessen($b, [['angebot_id' => $a, 'preis' => '12.50']], 'bar', null, new \DateTimeImmutable());
 
         $r = $this->post("/boersen/$b/kasse/abschliessen", ['zahlart' => 'karte_ueberweisung']);
-        $this->assertSame(422, $r->status);
+        $r = $this->folge($r, $b);
         $this->assertStringContainsString(e($this->nummer($a) . ' ist bereits verkauft.'), $r->body);
         $this->assertMatchesRegularExpression('/kasse-karte-fehler[^>]*data-angebot="' . $a . '"/', $r->body);
         $this->assertDoesNotMatchRegularExpression('/kasse-karte-fehler[^>]*data-angebot="' . $weiteres . '"/', $r->body);
@@ -238,7 +308,7 @@ final class KasseHttpTest extends DbTestCase
         $this->assertSame(200, $r->status);
         $this->assertStringContainsString('Die Börse läuft nicht – Verkauf nicht möglich.', $r->body);
         $r = $this->post("/boersen/$b/kasse/hinzu", ['nummer' => (string) $this->lauf($a)]);
-        $this->assertSame(422, $r->status);
+        $r = $this->folge($r, $b);
         $this->assertStringContainsString('Die Börse läuft nicht – Verkauf nicht möglich.', $r->body);
         $this->assertSame(404, $this->get('/boersen/999/kasse')->status);
     }
