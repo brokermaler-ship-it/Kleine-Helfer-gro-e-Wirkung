@@ -19,14 +19,14 @@ final class MigratorTest extends DbTestCase
         self::alleTabellenLoeschen($this->pdo);
         $migrator = new Migrator($this->pdo, $this->migrationen());
         $this->assertFalse($migrator->istInstalliert());
-        $this->assertSame(['001_grundgeruest', '002_spurweiten_start', '003_fahrzeug_angelegt_von', '004_onedrive', '005_onedrive_auftrag_sperre', '006_onedrive_sperr_token_index', '007_onedrive_laufwerk', '008_rolle_fahrzeugwart', '009_abstellgleis', '010_kennwort_vergessen', '011_anlage', '012_wartungsart', '013_wartung', '014_reparatur', '015_etikett', '016_magazin', '017_boerse', '018_titelbild_index', '019_boerse_anfrage'], $migrator->ausstehend());
+        $this->assertSame(['001_grundgeruest', '002_spurweiten_start', '003_fahrzeug_angelegt_von', '004_onedrive', '005_onedrive_auftrag_sperre', '006_onedrive_sperr_token_index', '007_onedrive_laufwerk', '008_rolle_fahrzeugwart', '009_abstellgleis', '010_kennwort_vergessen', '011_anlage', '012_wartungsart', '013_wartung', '014_reparatur', '015_etikett', '016_magazin', '017_boerse', '018_titelbild_index', '019_boerse_anfrage', '020_fahrzeug_import'], $migrator->ausstehend());
     }
 
     public function test_ausfuehren_legt_tabellen_an_und_ist_idempotent(): void
     {
         self::alleTabellenLoeschen($this->pdo);
         $migrator = new Migrator($this->pdo, $this->migrationen());
-        $this->assertSame(['001_grundgeruest', '002_spurweiten_start', '003_fahrzeug_angelegt_von', '004_onedrive', '005_onedrive_auftrag_sperre', '006_onedrive_sperr_token_index', '007_onedrive_laufwerk', '008_rolle_fahrzeugwart', '009_abstellgleis', '010_kennwort_vergessen', '011_anlage', '012_wartungsart', '013_wartung', '014_reparatur', '015_etikett', '016_magazin', '017_boerse', '018_titelbild_index', '019_boerse_anfrage'], $migrator->ausfuehren());
+        $this->assertSame(['001_grundgeruest', '002_spurweiten_start', '003_fahrzeug_angelegt_von', '004_onedrive', '005_onedrive_auftrag_sperre', '006_onedrive_sperr_token_index', '007_onedrive_laufwerk', '008_rolle_fahrzeugwart', '009_abstellgleis', '010_kennwort_vergessen', '011_anlage', '012_wartungsart', '013_wartung', '014_reparatur', '015_etikett', '016_magazin', '017_boerse', '018_titelbild_index', '019_boerse_anfrage', '020_fahrzeug_import'], $migrator->ausfuehren());
         $this->assertTrue($migrator->istInstalliert());
         $this->assertSame([], $migrator->ausstehend());
         $this->assertSame([], $migrator->ausfuehren());
@@ -319,6 +319,27 @@ final class MigratorTest extends DbTestCase
         $this->assertSame('offen', $this->pdo->query('SELECT status FROM boerse_anfrage')->fetchColumn());
         $index = $this->pdo->query("SELECT GROUP_CONCAT(column_name ORDER BY seq_in_index) FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'boerse_anfrage_sperre' AND index_name = 'idx_boerse_sperre_ip'")->fetchColumn();
         $this->assertSame('ip_hash,zeitpunkt', $index);
+    }
+
+    /** Migration 020: Kennzeichen „ungeprüft“ am Fahrzeug und Importliste mit eindeutigem Datei-Hash. */
+    public function test_migration_020_fahrzeug_import(): void
+    {
+        $spalte = $this->pdo->query("SELECT column_default, is_nullable, column_type FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'fahrzeug' AND column_name = 'ungeprueft'")->fetch(\PDO::FETCH_ASSOC);
+        $this->assertSame('NO', $spalte['is_nullable']);
+        $this->assertSame('0', trim((string) $spalte['column_default'], "'"));
+        $this->assertStringStartsWith('tinyint', $spalte['column_type']);
+        $index = $this->pdo->query("SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'fahrzeug' AND column_name = 'ungeprueft' AND seq_in_index = 1")->fetchColumn();
+        $this->assertSame(1, (int) $index);
+        $this->pdo->exec("INSERT INTO fahrzeug (inventarnummer, bezeichnung, spurweite_id) SELECT 'EMC-0001', 'Lok', id FROM spurweite LIMIT 1");
+        $this->assertSame(0, (int) $this->pdo->query('SELECT ungeprueft FROM fahrzeug')->fetchColumn());
+
+        $spalten = $this->pdo->query("SELECT column_name FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'fahrzeug_import' ORDER BY ordinal_position")->fetchAll(\PDO::FETCH_COLUMN);
+        $this->assertSame(['id', 'datei_sha256', 'dateiname', 'anzahl', 'benutzer_id', 'erstellt_am'], $spalten);
+        $regeln = $this->pdo->query("SELECT referenced_table_name, delete_rule FROM information_schema.referential_constraints WHERE constraint_schema = DATABASE() AND table_name = 'fahrzeug_import'")->fetchAll(\PDO::FETCH_KEY_PAIR);
+        $this->assertSame(['benutzer' => 'SET NULL'], $regeln);
+        $hash = str_repeat('a', 64);
+        $this->pdo->exec("INSERT INTO fahrzeug_import (datei_sha256, dateiname, anzahl) VALUES ('$hash', 'a.csv', 1)");
+        $this->assertDoppelt(fn() => $this->pdo->exec("INSERT INTO fahrzeug_import (datei_sha256, dateiname, anzahl) VALUES ('$hash', 'b.csv', 2)"), 'gleicher Hash');
     }
 
     private function assertDoppelt(callable $aktion, string $grund): void

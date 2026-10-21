@@ -56,6 +56,8 @@ use Emc\Digital\PdfText;
 use Emc\Etiketten\EtikettAuswahl;
 use Emc\Etiketten\EtikettController;
 use Emc\Fahrzeuge\FahrzeugController;
+use Emc\Fahrzeuge\FahrzeugImport;
+use Emc\Fahrzeuge\FahrzeugImportController;
 use Emc\Fahrzeuge\FahrzeugRepository;
 use Emc\Magazin\KategorieController;
 use Emc\Magazin\MagazinController;
@@ -328,6 +330,19 @@ final class App
             $c->get(ReparaturDienst::class),
             $c->get(MagazinDienst::class),
             $c->get(MagazinRepository::class)
+        ));
+        $this->container->set(FahrzeugImport::class, fn(Container $c) => new FahrzeugImport(
+            $c->get('pdo'),
+            $c->get(FahrzeugRepository::class),
+            $c->get(SpurweiteRepository::class),
+            $c->get(Aenderungsprotokoll::class)
+        ));
+        $this->container->set(FahrzeugImportController::class, fn(Container $c) => new FahrzeugImportController(
+            $this->view,
+            $c->get(FahrzeugImport::class),
+            $c->get(Auth::class),
+            $c->get('session'),
+            $this->speicherPfad()
         ));
         $this->container->set(AnlageRepository::class, fn(Container $c) => new AnlageRepository($c->get('pdo')));
         $this->container->set(ReparaturRepository::class, fn(Container $c) => new ReparaturRepository($c->get('pdo')));
@@ -905,6 +920,11 @@ final class App
             if ($pfad === $p || str_starts_with($pfad, $p . '/')) {
                 return true;
             }
+        }
+        // Fahrzeug-Import und „Als geprüft markieren“ (Migration 020).
+        if ($pfad === '/fahrzeuge/import' || str_starts_with($pfad, '/fahrzeuge/import/')
+            || (str_starts_with($pfad, '/fahrzeuge/') && str_ends_with($pfad, '/geprueft'))) {
+            return true;
         }
         // Kurzlink /c/<Code>, „Defekt melden“ an Fahrzeug oder Anlage (…/defekt) und die Übergabe ans Magazin.
         return str_starts_with($pfad, '/c/') || str_ends_with($pfad, '/defekt') || (str_starts_with($pfad, '/fahrzeuge/') && str_ends_with($pfad, '/an-magazin'));

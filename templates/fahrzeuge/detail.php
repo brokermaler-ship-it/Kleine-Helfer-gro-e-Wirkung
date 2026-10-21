@@ -13,6 +13,7 @@ $abgestellt = $fz['status'] === 'ausgemustert';
             <span class="text-muted me-2"><?= e($fz['inventarnummer']) ?></span>
             <?= $statusBadge($fz) ?>
             <?= $eigentumBadge($fz) ?>
+            <?= $ungeprueftBadge($fz) ?>
         </div>
     </div>
     <div class="d-flex flex-wrap gap-2">
@@ -22,6 +23,12 @@ $abgestellt = $fz['status'] === 'ausgemustert';
         <?php endif; ?>
         <?php if ($darfFz($fz)): ?>
             <a class="btn btn-primary" href="<?= e(url('/fahrzeuge/' . $fz['id'] . '/bearbeiten')) ?>">Bearbeiten</a>
+            <?php if ((int) ($fz['ungeprueft'] ?? 0) === 1): ?>
+            <form method="post" action="<?= e(url('/fahrzeuge/' . $fz['id'] . '/geprueft')) ?>">
+                <?php include dirname(__DIR__) . '/partials/csrf.php'; ?>
+                <button type="submit" class="btn btn-outline-success">Als geprüft markieren</button>
+            </form>
+            <?php endif; ?>
             <?php if ($abgestellt && ($magazin['artikel'] ?? null) !== null): ?>
             <?php /* ans Magazin übergeben: bleibt auf dem Abstellgleis */ ?>
             <?php elseif ($abgestellt): ?>

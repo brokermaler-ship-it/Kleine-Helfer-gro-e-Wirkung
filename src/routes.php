@@ -25,6 +25,7 @@ use Emc\Digital\DecoderController;
 use Emc\Digital\FunktionController;
 use Emc\Etiketten\EtikettController;
 use Emc\Fahrzeuge\FahrzeugController;
+use Emc\Fahrzeuge\FahrzeugImportController;
 use Emc\Magazin\KategorieController;
 use Emc\Magazin\MagazinController;
 use Emc\OneDrive\OneDriveController;
@@ -82,6 +83,13 @@ return function (Router $router, App $app): void {
     $fz = fn(string $m) => fn(Request $r, array $p = []) => $c->get(FahrzeugController::class)->$m($r, $p);
     $router->add('GET', '/fahrzeuge', $app->erfordert('lesen', $fz('liste')));
     $router->add('GET', '/fahrzeuge/neu', $app->erfordert('fahrzeug_anlegen', $fz('neu')));
+    // Fahrzeug-Import aus CSV: ab Fahrzeugwart (wer alle Fahrzeuge bearbeiten darf); vor /fahrzeuge/{id}.
+    $imp = fn(string $m) => fn(Request $r, array $p = []) => $c->get(FahrzeugImportController::class)->$m($r, $p);
+    $router->add('GET', '/fahrzeuge/import', $app->erfordert('fahrzeug_bearbeiten', $imp('formular')));
+    $router->add('POST', '/fahrzeuge/import', $app->erfordert('fahrzeug_bearbeiten', $imp('hochladen')));
+    $router->add('POST', '/fahrzeuge/import/bestaetigen', $app->erfordert('fahrzeug_bearbeiten', $imp('bestaetigen')));
+    $router->add('POST', '/fahrzeuge/import/abbrechen', $app->erfordert('fahrzeug_bearbeiten', $imp('abbrechen')));
+    $router->add('GET', '/fahrzeuge/import/vorlage.csv', $app->erfordert('fahrzeug_bearbeiten', $imp('vorlage')));
     $router->add('POST', '/fahrzeuge', $app->erfordert('fahrzeug_anlegen', $fz('anlegen')));
     $router->add('GET', '/fahrzeuge/{id}', $app->erfordert('lesen', $fz('anzeigen')));
     $router->add('GET', '/fahrzeuge/{id}/bearbeiten', $app->erfordert('lesen', $fz('bearbeiten')));
@@ -89,6 +97,8 @@ return function (Router $router, App $app): void {
     $router->add('POST', '/fahrzeuge/{id}/loeschen', $app->erfordert('fahrzeug_bearbeiten', $fz('loeschen')));
     $router->add('POST', '/fahrzeuge/{id}/abstellen', $app->erfordert('lesen', $fz('abstellen')));
     $router->add('POST', '/fahrzeuge/{id}/zurueckholen', $app->erfordert('lesen', $fz('zurueckholen')));
+    // „Als geprüft markieren“ (importierte Fahrzeuge): wer das Fahrzeug bearbeiten darf (prüft der Controller).
+    $router->add('POST', '/fahrzeuge/{id}/geprueft', $app->erfordert('lesen', $fz('alsGeprueft')));
     // Übergabe ans Magazin: Börsenwart oder Fahrzeugwart und höher (prüft der Controller).
     $router->add('POST', '/fahrzeuge/{id}/an-magazin', $app->erfordert('lesen', $fz('anMagazin')));
     $router->add('GET', '/abstellgleis', $app->erfordert('lesen', $fz('abstellgleis')));

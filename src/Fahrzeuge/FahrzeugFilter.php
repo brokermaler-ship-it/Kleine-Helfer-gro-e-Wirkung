@@ -15,6 +15,8 @@ final class FahrzeugFilter
         public readonly ?int $personId = null,
         public readonly ?string $status = null,
         public readonly ?string $gattung = null,
+        /** Nur ungeprüfte (importierte) Fahrzeuge (Parameter ungeprueft=1). */
+        public readonly bool $ungeprueft = false,
     ) {
     }
 
@@ -31,12 +33,13 @@ final class FahrzeugFilter
             $r->ganzzahl('person', 1, 2147483647),
             in_array($status, FahrzeugValidator::STATUS, true) ? $status : null,
             in_array($gattung, FahrzeugValidator::GATTUNGEN, true) ? $gattung : null,
+            $r->text('ungeprueft') === '1',
         );
     }
 
     public function istGesetzt(): bool
     {
         return $this->text !== null || $this->spurweiteId !== null || $this->eigentuemer !== null
-            || $this->personId !== null || $this->status !== null || $this->gattung !== null;
+            || $this->personId !== null || $this->status !== null || $this->gattung !== null || $this->ungeprueft;
     }
 }

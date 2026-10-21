@@ -86,7 +86,7 @@ $konto = $vorschau['benutzer'];
                         </tr>
                         <?php endif; ?>
                         <tr>
-                            <td>Freitexte in Magazin und Börse (z. B. „Spende von …“, Lagerort „bei …“, Notizen, Ort einer Börse, Storno-Grund) mit Name, E-Mail oder Telefon (<?= e((string) ($vorschau['freitexte'] ?? 0)) ?>)</td>
+                            <td>Freitexte in Magazin, Börse und Fahrzeugnotizen (z. B. „Spende von …“, Lagerort „bei …“, Notizen, „Besitzer laut Liste“, Ort einer Börse, Storno-Grund) mit Name, E-Mail oder Telefon (<?= e((string) ($vorschau['freitexte'] ?? 0)) ?>)</td>
                             <td>Fundstellen durch „<?= e(\Emc\Protokoll\Aenderungsprotokoll::EHEMALIGES_MITGLIED) ?>“ ersetzt; je Objekt ein Protokolleintrag „Freitexte nach DSGVO bereinigt“ ohne alte Werte</td>
                         </tr>
                         <tr>

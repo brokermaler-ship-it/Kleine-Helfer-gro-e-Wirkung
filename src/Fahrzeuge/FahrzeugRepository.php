@@ -63,6 +63,9 @@ final class FahrzeugRepository
             $wo[] = 'f.gattung = ?';
             $p[] = $f->gattung;
         }
+        if ($f->ungeprueft) {
+            $wo[] = 'f.ungeprueft = 1'; // Spalte aus Migration 020
+        }
         $sql = 'SELECT f.*, s.name AS spurweite_name, '
             . "TRIM(CONCAT(p.vorname, ' ', p.nachname)) AS eigentuemer_name, "
             . "(SELECT GROUP_CONCAT(d.adresse ORDER BY d.protokoll, d.adresse SEPARATOR ', ') FROM decoder d "
@@ -164,12 +167,18 @@ final class FahrzeugRepository
         return $st->fetchAll(\PDO::FETCH_ASSOC);
     }
 
-    /** @param array<string,mixed> $d */
-    public function anlegen(array $d, ?int $angelegtVonBenutzerId = null): int
+    /**
+     * @param array<string,mixed> $d
+     * @param bool $ungeprueft Kennzeichen „ungeprüft“ setzen (nur der Import; braucht Migration 020)
+     */
+    public function anlegen(array $d, ?int $angelegtVonBenutzerId = null, bool $ungeprueft = false): int
     {
         $werte = $this->werte($d);
-        $spalten = implode(', ', self::FELDER);
-        $platzhalter = implode(', ', array_fill(0, count(self::FELDER) + 2, '?'));
+        $spalten = implode(', ', self::FELDER) . ($ungeprueft ? ', ungeprueft' : '');
+        if ($ungeprueft) {
+            $werte[] = 1;
+        }
+        $platzhalter = implode(', ', array_fill(0, count($werte) + 2, '?'));
         $status = $werte[array_search('status', self::FELDER, true)];
         $letzter = null;
         for ($versuch = 0; $versuch < 3; $versuch++) {
@@ -214,6 +223,26 @@ final class FahrzeugRepository
         if ($st->rowCount() === 0) {
             throw new KonfliktFehler();
         }
+    }
+
+    /**
+     * Kennzeichen „ungeprüft“ löschen. geaendert_am bleibt bewusst unverändert: aktualisieren() schreibt die Spalte nie,
+     * ein gleichzeitig geöffnetes Formular kann das Kennzeichen also nicht überschreiben – ein neuer Zeitstempel würde
+     * dort nur einen unnötigen Bearbeitungskonflikt auslösen.
+     *
+     * @return bool ob das Fahrzeug bis eben ungeprüft war
+     */
+    public function markiereGeprueft(int $id): bool
+    {
+        $st = $this->pdo->prepare('UPDATE fahrzeug SET ungeprueft = 0, geaendert_am = geaendert_am WHERE id = ? AND ungeprueft = 1');
+        $st->execute([$id]);
+        return $st->rowCount() > 0;
+    }
+
+    /** Bezeichnungen aller Fahrzeuge (auch ausgemusterter), für den Hinweis „doppelt“ beim Import. @return list<string> */
+    public function alleBezeichnungen(): array
+    {
+        return array_map('strval', $this->pdo->query('SELECT bezeichnung FROM fahrzeug')->fetchAll(\PDO::FETCH_COLUMN));
     }
 
     public function loeschen(int $id): void

@@ -6,7 +6,10 @@ include __DIR__ . '/_labels.php';
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="h3 mb-0">Fahrzeuge</h1>
     <?php if ($darf('fahrzeug_bearbeiten')): ?>
-        <a class="btn btn-primary" href="<?= e(url('/fahrzeuge/neu')) ?>">+ Fahrzeug anlegen</a>
+        <div class="d-flex flex-wrap gap-2">
+            <a class="btn btn-outline-primary" href="<?= e(url('/fahrzeuge/import')) ?>">Fahrzeuge importieren</a>
+            <a class="btn btn-primary" href="<?= e(url('/fahrzeuge/neu')) ?>">+ Fahrzeug anlegen</a>
+        </div>
     <?php elseif ($darf('fahrzeug_anlegen')): ?>
         <a class="btn btn-primary" href="<?= e(url('/fahrzeuge/neu')) ?>">+ Eigenes Fahrzeug anlegen</a>
     <?php endif; ?>

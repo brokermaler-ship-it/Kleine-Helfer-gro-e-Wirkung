@@ -305,6 +305,45 @@ final class VorMigrationTest extends DbTestCase
         $pruefe();
     }
 
+    /** Vor Migration 020 führen Import und „Als geprüft markieren“ zum Update; Liste und Fahrzeugseite bleiben lesbar. */
+    public function test_fahrzeug_import_vor_migration_020(): void
+    {
+        $id = $this->legeBenutzerAn('admin@verein.de', 'geheim-passwort-1', 'admin');
+        [$fz] = $this->dokumentMitFahrzeug();
+        $this->pdo->exec('DROP TABLE fahrzeug_import');
+        $this->pdo->exec('ALTER TABLE fahrzeug DROP INDEX idx_fahrzeug_ungeprueft, DROP COLUMN ungeprueft');
+        $sitzung = ['_csrf' => str_repeat('a', 64)];
+        $this->sitzungAnmelden($sitzung, $id);
+        $app = fn() => \Emc\Core\App::erzeuge(self::testConfig(), new \Emc\Core\Session($sitzung));
+        $tmp = tempnam(sys_get_temp_dir(), 'csv');
+        $pruefe = function (array $anfragen) use ($app, $fz, $tmp): void {
+            foreach ($anfragen as [$methode, $pfad]) {
+                file_put_contents($tmp, "Bezeichnung;Gattung;Spur\nLok;Lok;H0\n");
+                $datei = ['datei' => ['name' => 'a.csv', 'tmp_name' => $tmp, 'error' => UPLOAD_ERR_OK, 'size' => 30]];
+                $r = $app()->handle(new \Emc\Core\Request($methode, $pfad, [], $methode === 'POST' ? ['_csrf' => str_repeat('a', 64)] : [], $methode === 'POST' ? $datei : []));
+                self::assertSame(303, $r->status, $pfad);
+                self::assertSame('/admin/update', $r->headers['Location'], $pfad);
+            }
+            $r = $app()->handle(new \Emc\Core\Request('GET', '/fahrzeuge', ['ungeprueft' => '1']));
+            self::assertSame(303, $r->status);
+            self::assertSame('/admin/update', $r->headers['Location']);
+            self::assertSame(200, $app()->handle(new \Emc\Core\Request('GET', '/fahrzeuge'))->status);
+            $seite = $app()->handle(new \Emc\Core\Request('GET', "/fahrzeuge/$fz"));
+            self::assertSame(200, $seite->status);
+            self::assertStringNotContainsString('ungeprüft', $seite->body);
+        };
+        $mitDatenbank = [['GET', '/fahrzeuge/import'], ['POST', '/fahrzeuge/import'], ['POST', "/fahrzeuge/$fz/geprueft"]];
+        try {
+            // Spalte und Tabelle fehlen, obwohl die Version eingetragen ist (z. B. abgebrochenes Update): Controller fängt es ab.
+            $pruefe($mitDatenbank);
+            // Steht die Migration aus, leitet schon App weiter (auch Vorlage und Bestätigen).
+            $this->pdo->exec("DELETE FROM schema_migration WHERE version = '020_fahrzeug_import'");
+            $pruefe([...$mitDatenbank, ['GET', '/fahrzeuge/import/vorlage.csv'], ['POST', '/fahrzeuge/import/bestaetigen'], ['POST', '/fahrzeuge/import/abbrechen']]);
+        } finally {
+            @unlink($tmp);
+        }
+    }
+
     /** App merkt sich die ausstehenden Migrationen nur für eine Anfrage: nach dem Update gilt sofort der neue Stand. */
     public function test_ausstehende_migrationen_je_anfrage_neu_ermittelt(): void
     {

@@ -35,7 +35,7 @@ $imMagazin = function (array $fz) use ($magazinInfo): string {
                         <div class="small text-muted"><?= e($fz['inventarnummer']) ?> · <?= e($fz['spurweite_name']) ?></div>
                         <div class="small">Adresse: <?= $adressen($fz) ?></div>
                         <div class="mt-1">
-                            <?= $mitSeit ? '<span class="small">' . $seit($fz) . '</span>' . $imMagazin($fz) : $statusBadge($fz) ?>
+                            <?= $mitSeit ? '<span class="small">' . $seit($fz) . '</span>' . $imMagazin($fz) : $statusBadge($fz) ?><?= $ungeprueftBadge($fz) ?>
                             <?= $eigentumBadge($fz) ?>
                         </div>
                         <?php if (!$mitSeit): ?>
@@ -59,7 +59,7 @@ $imMagazin = function (array $fz) use ($magazinInfo): string {
                     <td><?= e($fz['spurweite_name']) ?></td>
                     <td><?= $adressen($fz) ?></td>
                     <td><?= $eigentumBadge($fz) ?></td>
-                    <td><?= $mitSeit ? $seit($fz) . $imMagazin($fz) : $statusBadge($fz) ?></td>
+                    <td><?= $mitSeit ? $seit($fz) . $imMagazin($fz) : $statusBadge($fz) ?><?= $ungeprueftBadge($fz) ?></td>
                     <?php if (!$mitSeit): ?>
                         <td class="text-end"><a class="btn btn-sm btn-outline-danger text-nowrap" href="<?= e(url('/fahrzeuge/' . $fz['id'] . '/defekt')) ?>"
                                aria-label="Defekt melden: <?= e($fz['bezeichnung']) ?>">Defekt melden</a></td>

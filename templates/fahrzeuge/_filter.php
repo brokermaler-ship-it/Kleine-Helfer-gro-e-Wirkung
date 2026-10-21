@@ -66,6 +66,14 @@
                 <?php endforeach; ?>
             </select>
         </div>
+        <?php if ($mitStatusfilter): ?>
+        <div class="col-12 col-md-4 d-flex align-items-end">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="f-ungeprueft" name="ungeprueft" value="1"<?= $filter->ungeprueft ? ' checked' : '' ?>>
+                <label class="form-check-label" for="f-ungeprueft">nur ungeprüfte (importierte)</label>
+            </div>
+        </div>
+        <?php endif; ?>
         <div class="col-12 col-md-8 d-flex align-items-end gap-2">
             <button type="submit" class="btn btn-primary">Suchen</button>
             <a class="btn btn-link" href="<?= e(url($filterZiel)) ?>">Zurücksetzen</a>

@@ -60,10 +60,20 @@ final class FahrzeugController
         $filter = FahrzeugFilter::ausRequest($r);
         $benutzer = $this->auth->benutzer();
         $meine = $benutzer !== null && !$filter->istGesetzt() ? $this->fahrzeuge->sucheEigene($benutzer->personId) : [];
+        try {
+            $fahrzeuge = $this->fahrzeuge->suche($filter);
+        } catch (\PDOException $e) {
+            // Filter „nur ungeprüfte“ ohne die Spalte aus Migration 020 (Update steht aus oder ist abgebrochen).
+            if (!$filter->ungeprueft || (string) $e->getCode() !== '42S22') {
+                throw $e;
+            }
+            $this->session->meldung('warnung', 'Bitte zuerst das Datenbank-Update ausführen.');
+            return Response::redirect(url('/admin/update'));
+        }
         return $this->html('fahrzeuge/liste', [
             'titel' => 'Fahrzeuge',
             'meine' => $meine,
-            'fahrzeuge' => $this->fahrzeuge->suche($filter),
+            'fahrzeuge' => $fahrzeuge,
             'filter' => $filter,
             'spurweiten' => $this->spurweiten->alle(),
             'personen' => $this->personen->alle(false),
@@ -122,6 +132,31 @@ final class FahrzeugController
         }
         $this->session->meldung('erfolg', 'Das Fahrzeug wurde als M' . $id . ' ans Magazin übergeben.');
         return Response::redirect(url('/magazin/' . $id));
+    }
+
+    /**
+     * POST /fahrzeuge/{id}/geprueft: Kennzeichen „ungeprüft“ (aus dem Import) löschen; wer das Fahrzeug bearbeiten darf.
+     * Ein schon geprüftes Fahrzeug bleibt unverändert (kein weiterer Protokolleintrag).
+     */
+    public function alsGeprueft(Request $r, array $p): Response
+    {
+        $fz = $this->ladeBearbeitbar($p);
+        try {
+            $geaendert = $this->fahrzeuge->markiereGeprueft((int) $fz['id']);
+        } catch (\PDOException $e) {
+            if ((string) $e->getCode() !== '42S22') {
+                throw $e;
+            }
+            $this->session->meldung('warnung', 'Bitte zuerst das Datenbank-Update ausführen.');
+            return Response::redirect(url('/admin/update'));
+        }
+        if ($geaendert) {
+            $this->protokoll->schreibe($this->auth->benutzer()?->id, 'fahrzeug', (int) $fz['id'], 'geaendert', [
+                'geprüft' => ['alt' => 'nein', 'neu' => 'ja'],
+            ]);
+        }
+        $this->session->meldung('erfolg', 'Das Fahrzeug ist jetzt als geprüft markiert.');
+        return Response::redirect(url('/fahrzeuge/' . $fz['id']));
     }
 
     private function stelleAb(array $p, bool $abgestellt, string $meldung): Response

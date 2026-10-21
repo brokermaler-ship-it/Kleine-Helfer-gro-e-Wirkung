@@ -19,3 +19,6 @@ $titelbild = fn(array $fz): string => $fz['titelbild_dokument_id'] === null
     ? '<div class="fahrzeug-bild fahrzeug-bild-leer" aria-hidden="true">&#128642;</div>'
     : '<img class="fahrzeug-bild" alt="" loading="lazy" src="' . e(url('/dateien/' . $fz['titelbild_dokument_id'] . '/vorschau')) . '">';
 $adressen = fn(array $fz): string => $fz['adressen'] === null ? '–' : e((string) $fz['adressen']);
+$ungeprueftBadge = fn(array $fz): string => (int) ($fz['ungeprueft'] ?? 0) === 1
+    ? ' <span class="badge text-bg-warning" title="Importiert, noch nicht geprüft">ungeprüft</span>'
+    : '';

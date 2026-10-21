@@ -50,6 +50,8 @@ final class DsgvoLoeschung
         ['boerse_angebot', 'notiz', null, 'boerse_angebot', 'id'],
         ['boerse_verkauf', 'storno_grund', 300, 'boerse', 'boerse_id'],
         ['boerse', 'ort', 150, 'boerse', 'id'],
+        // Fahrzeugnotizen, z. B. „Besitzer laut Liste: …“ aus dem Fahrzeug-Import (Version 0.8.1).
+        ['fahrzeug', 'notiz', null, 'fahrzeug', 'id'],
     ];
     /** Protokolleintrag an jedem Objekt mit bereinigtem Freitext (ohne alte Werte). */
     public const FREITEXT_NACHWEIS = 'Freitexte nach DSGVO bereinigt';
@@ -85,7 +87,7 @@ final class DsgvoLoeschung
      *
      * `angebote_geloescht`: nicht verkaufte Börsenangebote ohne Verkaufsposition (werden gelöscht); `angebote_verkauft`:
      * verkaufte (bleiben ohne Namen); `angebote_storniert`: nicht verkaufte mit storniertem Verkauf (bleiben ohne Person,
-     * Fotos, Beschreibung und Notiz); `freitexte`: Freitexte in Magazin und Börse mit Name, E-Mail oder Telefon;
+     * Fotos, Beschreibung und Notiz); `freitexte`: Freitexte in Magazin, Börse und Fahrzeugnotizen mit Name, E-Mail oder Telefon;
      * `anfragen`: öffentliche Börsenanfragen mit E-Mail oder Telefon der Person (werden gelöscht).
      *
      * @return array{person: array<string,mixed>, benutzer: ?array<string,mixed>, fahrzeuge: list<array{id:int, inventarnummer:string, bezeichnung:string, dokumente:int, rechnungen:int, wartungen:int, reparaturen:int}>, wartungen_in_vereinsdaten:int, reparaturen_in_vereinsdaten:int, protokolleintraege:int, verweigert:?string, onedrive_konto_der_person:bool, angebote_geloescht:int, angebote_verkauft:int, angebote_storniert:int, freitexte:int, anfragen:int}
