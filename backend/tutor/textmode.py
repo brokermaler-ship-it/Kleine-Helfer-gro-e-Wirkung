@@ -35,7 +35,7 @@ def print_event(topic: str, payload: dict) -> None:
 
 def run(module_id: str) -> int:
     settings = load_settings()
-    modules = load_modules(settings.content_dir)
+    modules = load_modules(settings.content_dir, settings.intern_content_dir)
     if module_id not in modules:
         print(f"Unbekanntes Modul '{module_id}'. Verfügbar: {', '.join(modules)}", file=sys.stderr)
         return 2

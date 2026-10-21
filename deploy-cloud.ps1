@@ -39,6 +39,8 @@ Copy-Item deploy\livekit-cloud\Dockerfile, deploy\livekit-cloud\.dockerignore, d
 Copy-Item backend\pyproject.toml "$stage\backend"
 Copy-Item backend\tutor "$stage\backend\tutor" -Recurse -Exclude __pycache__
 Copy-Item content "$stage\content" -Recurse
+# Interne Module (nicht im Repository) mit hochladen
+if (Test-Path content-intern) { Copy-Item content-intern\*.yaml "$stage\content\modules" }
 if (Test-Path $toml) { Copy-Item $toml $stage }
 
 # Geheimnisse für den Agenten: alles außer LIVEKIT_*, das setzt LiveKit Cloud selbst.

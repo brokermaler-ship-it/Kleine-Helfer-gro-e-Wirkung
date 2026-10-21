@@ -114,6 +114,27 @@ Beispielmodul ist **erfundener Inhalt** und muss vor einem echten Pilot durch ei
 freigegebene SOP ersetzt werden. Beim Laden wird geprüft, dass jede Quizfrage auf ein
 Lernziel verweist und einen gültigen Lösungsindex hat.
 
+Interne Module, die nicht in dieses öffentliche Repository gehören, liegen in
+`content-intern/` (per `.gitignore` ausgeschlossen). Der Tutor lädt sie zusätzlich,
+`deploy-cloud.ps1` lädt sie mit zu LiveKit Cloud hoch.
+
+## Tutor-Stimmen
+
+Die lernende Person wählt zwischen **Lukas** (Cartesia-Stimme aus `CARTESIA_VOICE_ID`) und
+**Luisa** (`CARTESIA_VOICE_ID_LUISA`, Vorgabe „Lorelei – Helpful Guide“). `GET /api/tutors`
+liefert die Auswahl.
+
+## Moodle (SCORM 1.2)
+
+    python moodle/build_scorm.py content/modules/phishing-melden.yaml --tutor-url https://tutor.example.de
+
+erzeugt `moodle/dist/<modul>_SCORM.zip`: Lernskript mit einem Modul je Lernziel,
+Freischaltung ab 70 % im Quiz des Vormoduls, Punktzahl an Moodle (`cmi.core.score.raw`) und
+am Ende je Tutor ein Knopf, der das Lerngespräch in einem neuen Fenster öffnet
+(`?kennung=M-…&modul=…&tutor=…&direkt=1`). Statt der Moodle-Kennung geht nur ein
+Pseudonym an den Tutor. In Moodle: Arbeitsmaterial → Lernpaket → ZIP hochladen.
+Firmen-CI (`moodle/template/hsl-ci.css`, Logo) wird nur übernommen, wenn sie lokal vorliegt.
+
 ## Stand und Grenzen
 
 Geprüft:

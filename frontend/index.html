@@ -27,6 +27,9 @@
           <select id="module-select" required></select>
         </label>
         <div id="module-info" class="muted"></div>
+        <fieldset id="tutor-choice" class="tutor-choice">
+          <legend>Mit wem möchtest du lernen?</legend>
+        </fieldset>
         <div class="row">
           <button type="submit" class="primary">Weiter zum Wissenscheck</button>
           <button type="button" id="retention-only" class="secondary">Nur Wissenscheck (Wiederholung)</button>
@@ -84,6 +87,11 @@
         <button id="protocol-continue" class="primary" type="button">Weiter zum Wissenscheck</button>
       </div>
     </dialog>
+    <!-- Ende bei Aufruf aus Moodle -->
+    <section id="view-done" class="view" hidden>
+      <h1>Gespräch beendet</h1>
+      <p class="lead">Danke! Du kannst dieses Fenster schließen und in Moodle mit dem Kurs weitermachen.</p>
+    </section>
   </main>
 
   <script src="app.js"></script>

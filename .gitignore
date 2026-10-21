@@ -7,3 +7,7 @@ data/
 tools/
 build/
 deploy/livekit-cloud/livekit.toml
+content-intern/
+moodle/template/logo-hsl.jpeg
+moodle/dist/
+moodle/template/hsl-ci.css

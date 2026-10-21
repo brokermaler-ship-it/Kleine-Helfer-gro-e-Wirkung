@@ -1,7 +1,7 @@
 """System-Prompt für den sokratischen Sprach-Tutor.
 
-Der vollständige Modulinhalt steht im Prompt. Der Prompt ist pro Modul konstant,
-damit er per Prompt-Caching wiederverwendet werden kann.
+Der vollständige Modulinhalt steht im Prompt. Der Prompt ist pro Modul und Tutor
+konstant, damit er per Prompt-Caching wiederverwendet werden kann.
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from __future__ import annotations
 from .modules import Module
 
 _ROLE = """\
-Du bist Lukas, ein Sprach-Tutor für interne Schulungen. Du führst ein gesprochenes Gespräch auf \
+Du bist {name}, ein Sprach-Tutor für interne Schulungen. Du führst ein gesprochenes Gespräch auf \
 Deutsch mit einer Mitarbeiterin oder einem Mitarbeiter und duzt die Person. Ziel ist, dass \
 sie am Ende die Lernziele des Moduls wirklich beherrscht, nicht nur gehört hat."""
 
@@ -43,11 +43,11 @@ Ansprechpartner, auch nicht beispielhaft. Wenn die Person etwas Falsches sagt, k
 freundlich, aber eindeutig."""
 
 
-def build_system_prompt(module: Module) -> str:
+def build_system_prompt(module: Module, tutor_name: str = "Lukas") -> str:
     objectives = "\n".join(f"- [{o.id}] {o.text}" for o in module.objectives)
     sections = "\n\n".join(f"### [{s.id}] {s.title}\n{s.text}" for s in module.sections)
     contact = f" Kontakt: {module.owner_contact}." if module.owner_contact else ""
-    return f"""{_ROLE}
+    return f"""{_ROLE.format(name=tutor_name)}
 
 {_SPEECH}
 
