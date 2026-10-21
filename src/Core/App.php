@@ -17,6 +17,7 @@ use Emc\Boerse\AngebotController;
 use Emc\Boerse\AngebotDienst;
 use Emc\Boerse\AngebotRepository;
 use Emc\Boerse\AbrechnungRepository;
+use Emc\Boerse\AnfrageController;
 use Emc\Boerse\AnfrageDienst;
 use Emc\Boerse\AnfrageRepository;
 use Emc\Boerse\Angebotsnummer;
@@ -108,6 +109,8 @@ final class App
     private ?array $ausstehend = null;
     /** Anzahl neuer Defektmeldungen für den angemeldeten Benutzer, je Anfrage einmal ermittelt (false = noch nicht). */
     private int|false|null $neueDefekte = false;
+    /** Anzahl offener Börsenanfragen für Börsenwarte, je Anfrage einmal ermittelt (false = noch nicht). */
+    private int|false|null $neueAnfragen = false;
 
     /** @param array<string,mixed> $config */
     private function __construct(private array $config, ?Session $session, private string $migrationsVerzeichnis)
@@ -440,7 +443,17 @@ final class App
             $c->get(Spamschutz::class),
             $c->get(UploadService::class),
             $c->get(DokumentRepository::class),
-            $c->get(Aenderungsprotokoll::class)
+            $c->get(Aenderungsprotokoll::class),
+            $c->get(MagazinDienst::class)
+        ));
+        $this->container->set(AnfrageController::class, fn(Container $c) => new AnfrageController(
+            $this->view,
+            $c->get(AnfrageRepository::class),
+            $c->get(AnfrageDienst::class),
+            $c->get(MagazinRepository::class),
+            $c->get(SpurweiteRepository::class),
+            $c->get(Auth::class),
+            $c->get('session')
         ));
         $this->container->set(OeffentlichController::class, fn(Container $c) => new OeffentlichController(
             $this->view,
@@ -627,6 +640,7 @@ final class App
     {
         $this->ausstehend = null;
         $this->neueDefekte = false;
+        $this->neueAnfragen = false;
         try {
             $this->richteViewEin();
             $antwort = $this->durchMiddleware($request);
@@ -688,6 +702,8 @@ final class App
         $this->view->teile('abstellgleisAnzahl', fn(): int => $c->get(FahrzeugRepository::class)->anzahlAbgestellt());
         // Badge am Menüpunkt „Reparaturen“; dieselbe Zahl wie in der Hinweisleiste (ein COUNT pro Seite).
         $this->view->teile('neueDefekte', fn(): ?int => $this->neueDefektmeldungen());
+        // Badge am Menüpunkt „Börse“ (und „Anfragen“); dieselbe Zahl wie in der Hinweisleiste.
+        $this->view->teile('neueAnfragen', fn(): ?int => $this->neueBoersenanfragen());
         $this->view->teileSpaet('benutzer', fn() => $auth()->benutzer());
         $this->view->teileSpaet('betriebshinweise', fn() => $this->betriebshinweise());
         $this->view->teileSpaet('meldungen', fn() => $c->get('session')->meldungenAbholen());
@@ -872,7 +888,7 @@ final class App
     }
 
     /**
-     * Hinweisleisten: neue Defektmeldungen (ab Fahrzeugwart), für Administratoren Kennwort-Anfragen, Update ausstehend,
+     * Hinweisleisten: neue Defektmeldungen (ab Fahrzeugwart), neue Börsenanfragen (Börsenwart), für Administratoren Kennwort-Anfragen, Update ausstehend,
      * Sicherung überfällig und OneDrive.
      *
      * @return list<array{typ:string,text:string,link:string,linktext:string}>
@@ -894,6 +910,10 @@ final class App
         $n = $this->neueDefektmeldungen();
         if ($n !== null && $n > 0) {
             $hinweise[] = ['typ' => 'warning', 'text' => $n === 1 ? '1 neue Defektmeldung' : $n . ' neue Defektmeldungen', 'link' => $this->linkNeueDefekte(), 'linktext' => 'Ansehen'];
+        }
+        $n = $this->neueBoersenanfragen();
+        if ($n !== null && $n > 0) {
+            $hinweise[] = ['typ' => 'info', 'text' => $n === 1 ? '1 neue Börsenanfrage' : $n . ' neue Börsenanfragen', 'link' => '/anfragen?status=offen', 'linktext' => 'Ansehen'];
         }
         try {
             if (!Berechtigung::darf($this->container->get(Auth::class)->benutzer(), Berechtigung::BETRIEB)) {
@@ -944,6 +964,26 @@ final class App
             // Hinweise sind nur Beiwerk (z. B. Tabellen aus Migration 014 fehlen trotz eingetragener Version).
         }
         return $this->neueDefekte;
+    }
+
+    /**
+     * Offene Börsenanfragen (Status „offen“) für Börsenwarte; null für alle anderen, vor dem Datenbank-Update und bei
+     * Datenbankfehlern. Je Anfrage einmal abgefragt (Hinweisleiste und Badge im Menü teilen sich das Ergebnis).
+     */
+    private function neueBoersenanfragen(): ?int
+    {
+        if ($this->neueAnfragen !== false) {
+            return $this->neueAnfragen;
+        }
+        $this->neueAnfragen = null;
+        try {
+            if (Berechtigung::istBoersenwart($this->container->get(Auth::class)->benutzer()) && $this->ausstehend() === []) {
+                $this->neueAnfragen = $this->container->get(AnfrageRepository::class)->anzahlOffen();
+            }
+        } catch (\Throwable) {
+            // Hinweise sind nur Beiwerk (z. B. Tabelle aus Migration 019 fehlt trotz eingetragener Version).
+        }
+        return $this->neueAnfragen;
     }
 
     /** Liste der gemeldeten Reparaturen; wer nur einen Objekttyp sieht, bekommt den Filter dazu (Zahl und Liste passen). */

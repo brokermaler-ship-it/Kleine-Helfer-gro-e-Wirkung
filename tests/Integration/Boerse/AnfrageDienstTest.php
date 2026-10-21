@@ -38,7 +38,8 @@ final class AnfrageDienstTest extends DbTestCase
             new Spamschutz($this->pdo, new Einstellungen($this->pdo)),
             $upload,
             $this->dok,
-            new Aenderungsprotokoll($this->pdo)
+            new Aenderungsprotokoll($this->pdo),
+            new \Emc\Magazin\MagazinDienst($this->pdo, new \Emc\Magazin\MagazinRepository($this->pdo), new Aenderungsprotokoll($this->pdo))
         );
     }
 
@@ -212,5 +213,74 @@ final class AnfrageDienstTest extends DbTestCase
         $this->dienst->loesche($id, null);
         $this->assertSame(0, $this->zahl('SELECT COUNT(*) FROM boerse_anfrage'));
         $this->assertNull($this->dok->finde($foto));
+    }
+
+    /** @return array{0: array<string,mixed>, 1: array<string,mixed>} Artikel und Eingang für die Übernahme */
+    private function uebernahme(): array
+    {
+        $kategorie = $this->zahl("SELECT id FROM magazin_kategorie WHERE schluessel = 'sonstiges'");
+        return [
+            ['bezeichnung' => 'Kiste', 'kategorie_id' => $kategorie, 'zustand' => 'gebraucht', 'lagerort' => null],
+            ['datum' => '2026-10-21', 'menge' => 1, 'herkunft' => 'spende', 'freitext' => 'Anfrage über die Webseite (Nr. 1)', 'betrag' => null],
+        ];
+    }
+
+    /** Übernahme wartet auf die Sperre der Anfrage (z. B. gleichzeitiges Löschen): Sperrkonflikt, nichts gespeichert. */
+    public function test_uebernahme_unter_sperre(): void
+    {
+        $jetzt = new \DateTimeImmutable('2026-10-21 12:00:00');
+        $this->dienst->nimmEntgegen('sammlung', null, $this->daten(), [$this->foto(ExifJpeg::erzeuge(), 'a.jpg')], '203.0.113.7', $jetzt);
+        $id = $this->zahl('SELECT MAX(id) FROM boerse_anfrage');
+        [$artikel, $eingang] = $this->uebernahme();
+        $zweite = self::verbindung();
+        $zweite->beginTransaction();
+        $zweite->query("SELECT id FROM boerse_anfrage WHERE id = $id FOR UPDATE")->fetchAll();
+        $this->pdo->exec('SET SESSION innodb_lock_wait_timeout = 1');
+        try {
+            $this->dienst->uebernimmInsMagazin($id, $artikel, $eingang, null);
+            $this->fail('Sperrkonflikt erwartet');
+        } catch (\Emc\Core\DomainFehler $e) {
+            $this->assertSame(\Emc\Core\Transaktion::SPERRKONFLIKT, $e->getMessage());
+        } finally {
+            $zweite->rollBack();
+            $this->pdo->exec('SET SESSION innodb_lock_wait_timeout = 50');
+        }
+        $this->assertSame(0, $this->zahl('SELECT COUNT(*) FROM magazin_artikel'));
+        $this->assertSame(0, $this->zahl('SELECT COUNT(*) FROM magazin_buchung'));
+        $this->assertSame('offen', (string) $this->pdo->query("SELECT status FROM boerse_anfrage WHERE id = $id")->fetchColumn());
+
+        $artikelId = $this->dienst->uebernimmInsMagazin($id, $artikel, $eingang, null);
+        $this->assertSame(1, $this->zahl("SELECT SUM(menge) FROM magazin_buchung WHERE artikel_id = $artikelId"));
+        try {
+            $this->dienst->uebernimmInsMagazin($id, $artikel, $eingang, null);
+            $this->fail('schon übernommen');
+        } catch (\Emc\Core\DomainFehler $e) {
+            $this->assertSame(AnfrageDienst::SCHON_UEBERNOMMEN, $e->getMessage());
+        }
+        $this->assertSame(1, $this->zahl('SELECT COUNT(*) FROM magazin_artikel'));
+    }
+
+    /** Ein Fehler beim Anlegen des Artikels lässt die Anfrage unverändert (eine Transaktion). */
+    public function test_uebernahme_fehler_laesst_anfrage_unveraendert(): void
+    {
+        $this->dienst->nimmEntgegen('sammlung', null, $this->daten(), [$this->foto(ExifJpeg::erzeuge(), 'a.jpg')], '203.0.113.7', new \DateTimeImmutable('2026-10-21 12:00:00'));
+        $id = $this->zahl('SELECT MAX(id) FROM boerse_anfrage');
+        [$artikel, $eingang] = $this->uebernahme();
+        $eingang['menge'] = 0;
+        try {
+            $this->dienst->uebernimmInsMagazin($id, $artikel, $eingang, null);
+            $this->fail('Fehler erwartet');
+        } catch (\Emc\Core\DomainFehler) {
+        }
+        $this->assertSame(0, $this->zahl('SELECT COUNT(*) FROM magazin_artikel'));
+        $this->assertSame(0, $this->zahl("SELECT COUNT(*) FROM dokument_zuordnung WHERE objekt_typ = 'magazin_artikel'"));
+        $this->assertSame(0, $this->zahl("SELECT COUNT(*) FROM aenderungsprotokoll WHERE objekt_typ = 'boerse_anfrage' AND aktion = 'geaendert'"));
+        $this->assertNull($this->pdo->query("SELECT magazin_artikel_id FROM boerse_anfrage WHERE id = $id")->fetchColumn());
+
+        $kauf = $this->dienst->nimmEntgegen('kaufanfrage', null, $this->daten(['wunsch' => null]), [], '203.0.113.8', new \DateTimeImmutable('2026-10-21 12:00:00'));
+        $this->assertSame('gespeichert', $kauf);
+        $kaufId = $this->zahl('SELECT MAX(id) FROM boerse_anfrage');
+        $this->expectExceptionMessage(AnfrageDienst::NUR_SAMMLUNG);
+        $this->dienst->uebernimmInsMagazin($kaufId, $artikel, ['menge' => 1] + $eingang, null);
     }
 }

@@ -93,11 +93,12 @@ main { padding-bottom: 2rem; flex: 1 0 auto; }
     .emc-benutzername { max-width: 6.5rem; }
 }
 @media (min-width: 1200px) and (max-width: 1299.98px) {
-    .emc-codefeld .form-control { width: 5.5rem; }
-    .emc-benutzername { max-width: 5.5rem; }
+    /* Platz für das Badge „neue Börsenanfragen“ am Menüpunkt „Börse“ (bis „9+“). */
+    .emc-codefeld .form-control { width: 5rem; }
+    .emc-benutzername { max-width: 5rem; }
 }
 @media (min-width: 1400px) {
-    /* Ab 1600 px steht zusätzlich der Markentext neben dem Logo. */
+    /* Ab 1700 px steht zusätzlich der Markentext neben dem Logo. */
     .emc-navbar .navbar-nav { --bs-navbar-nav-link-padding-x: .3rem; }
 }
 /* „Defekt melden“: eine Spalte, große Ziele für den Daumen */
@@ -207,8 +208,9 @@ body.druckseite { display: block; min-height: 0; background: #e9ecef; }
 /* Magazin */
 .min-w-0 { min-width: 0; }
 .magazin-foto { width: 128px; height: 96px; object-fit: cover; }
-/* Markentext „Lokschuppen“ neben dem Logo erst ab 1600 px wieder (mit „Magazin“ ist das Menü dazwischen zu breit). */
-@media (min-width: 1600px) {
+/* Markentext „Lokschuppen“ neben dem Logo erst ab 1700 px wieder (mit „Magazin“ und dem Badge „neue Börsenanfragen“
+   ist das Menü dazwischen zu breit). */
+@media (min-width: 1700px) {
     .emc-navbar .emc-markentext { display: inline !important; }
 }
 

@@ -5,16 +5,19 @@ declare(strict_types=1);
 namespace Emc\Boerse;
 
 use Emc\Betrieb\Einstellungen;
+use Emc\Codes\Code;
+use Emc\Core\DomainFehler;
 use Emc\Core\Transaktion;
 use Emc\Dateien\DateiController;
 use Emc\Dateien\DokumentRepository;
 use Emc\Dateien\UploadFehler;
 use Emc\Dateien\UploadService;
+use Emc\Magazin\MagazinDienst;
 use Emc\Protokoll\Aenderungsprotokoll;
 
 /**
  * Anfragen aus dem öffentlichen Bereich: entgegennehmen (Begrenzung je IP, Fotos ohne Metadaten) und nach 12 Monaten
- * samt Fotos löschen. Protokolleinträge enthalten nie Name, E-Mail, Telefon oder Nachricht.
+ * samt Fotos löschen; beim Börsenwart Status setzen und eine angebotene Sammlung ins Magazin übernehmen. Protokolleinträge enthalten nie Name, E-Mail, Telefon oder Nachricht.
  */
 final class AnfrageDienst
 {
@@ -22,6 +25,9 @@ final class AnfrageDienst
     public const AUFBEWAHRUNG_MONATE = 12;
     /** Einstellung mit dem Zeitpunkt des letzten Aufräumens beim Seitenaufruf. */
     public const AUFGERAEUMT_AM = 'boerse_aufgeraeumt_am';
+    public const NICHT_GEFUNDEN = 'Diese Anfrage gibt es nicht mehr.';
+    public const SCHON_UEBERNOMMEN = 'Diese Anfrage wurde schon übernommen.';
+    public const NUR_SAMMLUNG = 'Nur eine angebotene Sammlung lässt sich ins Magazin übernehmen.';
 
     private int $abgelehnt = 0;
 
@@ -32,6 +38,7 @@ final class AnfrageDienst
         private UploadService $upload,
         private DokumentRepository $dok,
         private Aenderungsprotokoll $protokoll,
+        private ?MagazinDienst $magazin = null,
     ) {
     }
 
@@ -116,6 +123,89 @@ final class AnfrageDienst
         }
         $einstellungen->setze(self::AUFGERAEUMT_AM, (string) $jetzt->getTimestamp());
         $this->raeumeAuf($jetzt);
+    }
+
+    /**
+     * Beim Öffnen durch den Börsenwart: offen → in_bearbeitung (sonst unverändert). Protokoll nur mit dem Status.
+     *
+     * @throws DomainFehler bei Sperrkonflikt
+     */
+    public function oeffne(int $anfrageId, ?int $benutzerId): void
+    {
+        Transaktion::readCommitted($this->pdo, function () use ($anfrageId, $benutzerId): void {
+            $a = $this->rep->sperre($anfrageId);
+            if ($a !== null && $a['status'] === 'offen') {
+                $this->schreibeStatus($anfrageId, 'offen', 'in_bearbeitung', $benutzerId);
+            }
+        });
+    }
+
+    /**
+     * Setzt den Status (offen, in_bearbeitung, erledigt). Protokoll nur mit dem Status.
+     *
+     * @return bool false, wenn sich nichts geändert hat
+     * @throws DomainFehler Anfrage gelöscht oder Sperrkonflikt
+     */
+    public function setzeStatus(int $anfrageId, string $status, ?int $benutzerId): bool
+    {
+        if (!in_array($status, AnfrageRepository::STATUS, true)) {
+            throw new \InvalidArgumentException('Unbekannter Status: ' . $status);
+        }
+        return Transaktion::readCommitted($this->pdo, function () use ($anfrageId, $status, $benutzerId): bool {
+            $a = $this->rep->sperre($anfrageId) ?? throw new DomainFehler(self::NICHT_GEFUNDEN);
+            if ($a['status'] === $status) {
+                return false;
+            }
+            $this->schreibeStatus($anfrageId, (string) $a['status'], $status, $benutzerId);
+            return true;
+        });
+    }
+
+    /**
+     * Übernimmt eine angebotene Sammlung ins Magazin: in einer Transaktion Anfrage sperren (boerse_anfrage →
+     * magazin_artikel), Artikel mit Eingang anlegen, die Fotos der Anfrage zusätzlich dem Artikel zuordnen (das erste
+     * wird Titelbild), Anfrage erledigt mit Verweis auf den Artikel. Die Fotos bleiben auch an der Anfrage, bis sie
+     * gelöscht wird; geteilte Fotos überstehen das Löschen am Artikel.
+     *
+     * @param array<string,mixed> $artikel geprüft vom ArtikelValidator
+     * @param array<string,mixed> $eingang geprüft vom BuchungValidator
+     * @return int ID des neuen Artikels
+     * @throws DomainFehler gelöscht, keine Sammlung, schon übernommen, Sperrkonflikt (nichts gespeichert)
+     */
+    public function uebernimmInsMagazin(int $anfrageId, array $artikel, array $eingang, ?int $benutzerId): int
+    {
+        $magazin = $this->magazin ?? throw new \LogicException('AnfrageDienst ohne MagazinDienst.');
+        return Transaktion::readCommitted($this->pdo, function () use ($magazin, $anfrageId, $artikel, $eingang, $benutzerId): int {
+            $a = $this->rep->sperre($anfrageId) ?? throw new DomainFehler(self::NICHT_GEFUNDEN);
+            if ($a['art'] !== 'sammlung') {
+                throw new DomainFehler(self::NUR_SAMMLUNG);
+            }
+            if ($a['magazin_artikel_id'] !== null) {
+                throw new DomainFehler(self::SCHON_UEBERNOMMEN);
+            }
+            $fotos = $this->rep->sperreFotos($anfrageId);
+            $artikelId = $magazin->legeAnMitEingangInLaufenderTransaktion($artikel, $eingang, $benutzerId);
+            foreach ($fotos as $foto) {
+                $this->dok->zuordnen($foto['id'], MagazinDienst::OBJEKT_ARTIKEL, $artikelId);
+                if ($foto['hat_anzeige']) {
+                    $this->dok->setzeTitelbildWennLeer(MagazinDienst::OBJEKT_ARTIKEL, $artikelId, $foto['id']);
+                }
+                $this->protokoll->schreibe($benutzerId, MagazinDienst::OBJEKT_ARTIKEL, $artikelId, 'geaendert', ['datei' => ['alt' => null, 'neu' => $foto['titel']]]);
+            }
+            $this->rep->setzeMagazinArtikel($anfrageId, $artikelId);
+            $this->rep->setzeStatus($anfrageId, 'erledigt', $benutzerId);
+            $this->protokoll->schreibe($benutzerId, self::OBJEKT, $anfrageId, 'geaendert', [
+                'status' => ['alt' => $a['status'], 'neu' => 'erledigt'],
+                'magazin' => ['alt' => null, 'neu' => Code::magazin($artikelId)],
+            ]);
+            return $artikelId;
+        });
+    }
+
+    private function schreibeStatus(int $anfrageId, string $alt, string $neu, ?int $benutzerId): void
+    {
+        $this->rep->setzeStatus($anfrageId, $neu, $benutzerId);
+        $this->protokoll->schreibe($benutzerId, self::OBJEKT, $anfrageId, 'geaendert', ['status' => ['alt' => $alt, 'neu' => $neu]]);
     }
 
     /** Löscht eine Anfrage von Hand samt nur ihr zugeordneten Fotos (geteilte, z. B. ins Magazin übernommene, bleiben). */

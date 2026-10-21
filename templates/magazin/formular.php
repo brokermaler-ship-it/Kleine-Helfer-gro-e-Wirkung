@@ -10,13 +10,17 @@
  * @var string $stand
  * @var list<array<string,mixed>> $kategorien
  * @var list<array<string,mixed>> $spurweiten
+ * @var ?string $formularAktion  anderes Ziel der Neuanlage (Übernahme einer Börsenanfrage)
+ * @var ?string $formularAbbrechen
+ * @var ?string $formularHinweis Hinweis zu den Fotos statt „Fotos fügst du nach dem Speichern …“
  */
 use Emc\Magazin\BuchungValidator;
 
 include __DIR__ . '/_labels.php';
 $neu = $artikel === null;
-$aktion = $neu ? url('/magazin') : url('/magazin/' . (int) $artikel['id']);
-$abbrechen = $neu ? url('/magazin') : url('/magazin/' . (int) $artikel['id']);
+$aktion = $neu ? ($formularAktion ?? url('/magazin')) : url('/magazin/' . (int) $artikel['id']);
+$abbrechen = $neu ? ($formularAbbrechen ?? url('/magazin')) : url('/magazin/' . (int) $artikel['id']);
+$fotoHinweis = $formularHinweis ?? 'Fotos fügst du nach dem Speichern auf der Artikelseite hinzu.';
 $wert = fn(string $n): string => (string) ($werte[$n] ?? '');
 $klasse = fn(string $n): string => isset($fehler[$n]) ? ' is-invalid' : '';
 $fehlerFeld = function (string $n) use ($fehler): void {
@@ -142,6 +146,6 @@ $text = function (string $n, string $label, int $max, bool $pflicht = false, str
             <button type="submit" class="btn btn-primary">Speichern</button>
             <a class="btn btn-link" href="<?= e($abbrechen) ?>">Abbrechen</a>
         </form>
-        <?php if ($neu): ?><p class="small text-muted mt-3">Fotos fügst du nach dem Speichern auf der Artikelseite hinzu.</p><?php endif; ?>
+        <?php if ($neu): ?><p class="small text-muted mt-3"><?= e($fotoHinweis) ?></p><?php endif; ?>
     </div>
 </div>

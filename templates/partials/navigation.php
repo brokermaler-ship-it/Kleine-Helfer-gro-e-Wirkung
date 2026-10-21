@@ -7,6 +7,8 @@ $benutzer = $benutzer ?? null;
 $abstellgleisAnzahl = $abstellgleisAnzahl ?? null;
 /** @var ?callable $neueDefekte liefert die Anzahl neuer Defektmeldungen oder null (ohne Recht auf Defekthinweise) */
 $neueDefekte = $neueDefekte ?? null;
+/** @var ?callable $neueAnfragen liefert die Anzahl offener Börsenanfragen oder null (kein Börsenwart) */
+$neueAnfragen = $neueAnfragen ?? null;
 use Emc\Auth\Berechtigung;
 ?>
 <nav class="navbar navbar-expand-xl emc-navbar navbar-dark">
@@ -36,14 +38,25 @@ use Emc\Auth\Berechtigung;
                 </li>
                 <li class="nav-item"><a class="nav-link" href="<?= e(url('/anlagen')) ?>">Anlagen</a></li>
                 <li class="nav-item"><a class="nav-link" href="<?= e(url('/magazin')) ?>">Magazin</a></li>
+                <?php
+                $istWart = Berechtigung::istBoersenwart($benutzer);
+                $anfragenNeu = $istWart && $neueAnfragen !== null ? $neueAnfragen() : null;
+                // In der Kopfzeile höchstens „9+“ (sonst wird sie ab xl für Administratoren zu breit); die genaue Zahl
+                // steht im Titel, am Menüpunkt „Anfragen“ und in der Hinweisleiste.
+                $anfragenBadge = function (int $n, string $extra = '', int $max = 99): string {
+                    return '<span class="badge rounded-pill text-bg-info"' . $extra . ' title="' . e($n === 1 ? '1 neue Börsenanfrage' : $n . ' neue Börsenanfragen') . '">'
+                        . ($n > $max ? $max . '+' : $n) . ' <span class="visually-hidden">neue Anfragen</span></span>';
+                };
+                ?>
                 <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="<?= e(url('/angebote')) ?>" role="button" data-bs-toggle="dropdown" aria-expanded="false">Börse</a>
+                    <a class="nav-link dropdown-toggle" href="<?= e(url('/angebote')) ?>" role="button" data-bs-toggle="dropdown" aria-expanded="false">Börse<?php if ($anfragenNeu !== null && $anfragenNeu > 0): ?> <?= $anfragenBadge($anfragenNeu, ' data-neue-anfragen="' . (int) $anfragenNeu . '"', 9) ?><?php endif; ?></a>
                     <ul class="dropdown-menu">
                         <li><a class="dropdown-item" href="<?= e(url('/angebote')) ?>">Angebote</a></li>
                         <li><a class="dropdown-item" href="<?= e(url('/angebote', ['meine' => '1'])) ?>">Meine Angebote</a></li>
                         <li><a class="dropdown-item" href="<?= e(url('/boersen')) ?>">Börsen</a></li>
-                        <?php if (Berechtigung::istBoersenwart($benutzer)): ?>
+                        <?php if ($istWart): ?>
                             <li><a class="dropdown-item" href="<?= e(url('/kasse')) ?>">Kasse</a></li>
+                            <li><a class="dropdown-item d-flex justify-content-between align-items-center gap-3" href="<?= e(url('/anfragen')) ?>">Anfragen<?php if ($anfragenNeu !== null && $anfragenNeu > 0): ?> <?= $anfragenBadge($anfragenNeu) ?><?php endif; ?></a></li>
                         <?php endif; ?>
                     </ul>
                 </li>

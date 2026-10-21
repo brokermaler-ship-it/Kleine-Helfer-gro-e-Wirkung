@@ -12,6 +12,7 @@ use Emc\Core\Router;
 use Emc\Betrieb\SicherungController;
 use Emc\Betrieb\TestdatenController;
 use Emc\Betrieb\UpdateController;
+use Emc\Boerse\AnfrageController;
 use Emc\Boerse\AngebotController;
 use Emc\Boerse\BoerseController;
 use Emc\Boerse\KasseController;
@@ -146,6 +147,15 @@ return function (Router $router, App $app): void {
     $router->add('POST', '/magazin/{id}', $app->erfordert('lesen', $mag('aendern')));
     $router->add('POST', '/magazin/{id}/buchungen', $app->erfordert('lesen', $mag('buchen')));
     $router->add('POST', '/magazin/{id}/fotos', $app->erfordert('lesen', $mag('fotos')));
+
+    // Eingang der Börsenanfragen aus dem öffentlichen Bereich: nur Börsenwart (prüft der Controller, sonst 403).
+    $anf = fn(string $m) => fn(Request $r, array $p = []) => $c->get(AnfrageController::class)->$m($r, $p);
+    $router->add('GET', '/anfragen', $app->erfordert('lesen', $anf('liste')));
+    $router->add('GET', '/anfragen/{id}', $app->erfordert('lesen', $anf('anzeigen')));
+    $router->add('POST', '/anfragen/{id}/status', $app->erfordert('lesen', $anf('status')));
+    $router->add('POST', '/anfragen/{id}/loeschen', $app->erfordert('lesen', $anf('loeschen')));
+    $router->add('GET', '/anfragen/{id}/uebernehmen', $app->erfordert('lesen', $anf('uebernehmenFormular')));
+    $router->add('POST', '/anfragen/{id}/uebernehmen', $app->erfordert('lesen', $anf('uebernehmen')));
 
     // Börse intern: lesen alle; eigene Angebote alle Mitglieder, Rechte am Angebot prüft der AngebotDienst (403),
     // Börsenwart-Aktionen prüft der Controller. „/boersen…“ bleibt hinter der Anmeldung (nicht der öffentliche Bereich

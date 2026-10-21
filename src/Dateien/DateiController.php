@@ -185,6 +185,7 @@ final class DateiController
             'anlage' => $this->dokumente->objekte((int) $dok['id'], 'anlage'),
             'magazin_artikel' => $this->dokumente->objekte((int) $dok['id'], 'magazin_artikel'),
             'boerse_angebot' => $angebotIds,
+            'boerse_anfrage' => $this->dokumente->objekte((int) $dok['id'], 'boerse_anfrage'),
         ];
         if ($nurAngebot !== null && in_array($nurAngebot, $angebotIds, true)) {
             // Zurück auf die Seite, von der gelöscht wurde.
@@ -281,7 +282,7 @@ final class DateiController
      * Bearbeiter und Admin (Dateien bearbeiten) dürfen jede Datei löschen. Alle anderen nur eine Datei mit genau einer
      * Zuordnung: an einem Fahrzeug, das sie bearbeiten dürfen, als Foto einer Wartung bzw. Reparatur mit demselben
      * Recht wie beim Eintragen der Wartung bzw. Bearbeiten der Reparatur, als Foto eines Magazinartikels als
-     * Börsenwart oder als Foto eines Angebots mit Berechtigung::darfAngebotBearbeiten (Börsenwart; Mitglied am eigenen,
+     * Börsenwart, als Foto einer Börsenanfrage als Börsenwart oder als Foto eines Angebots mit Berechtigung::darfAngebotBearbeiten (Börsenwart; Mitglied am eigenen,
      * noch angebotenen Angebot). Ein Foto, das nur an Magazinartikeln und Angeboten hängt (aus dem Magazin übernommen),
      * löscht auch der Börsenwart. Andere geteilte Dokumente bleiben Bearbeitern vorbehalten.
      *
@@ -306,8 +307,8 @@ final class DateiController
             }
             return;
         }
-        if ($art === 'magazin_artikel') {
-            // Fotos eines Magazinartikels pflegt der Börsenwart (wie das Hochladen).
+        if ($art === 'magazin_artikel' || $art === 'boerse_anfrage') {
+            // Fotos eines Magazinartikels pflegt der Börsenwart (wie das Hochladen), Fotos einer Börsenanfrage ebenso.
             Berechtigung::verlangeBoersenwart($benutzer);
             return;
         }
@@ -320,9 +321,10 @@ final class DateiController
             return;
         }
         if ($zuordnungen !== [] && Berechtigung::istBoersenwart($benutzer)
-            && array_diff(array_column($zuordnungen, 'objekt_typ'), ['magazin_artikel', 'boerse_angebot']) === []
+            && array_diff(array_column($zuordnungen, 'objekt_typ'), ['magazin_artikel', 'boerse_angebot', 'boerse_anfrage']) === []
         ) {
-            // Vom Magazinartikel ins Angebot übernommenes Foto: Magazin und Börse pflegt der Börsenwart.
+            // Vom Magazinartikel ins Angebot bzw. aus einer Anfrage ins Magazin übernommenes Foto: Magazin und Börse
+            // pflegt der Börsenwart.
             return;
         }
         if ($art !== 'fahrzeug') {
@@ -501,6 +503,9 @@ final class DateiController
         }
         if ($typ === 'magazin_artikel') {
             return Response::redirect(url('/magazin/' . $objektId) . '#fotos');
+        }
+        if ($typ === 'boerse_anfrage') {
+            return Response::redirect(url('/anfragen/' . $objektId) . '#fotos');
         }
         return Response::redirect(url(($typ === 'anlage' ? '/anlagen/' : '/fahrzeuge/') . $objektId) . '#dateien');
     }

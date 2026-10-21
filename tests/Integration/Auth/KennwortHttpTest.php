@@ -314,7 +314,8 @@ final class KennwortHttpTest extends DbTestCase
         // Bearbeiter: kein Hinweis, 403 beim Verwerfen.
         $sitzungB = ['_csrf' => str_repeat(self::CSRF, 64)];
         $this->sitzungAnmelden($sitzungB, $bearbeiter);
-        $this->assertStringNotContainsString('Anfrage', $this->app($sitzungB)->handle(new Request('GET', '/personen'))->body);
+        // Nur der Kennwort-Hinweis zählt (Bearbeiter sind Börsenwart und sehen im Menü „Anfragen“ der Börse).
+        $this->assertStringNotContainsString('auf neues Kennwort', $this->app($sitzungB)->handle(new Request('GET', '/personen'))->body);
         $verboten = $this->app($sitzungB)->handle(new Request('POST', '/admin/kennwort-anfragen/' . $anfrage . '/verwerfen', [], ['_csrf' => str_repeat(self::CSRF, 64)]));
         $this->assertSame(403, $verboten->status);
         $this->assertSame(2, (int) $this->pdo->query('SELECT COUNT(*) FROM kennwort_anfrage WHERE erledigt_am IS NULL')->fetchColumn());
