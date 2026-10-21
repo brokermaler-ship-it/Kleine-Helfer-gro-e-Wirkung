@@ -250,7 +250,8 @@ final class App
             $c->get(Uebertragung::class),
             $c->get(WartungRepository::class),
             $c->get(AusnahmeRepository::class),
-            $c->get(ReparaturRepository::class)
+            $c->get(ReparaturRepository::class),
+            $c->get(AngebotRepository::class)
         ));
         $this->container->set(SpurweiteRepository::class, fn(Container $c) => new SpurweiteRepository($c->get('pdo')));
         $this->container->set(SpurweiteController::class, fn(Container $c) => new SpurweiteController(

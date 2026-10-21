@@ -5,7 +5,12 @@ declare(strict_types=1);
 namespace Emc\Betrieb;
 
 use Emc\Anlagen\AnlageRepository;
+use Emc\Auth\Benutzer;
 use Emc\Auth\Rolle;
+use Emc\Boerse\AnfrageDienst;
+use Emc\Boerse\AngebotDienst;
+use Emc\Boerse\BoerseDienst;
+use Emc\Boerse\KasseDienst;
 use Emc\Core\App;
 use Emc\Core\DomainFehler;
 use Emc\Dateien\Bildbearbeitung;
@@ -17,6 +22,7 @@ use Emc\Digital\DecoderRepository;
 use Emc\Digital\FunktionRepository;
 use Emc\Digital\FunktionsvorlageRepository;
 use Emc\Fahrzeuge\FahrzeugRepository;
+use Emc\Magazin\MagazinDienst;
 use Emc\Personen\BenutzerRepository;
 use Emc\Personen\PersonRepository;
 use Emc\Protokoll\Aenderungsprotokoll;
@@ -109,6 +115,111 @@ final class DemoDaten
         $anlage = $this->anlageUndWartungen($ids, $personen, $spur['H0']);
         $this->reparaturen($ids, $anlage, $personen);
         $this->etiketten($ids);
+        $this->magazinUndBoerse($ids, $personen, $spur);
+    }
+
+    /**
+     * Magazin und Börse, alles über die Dienste (Bestand nur über Buchungen, Status nur über Kasse und Börse), Daten
+     * relativ zu heute: Greta (Fahrzeugwart mit Börsenwart-Häkchen) bucht drei Artikel und eine Sammlung, übergibt die
+     * ausgemusterte Vereins-Köf II vom Abstellgleis ans Magazin, legt die „Herbstbörse“ an und startet sie. Vereinsangebote
+     * aus dem Magazin, drei Angebote von Carla (nicht öffentlich, vorgeschlagen, freigegeben mit „Erlös als Spende“),
+     * ein dauerhaftes Angebot, zwei Verkäufe an der Kasse und eine Kaufanfrage aus dem öffentlichen Bereich (Test-IP,
+     * Adresse @test.emc78.de). Die ausgemusterte BR 103 von Dieter bleibt privat und unberührt.
+     *
+     * @param array<string,int> $ids
+     * @param array<string,int> $personen
+     * @param array<string,int> $spur
+     */
+    private function magazinUndBoerse(array $ids, array $personen, array $spur): void
+    {
+        $c = $this->app->container();
+        $magazin = $c->get(MagazinDienst::class);
+        $angebote = $c->get(AngebotDienst::class);
+        $boersen = $c->get(BoerseDienst::class);
+        $kasse = $c->get(KasseDienst::class);
+        $konto = fn(string $email): int => (int) $this->pdo->query('SELECT id FROM benutzer WHERE email = ' . $this->pdo->quote($email))->fetchColumn();
+        $kategorie = function (string $name): int {
+            $st = $this->pdo->prepare('SELECT id FROM magazin_kategorie WHERE name = ? OR schluessel = ?');
+            $st->execute([$name, $name]);
+            return (int) ($st->fetchColumn() ?: $this->pdo->query("SELECT id FROM magazin_kategorie WHERE schluessel = 'sonstiges'")->fetchColumn());
+        };
+        $gretaId = $konto('fahrzeugwart@test.emc78.de');
+        $carlaId = $konto('mitglied@test.emc78.de');
+        $greta = new Benutzer($gretaId, $personen['wart'], 'fahrzeugwart@test.emc78.de', 'Greta Wagner', Rolle::Fahrzeugwart, false, 'Greta', true);
+        $carla = new Benutzer($carlaId, $personen['carla'], 'mitglied@test.emc78.de', 'Carla Mustermann', Rolle::Mitglied, false, 'Carla', false);
+        $heute = new \DateTimeImmutable('today');
+        $tag = fn(int $tage): string => $heute->modify("-$tage days")->format('Y-m-d');
+
+        // Magazin: Eingänge mit Herkunft; der Name des Spenders steht im Freitext (bei einer DSGVO-Löschung ersetzt).
+        $gleise = $magazin->legeAnMitEingang(
+            ['bezeichnung' => 'Märklin C-Gleis 24188 gerade', 'kategorie_id' => $kategorie('Gleise und Weichen'), 'hersteller' => 'Märklin',
+                'artikelnummer' => '24188', 'spurweite_id' => $spur['H0'], 'zustand' => 'gebraucht', 'lagerort' => 'Keller, Regal 1'],
+            ['datum' => $tag(60), 'menge' => 12, 'herkunft' => 'spende', 'freitext' => 'Spende von Frank Demonstrant', 'betrag' => null],
+            $gretaId
+        );
+        $fahrpult = $magazin->legeAnMitEingang(
+            ['bezeichnung' => 'Fahrpult 6647', 'kategorie_id' => $kategorie('Elektrik und Digital'), 'hersteller' => 'Märklin',
+                'artikelnummer' => '6647', 'zustand' => 'defekt', 'lagerort' => 'Werkstatt', 'notiz' => 'Brummt, Trafo prüfen.'],
+            ['datum' => $tag(45), 'menge' => 1, 'herkunft' => 'fund', 'freitext' => 'im Vereinsheim gefunden', 'betrag' => null],
+            $gretaId
+        );
+        $buch = $magazin->legeAnMitEingang(
+            ['bezeichnung' => 'Dampflokomotiven der Deutschen Bundesbahn', 'kategorie_id' => $kategorie('literatur'), 'zustand' => 'neuwertig',
+                'autor_verlag' => 'Transpress', 'jahr' => 1985, 'isbn' => '978-3-613-01234-5', 'lagerort' => 'Bücherschrank'],
+            ['datum' => $tag(30), 'menge' => 1, 'herkunft' => 'kauf', 'freitext' => 'Flohmarkt', 'betrag' => '8.00'],
+            $gretaId
+        );
+        $nachlass = [];
+        foreach ([['Märklin M-Gleis 5106 gerade', '5106', 40], ['Märklin M-Gleis 5100 gebogen', '5100', 24]] as [$bez, $nr, $menge]) {
+            $nachlass[] = $magazin->legeAnMitEingang(
+                ['bezeichnung' => $bez, 'kategorie_id' => $kategorie('Gleise und Weichen'), 'hersteller' => 'Märklin', 'artikelnummer' => $nr,
+                    'spurweite_id' => $spur['H0'], 'zustand' => 'gebraucht', 'lagerort' => 'Keller, Kisten 1–3'],
+                ['datum' => $tag(20), 'menge' => $menge, 'herkunft' => 'nachlass', 'freitext' => 'Nachlass, über die Familie', 'betrag' => null],
+                $gretaId
+            );
+        }
+        $sammlung = $magazin->legeSammlungAn('Nachlass Märklin-Gleise, 3 Kisten', 'M-Gleis, gemischt, ungeprüft.', $nachlass, $gretaId);
+        $magazin->uebernimmFahrzeug($ids['koef_verein'], 'Keller, Regal 2', $gretaId, $heute->modify('-10 days'));
+
+        // Börse am heutigen Tag, gestartet (Kasse offen).
+        $boerse = $boersen->anlegen(['name' => 'Herbstbörse', 'datum' => $heute->format('Y-m-d'), 'ort' => 'Vereinsheim', 'provision_prozent' => '10.00'], $gretaId);
+        $boersen->starten($boerse, $gretaId);
+
+        $angebot = function (array $d, Benutzer $von) use ($angebote, $kategorie, $boerse, $heute): int {
+            return $angebote->anlegen($d + [
+                'beschreibung' => null, 'kategorie_id' => $kategorie('sonstiges'), 'spurweite_id' => null, 'zustand' => 'gebraucht', 'menge' => 1,
+                'herkunft' => 'verein', 'person_id' => null, 'erloes_spende' => 0, 'boerse_id' => $boerse, 'notiz' => null,
+            ], $von, $heute->setTime(9, 0));
+        };
+        // Vereinsangebote aus dem Magazin (zwei öffentlich freigegeben), eins dauerhaft.
+        $gleisAngebot = $angebot(['bezeichnung' => 'Märklin C-Gleis 24188 gerade, 4 Stück', 'magazin_artikel_id' => $gleise, 'menge' => 4, 'wunschpreis' => '6.00',
+            'kategorie_id' => $kategorie('Gleise und Weichen'), 'spurweite_id' => $spur['H0'], 'oeffentlich' => 'freigegeben'], $greta);
+        $buchAngebot = $angebot(['bezeichnung' => 'Dampflokomotiven der Deutschen Bundesbahn', 'magazin_artikel_id' => $buch, 'wunschpreis' => '12.50',
+            'kategorie_id' => $kategorie('literatur'), 'zustand' => 'neuwertig', 'oeffentlich' => 'freigegeben'], $greta);
+        $angebot(['bezeichnung' => 'Fahrpult 6647 (defekt, für Bastler)', 'magazin_artikel_id' => $fahrpult, 'wunschpreis' => '3.00',
+            'kategorie_id' => $kategorie('Elektrik und Digital'), 'zustand' => 'defekt'], $greta);
+        $angebot(['bezeichnung' => 'Nachlass Märklin-Gleise, 3 Kisten', 'magazin_sammlung_id' => $sammlung, 'wunschpreis' => '45.00',
+            'kategorie_id' => $kategorie('Gleise und Weichen'), 'spurweite_id' => $spur['H0'], 'boerse_id' => null], $greta);
+
+        // Angebote von Carla: nicht öffentlich, vorgeschlagen, freigegeben (Erlös als Spende).
+        $mitglied = fn(array $d): int => $angebot($d + ['herkunft' => 'mitglied', 'person_id' => $carla->personId], $carla);
+        $mitglied(['bezeichnung' => 'Roco Güterwagen-Set, 3 Wagen', 'wunschpreis' => '18.00', 'spurweite_id' => $spur['H0']]);
+        $mitglied(['bezeichnung' => 'Faller Bahnhof Bausatz, ungeöffnet', 'wunschpreis' => '25.00', 'zustand' => 'neu', 'oeffentlich' => 'vorgeschlagen',
+            'kategorie_id' => $kategorie('Gebäude und Bausätze')]);
+        $spende = $mitglied(['bezeichnung' => 'Minitrix Personenwagen 15123', 'wunschpreis' => '9.50', 'spurweite_id' => $spur['N'], 'erloes_spende' => 1,
+            'oeffentlich' => 'vorgeschlagen']);
+        $angebote->setzeOeffentlich($spende, 'freigegeben', $greta);
+
+        // Zwei Verkäufe an der Kasse: ein Vereinsstück (bar) und Carlas Spendenstück (Karte/Überweisung).
+        $kasse->abschliessen($boerse, [['angebot_id' => $buchAngebot, 'preis' => '12.50']], 'bar', $gretaId, $heute->setTime(10, 15));
+        $kasse->abschliessen($boerse, [['angebot_id' => $spende, 'preis' => '9.00']], 'karte_ueberweisung', $gretaId, $heute->setTime(10, 40));
+
+        // Eine Kaufanfrage aus dem öffentlichen Bereich (Test-IP aus dem Dokumentationsbereich, keine echten Daten).
+        $c->get(AnfrageDienst::class)->nimmEntgegen('kaufanfrage', $gleisAngebot, [
+            'name' => 'Rudi Beispielkunde', 'email' => 'rudi@test.emc78.de', 'telefon' => null,
+            'nachricht' => 'Sind die Gleise noch zu haben? Ich würde sie am Samstag abholen.', 'wunsch' => null,
+        ], [], '192.0.2.78', $heute->setTime(8, 30));
+        $this->pdo->exec('DELETE FROM boerse_anfrage_sperre'); // Begrenzung nicht durch die Beispieldaten verbrauchen
     }
 
     /**
@@ -304,12 +415,13 @@ final class DemoDaten
     {
         $repo = $this->app->container()->get(BenutzerRepository::class);
         foreach ([
-            ['anja', 'admin@test.emc78.de', Rolle::Admin, $adminPasswort],
-            ['bernd', 'bearbeiter@test.emc78.de', Rolle::Bearbeiter, self::PASSWORT],
-            ['wart', 'fahrzeugwart@test.emc78.de', Rolle::Fahrzeugwart, self::PASSWORT],
-            ['carla', 'mitglied@test.emc78.de', Rolle::Mitglied, self::PASSWORT],
-        ] as [$p, $mail, $rolle, $passwort]) {
-            $id = $repo->anlegen($personen[$p], $mail, $rolle, $passwort);
+            ['anja', 'admin@test.emc78.de', Rolle::Admin, $adminPasswort, false],
+            ['bernd', 'bearbeiter@test.emc78.de', Rolle::Bearbeiter, self::PASSWORT, false],
+            // Greta ist Fahrzeugwart mit Börsenwart-Häkchen: die Zusatzaufgabe hängt nicht an der Rolle.
+            ['wart', 'fahrzeugwart@test.emc78.de', Rolle::Fahrzeugwart, self::PASSWORT, true],
+            ['carla', 'mitglied@test.emc78.de', Rolle::Mitglied, self::PASSWORT, false],
+        ] as [$p, $mail, $rolle, $passwort, $boersenwart]) {
+            $id = $repo->anlegen($personen[$p], $mail, $rolle, $passwort, $boersenwart);
             $repo->passwortSetzen($id, $passwort, false);
         }
     }
@@ -365,6 +477,10 @@ final class DemoDaten
             'br185' => ['bezeichnung' => 'BR 185 276-4', 'baureihe' => '185.2', 'bahn' => 'DB', 'epoche' => 'VI', 'gattung' => 'lok',
                 'hersteller' => 'Minitrix', 'artikel' => '16852', 'spur' => 'N', 'eigner' => 'frank', 'status' => 'ausgeliehen', 'stunden' => 4.0,
                 'decoder' => [$esu('Motor', 185, 'LokPilot 5 Nano', false)]],
+            // Ausgemusterte Vereins-Köf, die über die Übergabe ins Magazin geht (die Köf II von Dieter bleibt privat).
+            'koef_verein' => ['bezeichnung' => 'Köf II', 'baureihe' => 'Köf II', 'bahn' => 'DB', 'epoche' => 'III', 'gattung' => 'lok',
+                'hersteller' => 'Märklin', 'artikel' => '36805', 'spur' => 'H0', 'strom' => '3L', 'eigner' => null, 'status' => 'ausgemustert', 'stunden' => 160.0,
+                'notiz' => 'Ausgemustert: Motor verschlissen; geht ans Magazin für die Börse.', 'decoder' => []],
             'bymb' => ['bezeichnung' => 'Eilzugwagen Bymb 421', 'baureihe' => 'Bymb 421', 'bahn' => 'DB', 'epoche' => 'IV', 'gattung' => 'wagen',
                 'hersteller' => 'Fleischmann', 'artikel' => '814401', 'spur' => 'N', 'eigner' => 'carla', 'decoder' => []],
         ];
@@ -428,6 +544,7 @@ final class DemoDaten
             ['br01', 'dampf.jpg', 'BR 01 118 Seitenansicht'],
             ['silberling', 'wagen.jpg', 'Silberling Bauart n'],
             ['vt98', 'wagen.jpg', 'Schienenbus VT 98'],
+            ['koef_verein', 'diesel.jpg', 'Köf II vom Abstellgleis'],
         ] as [$fahrzeug, $datei, $titel]) {
             $pfad = $this->fotoVerzeichnis . '/' . $datei;
             if (!is_file($pfad)) {

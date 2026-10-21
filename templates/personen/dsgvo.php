@@ -1,6 +1,6 @@
 <?php
 /** @var array<string,mixed> $person */
-/** @var array{person: array<string,mixed>, benutzer: ?array<string,mixed>, fahrzeuge: list<array{id:int, inventarnummer:string, bezeichnung:string, dokumente:int, rechnungen:int, wartungen:int, reparaturen:int}>, wartungen_in_vereinsdaten:int, reparaturen_in_vereinsdaten:int, protokolleintraege:int, verweigert:?string, onedrive_konto_der_person:bool} $vorschau */
+/** @var array{person: array<string,mixed>, benutzer: ?array<string,mixed>, fahrzeuge: list<array{id:int, inventarnummer:string, bezeichnung:string, dokumente:int, rechnungen:int, wartungen:int, reparaturen:int}>, wartungen_in_vereinsdaten:int, reparaturen_in_vereinsdaten:int, protokolleintraege:int, verweigert:?string, onedrive_konto_der_person:bool, angebote_geloescht:int, angebote_verkauft:int, angebote_storniert:int, freitexte:int} $vorschau */
 /** @var list<int> $uebergeben */ /** @var ?string $fehler */
 $name = trim($person['vorname'] . ' ' . $person['nachname']);
 $verweigert = $vorschau['verweigert'];
@@ -65,6 +65,22 @@ $konto = $vorschau['benutzer'];
                         <tr>
                             <td>Reparaturen an Vereinsfahrzeugen, fremden Fahrzeugen und Anlagen, die die Person gemeldet hat oder für die sie zuständig ist (<?= e((string) ($vorschau['reparaturen_in_vereinsdaten'] ?? 0)) ?>)</td>
                             <td>bleiben erhalten, „gemeldet von“ und „zuständig“ zeigen „<?= e(\Emc\Protokoll\Aenderungsprotokoll::EHEMALIGES_MITGLIED) ?>“; Freitexte (Beschreibung, Notizen) werden nicht durchsucht</td>
+                        </tr>
+                        <?php if (($vorschau['angebote_geloescht'] ?? 0) + ($vorschau['angebote_verkauft'] ?? 0) + ($vorschau['angebote_storniert'] ?? 0) > 0): ?>
+                        <tr>
+                            <td>Börsenangebote der Person</td>
+                            <td>
+                                <?= e((string) $vorschau['angebote_geloescht']) ?> nicht verkaufte Börsenangebote werden gelöscht, <?= e((string) $vorschau['angebote_verkauft']) ?> verkaufte bleiben ohne Namen in der Abrechnung.
+                                <?php if ($vorschau['angebote_storniert'] > 0): ?>
+                                    <?= e((string) $vorschau['angebote_storniert']) ?> mit storniertem Verkauf bleiben zurückgezogen ohne Namen, Fotos, Beschreibung und Notiz.
+                                <?php endif; ?>
+                                Auszahlungen bleiben mit Betrag, Anzeige „<?= e(\Emc\Protokoll\Aenderungsprotokoll::EHEMALIGES_MITGLIED) ?>“.
+                            </td>
+                        </tr>
+                        <?php endif; ?>
+                        <tr>
+                            <td>Freitexte in Magazin und Börse (z. B. „Spende von …“, Notizen, Storno-Grund) mit Name, E-Mail oder Telefon (<?= e((string) ($vorschau['freitexte'] ?? 0)) ?>)</td>
+                            <td>Fundstellen durch „<?= e(\Emc\Protokoll\Aenderungsprotokoll::EHEMALIGES_MITGLIED) ?>“ ersetzt; Börsenanfragen aus dem öffentlichen Bereich sind keiner Person zugeordnet und bleiben unberührt (Löschung nach 12 Monaten)</td>
                         </tr>
                         <tr>
                             <td>Bezüge in Vereinsdaten (z. B. „angelegt von“, „hochgeladen von“)</td>

@@ -148,10 +148,10 @@ final class DemoDatenTest extends DbTestCase
         $app = $this->app();
         (new DemoDaten($app))->erzeuge(true);
 
-        $this->assertSame(12, $this->zaehle('fahrzeug'));
+        $this->assertSame(13, $this->zaehle('fahrzeug'));
         $this->assertSame(7, $this->zaehle('person'));
         $this->assertSame(4, $this->zaehle('benutzer'));
-        $this->assertSame(1, (int) $this->pdo->query("SELECT COUNT(*) FROM fahrzeug WHERE status = 'ausgemustert'")->fetchColumn());
+        $this->assertSame(2, (int) $this->pdo->query("SELECT COUNT(*) FROM fahrzeug WHERE status = 'ausgemustert'")->fetchColumn());
         $this->assertGreaterThan(0, $this->zaehle('funktion'));
         $this->assertGreaterThan(0, $this->zaehle('funktionsvorlage'));
         $this->assertGreaterThan(0, $this->zaehle('cv_wert'));
@@ -185,7 +185,9 @@ final class DemoDatenTest extends DbTestCase
         $app = $this->app();
         (new DemoDaten($app))->erzeuge(true);
         (new DemoDaten($app))->erzeuge(true);
-        $this->assertSame(12, $this->zaehle('fahrzeug'));
+        $this->assertSame(13, $this->zaehle('fahrzeug'));
+        $this->assertSame(1, $this->zaehle('boerse'));
+        $this->assertSame(1, $this->zaehle('boerse_anfrage'));
         $this->assertSame(7, $this->zaehle('person'));
         $this->assertSame('EMC-0001', (string) $this->pdo->query('SELECT MIN(inventarnummer) FROM fahrzeug')->fetchColumn());
         $this->assertCount($this->zaehle('dokument'), $this->originalDateien(), 'keine verwaisten Dateien nach dem Zurücksetzen');
@@ -339,5 +341,54 @@ final class DemoDatenTest extends DbTestCase
         $body = $a->handle(new Request('GET', '/login'))->body;
         $this->assertStringNotContainsString('Test-EMC78!', $body);
         $this->assertStringNotContainsString('Testumgebung', $body);
+    }
+
+    /** Magazin und Börse über die Dienste: Häkchen, Bestände, Übergabe, laufende Börse mit Verkäufen, Anfrage. */
+    public function test_magazin_und_boerse(): void
+    {
+        $app = $this->app();
+        (new DemoDaten($app))->erzeuge(true);
+
+        $greta = $this->pdo->query("SELECT rolle, ist_boersenwart FROM benutzer WHERE email = 'fahrzeugwart@test.emc78.de'")->fetch(\PDO::FETCH_ASSOC);
+        $this->assertSame(['rolle' => 'fahrzeugwart', 'ist_boersenwart' => 1], ['rolle' => $greta['rolle'], 'ist_boersenwart' => (int) $greta['ist_boersenwart']]);
+        $this->assertSame(0, (int) $this->pdo->query("SELECT COUNT(*) FROM benutzer WHERE ist_boersenwart = 1 AND email <> 'fahrzeugwart@test.emc78.de'")->fetchColumn());
+        $auth = $this->app()->container()->get(Auth::class);
+        $this->assertSame(AnmeldeErgebnis::Erfolg, $auth->anmelden('fahrzeugwart@test.emc78.de', 'Test-EMC78!', '127.0.0.1'));
+        $this->assertTrue(\Emc\Auth\Berechtigung::istBoersenwart($auth->benutzer()));
+        $this->assertSame(\Emc\Auth\Rolle::Fahrzeugwart, $auth->benutzer()?->rolle);
+
+        $bestand = fn(string $bez): int => (int) $this->pdo->query('SELECT SUM(b.menge) FROM magazin_buchung b JOIN magazin_artikel a ON a.id = b.artikel_id WHERE a.bezeichnung = ' . $this->pdo->quote($bez))->fetchColumn();
+        $this->assertSame(12, $bestand('Märklin C-Gleis 24188 gerade'));
+        $this->assertSame(1, $bestand('Fahrpult 6647'));
+        $this->assertSame(0, $bestand('Dampflokomotiven der Deutschen Bundesbahn'), 'an der Kasse verkauft');
+        $this->assertSame([], $this->pdo->query('SELECT artikel_id FROM magazin_buchung GROUP BY artikel_id HAVING SUM(menge) < 0')->fetchAll(), 'kein Bestand negativ');
+        $this->assertSame(2, (int) $this->pdo->query("SELECT COUNT(*) FROM magazin_sammlung_artikel sa JOIN magazin_sammlung s ON s.id = sa.sammlung_id WHERE s.name = 'Nachlass Märklin-Gleise, 3 Kisten'")->fetchColumn());
+
+        // Vereins-Köf vom Abstellgleis im Magazin, mit Verweis und Titelfoto; Dieters BR 103 bleibt privat.
+        $koef = $this->pdo->query("SELECT a.id, a.fahrzeug_id, a.titelbild_dokument_id, f.eigentuemer_person_id, f.status FROM magazin_artikel a JOIN fahrzeug f ON f.id = a.fahrzeug_id")->fetchAll(\PDO::FETCH_ASSOC);
+        $this->assertCount(1, $koef);
+        $this->assertNull($koef[0]['eigentuemer_person_id']);
+        $this->assertSame('ausgemustert', $koef[0]['status']);
+        $this->assertSame(1, $bestand((string) $this->pdo->query('SELECT bezeichnung FROM magazin_artikel WHERE id = ' . (int) $koef[0]['id'])->fetchColumn()));
+        $this->assertSame(1, (int) $this->pdo->query("SELECT COUNT(*) FROM fahrzeug WHERE bezeichnung = 'BR 103 113-7' AND status = 'ausgemustert' AND eigentuemer_person_id IS NOT NULL")->fetchColumn());
+
+        // Laufende Börse mit Angeboten, zwei Verkäufen und stimmiger Abrechnung.
+        $boerse = $this->pdo->query('SELECT * FROM boerse')->fetch(\PDO::FETCH_ASSOC);
+        $this->assertSame(['Herbstbörse', 'laeuft', 'Vereinsheim'], [$boerse['name'], $boerse['status'], $boerse['ort']]);
+        $this->assertSame(2, (int) $this->pdo->query('SELECT COUNT(*) FROM boerse_verkauf WHERE storniert_am IS NULL')->fetchColumn());
+        $abr = new \Emc\Boerse\AbrechnungRepository($this->pdo);
+        $r = \Emc\Boerse\Abrechnung::berechne($abr->positionen((int) $boerse['id']), $abr->summeVerkaeufe((int) $boerse['id']));
+        $this->assertTrue($r['kontrolle']);
+        $this->assertSame(['vereinsstuecke' => 1250, 'provisionen' => 0, 'spenden' => 900, 'gesamt' => 2150], $r['verein']);
+        $this->assertSame(['nein' => 3, 'vorgeschlagen' => 1, 'freigegeben' => 3], array_map('intval', $this->pdo->query('SELECT oeffentlich, COUNT(*) FROM boerse_angebot GROUP BY oeffentlich ORDER BY oeffentlich')->fetchAll(\PDO::FETCH_KEY_PAIR)));
+        $this->assertSame(3, (int) $this->pdo->query("SELECT COUNT(*) FROM boerse_angebot WHERE herkunft = 'mitglied'")->fetchColumn());
+        $this->assertSame(1, (int) $this->pdo->query('SELECT COUNT(*) FROM boerse_angebot WHERE boerse_id IS NULL')->fetchColumn(), 'ein dauerhaftes Angebot');
+
+        // Eine offene Kaufanfrage mit Testadresse; keine Sperrzeile übrig.
+        $anfrage = $this->pdo->query('SELECT * FROM boerse_anfrage')->fetchAll(\PDO::FETCH_ASSOC);
+        $this->assertCount(1, $anfrage);
+        $this->assertSame(['kaufanfrage', 'offen'], [$anfrage[0]['art'], $anfrage[0]['status']]);
+        $this->assertStringEndsWith('@test.emc78.de', (string) $anfrage[0]['email']);
+        $this->assertSame(0, $this->zaehle('boerse_anfrage_sperre'));
     }
 }

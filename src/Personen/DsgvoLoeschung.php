@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Emc\Personen;
 
 use Emc\Auth\KennwortVergessen;
+use Emc\Boerse\AngebotRepository;
 use Emc\Core\DomainFehler;
 use Emc\Dateien\DokumentRepository;
 use Emc\Fahrzeuge\FahrzeugRepository;
@@ -19,7 +20,10 @@ use Emc\Wartung\WartungRepository;
  * Löscht eine Person nach DSGVO vollständig: Konto (auch frühere Konten im Protokoll), eigene Fahrzeuge samt Dateien,
  * Wartungen (mit Fotos), Wartungsplan-Ausnahmen und Reparaturen (mit Ersatzteilen und Fotos) – außer an den Verein
  * übergebene –, Bezüge in Vereinsdaten (auch „ausgeführt von“/„erfasst von“ an Wartungen, „gemeldet von“/„zuständig“ an
- * Reparaturen, Anzeige „ehemaliges Mitglied“) und Personendaten im Änderungsprotokoll.
+ * Reparaturen, Anzeige „ehemaliges Mitglied“) und Personendaten im Änderungsprotokoll. Börse: nicht verkaufte Angebote
+ * der Person samt Fotos; verkaufte bleiben ohne Person in der Abrechnung, Angebote mit storniertem Verkauf bleiben ohne
+ * Person, Fotos, Beschreibung und Notiz (die Verkaufsposition verweist darauf). Name, E-Mail und Telefon in Freitexten
+ * von Magazin und Börse (FREITEXTE) werden wie im Protokoll durch „ehemaliges Mitglied“ ersetzt.
  * „Kennwort vergessen“: Tokens und Anfragen per CASCADE mit dem Konto, Versuche über den E-Mail-Hash.
  * Datenbankteil in einer Transaktion, Dateien vom Webspace erst nach dem Commit.
  */
@@ -29,6 +33,20 @@ final class DsgvoLoeschung
     public const KEIN_ADMIN = 'Nur ein aktiver Administrator darf Personen nach DSGVO löschen.';
     public const LETZTER_ADMIN = 'Diese Person hat den letzten aktiven Administrator-Zugang. Es muss mindestens ein aktiver Administrator bleiben.';
     public const NACHWEIS = 'nach DSGVO gelöscht';
+
+    /**
+     * Freitexte, in denen Name, E-Mail oder Telefon der Person stehen können (z. B. „Spende von …“), mit Spaltenlänge
+     * (null = TEXT). Buchungen sind sonst unveränderlich – die DSGVO-Löschung ist die einzige Ausnahme.
+     */
+    private const FREITEXTE = [
+        ['magazin_buchung', 'freitext', 200],
+        ['magazin_artikel', 'notiz', null],
+        ['magazin_sammlung', 'name', 150],
+        ['magazin_sammlung', 'notiz', null],
+        ['boerse_angebot', 'beschreibung', null],
+        ['boerse_angebot', 'notiz', null],
+        ['boerse_verkauf', 'storno_grund', 300],
+    ];
 
     public function __construct(
         private \PDO $pdo,
@@ -40,10 +58,12 @@ final class DsgvoLoeschung
         private ?WartungRepository $wartungen = null,
         private ?AusnahmeRepository $ausnahmen = null,
         private ?ReparaturRepository $reparaturen = null,
+        private ?AngebotRepository $angebote = null,
     ) {
         $this->wartungen ??= new WartungRepository($pdo);
         $this->ausnahmen ??= new AusnahmeRepository($pdo);
         $this->reparaturen ??= new ReparaturRepository($pdo);
+        $this->angebote ??= new AngebotRepository($pdo);
     }
 
     /**
@@ -57,7 +77,11 @@ final class DsgvoLoeschung
      * `reparaturen_in_vereinsdaten`: ebenso Reparaturen an anderen Objekten, die die Person gemeldet hat (über ihr Konto)
      * oder für die sie zuständig ist.
      *
-     * @return array{person: array<string,mixed>, benutzer: ?array<string,mixed>, fahrzeuge: list<array{id:int, inventarnummer:string, bezeichnung:string, dokumente:int, rechnungen:int, wartungen:int, reparaturen:int}>, wartungen_in_vereinsdaten:int, reparaturen_in_vereinsdaten:int, protokolleintraege:int, verweigert:?string, onedrive_konto_der_person:bool}
+     * `angebote_geloescht`: nicht verkaufte Börsenangebote ohne Verkaufsposition (werden gelöscht); `angebote_verkauft`:
+     * verkaufte (bleiben ohne Namen); `angebote_storniert`: nicht verkaufte mit storniertem Verkauf (bleiben ohne Person,
+     * Fotos, Beschreibung und Notiz); `freitexte`: Freitexte in Magazin und Börse mit Name, E-Mail oder Telefon.
+     *
+     * @return array{person: array<string,mixed>, benutzer: ?array<string,mixed>, fahrzeuge: list<array{id:int, inventarnummer:string, bezeichnung:string, dokumente:int, rechnungen:int, wartungen:int, reparaturen:int}>, wartungen_in_vereinsdaten:int, reparaturen_in_vereinsdaten:int, protokolleintraege:int, verweigert:?string, onedrive_konto_der_person:bool, angebote_geloescht:int, angebote_verkauft:int, angebote_storniert:int, freitexte:int}
      */
     public function vorschau(int $personId, int $ausfuehrenderBenutzerId): array
     {
@@ -76,6 +100,7 @@ final class DsgvoLoeschung
             ];
         }
         $k = $this->kennungen($personId, $person, $benutzer);
+        $angebote = $this->angeboteDerPerson($personId, false);
         $mails = array_map('mb_strtolower', array_filter(
             [...$k['mails'], trim((string) ($person['email'] ?? '')), trim((string) ($benutzer['email'] ?? ''))],
             fn(string $m): bool => $m !== ''
@@ -97,7 +122,79 @@ final class DsgvoLoeschung
             'protokolleintraege' => $this->protokoll->zaehleBetroffene($k['begriffe'], $k['konten'], $k['objekte']),
             'verweigert' => $verweigert,
             'onedrive_konto_der_person' => $onedriveKonto !== '' && in_array($onedriveKonto, $mails, true),
+            'angebote_geloescht' => count(array_filter($angebote, fn(array $a): bool => self::angebotWirdGeloescht($a))),
+            'angebote_verkauft' => count(array_filter($angebote, fn(array $a): bool => $a['status'] === 'verkauft')),
+            'angebote_storniert' => count(array_filter($angebote, fn(array $a): bool => $a['status'] !== 'verkauft' && $a['positionen'] > 0)),
+            'freitexte' => $this->freitexte($k['begriffe'], false),
         ];
+    }
+
+    /** @param array{id:int, status:string, positionen:int} $a */
+    private static function angebotWirdGeloescht(array $a): bool
+    {
+        return $a['status'] !== 'verkauft' && $a['positionen'] === 0;
+    }
+
+    /**
+     * Börsenangebote der Person; vor Migration 017 keine. Mit $sperren nach id aufsteigend gesperrt.
+     *
+     * @return list<array{id:int, status:string, positionen:int}>
+     */
+    private function angeboteDerPerson(int $personId, bool $sperren): array
+    {
+        try {
+            return $this->angebote->fuerPerson($personId, $sperren);
+        } catch (\PDOException $e) {
+            if (in_array((string) $e->getCode(), ['42S02', '42S22'], true)) {
+                return [];
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * Zählt bzw. ersetzt ($ersetzen) Name, E-Mail und Telefon der Person in den Freitexten von Magazin und Börse
+     * (Vorauswahl per LIKE, Ersetzung ganzer Fundstellen wie im Protokoll, gekürzt auf die Spaltenlänge). Tabellen,
+     * die es vor 016/017 noch nicht gibt, werden übersprungen.
+     *
+     * @param list<string> $begriffe
+     * @return int Anzahl betroffener Felder
+     */
+    private function freitexte(array $begriffe, bool $ersetzen): int
+    {
+        $liste = Aenderungsprotokoll::suchbegriffe($begriffe);
+        if ($liste === []) {
+            return 0;
+        }
+        $werte = array_map(fn(string $b): string => '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $b) . '%', $liste);
+        $anzahl = 0;
+        foreach (self::FREITEXTE as [$tabelle, $spalte, $laenge]) {
+            try {
+                $st = $this->pdo->prepare(
+                    "SELECT id, $spalte AS text FROM $tabelle WHERE $spalte IS NOT NULL AND ("
+                    . implode(' OR ', array_fill(0, count($werte), "$spalte LIKE ? ESCAPE '!'")) . ') ORDER BY id'
+                );
+                $st->execute($werte);
+                $zeilen = $st->fetchAll(\PDO::FETCH_ASSOC);
+            } catch (\PDOException $e) {
+                if (in_array((string) $e->getCode(), ['42S02', '42S22'], true)) {
+                    continue;
+                }
+                throw $e;
+            }
+            $aendern = $this->pdo->prepare("UPDATE $tabelle SET $spalte = ? WHERE id = ?");
+            foreach ($zeilen as $z) {
+                $neu = Aenderungsprotokoll::ersetzeBegriffe((string) $z['text'], $begriffe);
+                if ($neu === (string) $z['text']) {
+                    continue;
+                }
+                $anzahl++;
+                if ($ersetzen) {
+                    $aendern->execute([$laenge === null ? $neu : mb_substr($neu, 0, $laenge), (int) $z['id']]);
+                }
+            }
+        }
+        return $anzahl;
     }
 
     /** Wartungen am Fahrzeug; vor Migration 013 keine. @return list<int> */
@@ -202,6 +299,11 @@ final class DsgvoLoeschung
             //    DSGVO-Seite meldet „Bitte erneut versuchen“ (PersonController::DSGVO_ERNEUT, Test in DsgvoHttpTest).
             $eigene = array_map(fn(array $fz): int => (int) $fz['id'], $this->eigeneFahrzeuge($personId, true));
             $this->sperreVereinsobjekte($personId);
+            //    c) Die Börsenangebote der Person, nach id aufsteigend (Reihenfolge Fahrzeuge → Angebote → Person). Eine
+            //       Kasse sperrt zwar zuerst die Börse, die Löschung braucht die Börse aber nicht; ein Rest-Deadlock
+            //       (Kasse hält schon die Person per Fremdschlüssel und wartet auf ein zweites Angebot) endet mit 1213
+            //       und „Bitte erneut versuchen“.
+            $angebote = $this->angeboteDerPerson($personId, true);
 
             // 1. Verweigerungsgründe – Admin-Zugänge gesperrt, damit nicht gleichzeitig der letzte Admin verschwindet;
             //    entschieden wird mit genau den gesperrten IDs (kein späterer Snapshot-Read).
@@ -275,6 +377,31 @@ final class DsgvoLoeschung
                 $this->fahrzeuge->loeschen($fzId); // Decoder, Funktionen, CVs per CASCADE
                 $eigeneObjekte[] = ['fahrzeug', $fzId];
             }
+
+            // 3b. Börsenangebote: ohne Verkaufsposition samt nur ihnen zugeordneter Fotos löschen (eine Kaufanfrage dazu
+            //     verliert per ON DELETE SET NULL nur den Verweis); mit storniertem Verkauf (RESTRICT der Position)
+            //     ohne Personenbezug behalten; verkaufte bleiben – person_id an Angebot, Position und Auszahlung leert
+            //     sich in Schritt 6 per ON DELETE SET NULL („ehemaliges Mitglied“, Beträge unverändert).
+            foreach ($angebote as $a) {
+                if ($a['status'] === 'verkauft') {
+                    continue;
+                }
+                foreach ($this->dokumenteNurHier($a['id'], 'boerse_angebot') as $dokId) {
+                    $pfad = $this->loescheDokument($dokId);
+                    if ($pfad !== null) {
+                        $pfade[$dokId] = $pfad;
+                    }
+                }
+                $this->pdo->prepare("DELETE FROM dokument_zuordnung WHERE objekt_typ = 'boerse_angebot' AND objekt_id = ?")->execute([$a['id']]);
+                if (self::angebotWirdGeloescht($a)) {
+                    $this->angebote->loesche($a['id']);
+                    $eigeneObjekte[] = ['boerse_angebot', $a['id']];
+                } else {
+                    $this->angebote->anonymisiere($a['id']);
+                }
+            }
+            // 3c. Freitexte in Magazin und Börse („Spende von …“, Notizen, Storno-Grund).
+            $this->freitexte($k['begriffe'], true);
 
             // 4. Anmelde- und Kennwort-Versuche aller bekannten E-Mails (Person, Konto, frühere) und das Benutzerkonto.
             //    Fremdschlüssel: dokument.hochgeladen_von und fahrzeug.angelegt_von_benutzer_id werden NULL.

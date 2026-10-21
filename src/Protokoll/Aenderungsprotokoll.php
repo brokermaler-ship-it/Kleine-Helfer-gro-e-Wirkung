@@ -193,6 +193,33 @@ final class Aenderungsprotokoll
     }
 
     /**
+     * Ersetzt ganze Fundstellen der Begriffe (Name, E-Mail, Telefon; wie anonymisiere()) in einem Freitext durch
+     * „ehemaliges Mitglied“ – z. B. für Freitexte außerhalb des Protokolls bei der DSGVO-Löschung.
+     *
+     * @param list<string> $begriffe
+     */
+    public static function ersetzeBegriffe(string $text, array $begriffe): string
+    {
+        $liste = self::bereinigeBegriffe($begriffe);
+        if ($liste === [] || $text === '') {
+            return $text;
+        }
+        $muster = '/(?<![\\p{L}\\p{N}])(?:' . implode('|', array_map(fn(string $b): string => preg_quote($b, '/'), $liste)) . ')(?![\\p{L}\\p{N}])/iu';
+        return self::ersetze($text, $muster);
+    }
+
+    /**
+     * Bereinigte Begriffe (mindestens MINDESTLAENGE Zeichen, gültiges UTF-8, längste zuerst) für eine Vorauswahl per LIKE.
+     *
+     * @param list<string> $begriffe
+     * @return list<string>
+     */
+    public static function suchbegriffe(array $begriffe): array
+    {
+        return self::bereinigeBegriffe($begriffe);
+    }
+
+    /**
      * Vorauswahl per LIKE (Platzhalter % und _ maskiert); die eigentliche Ersetzung geschieht in PHP.
      *
      * @param list<string> $begriffe

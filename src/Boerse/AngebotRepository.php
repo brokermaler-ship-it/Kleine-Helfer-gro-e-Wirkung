@@ -98,6 +98,44 @@ final class AngebotRepository
     }
 
     /**
+     * Angebote einer Person (DSGVO), nach id aufsteigend, mit Anzahl der Verkaufspositionen (auch stornierter – die
+     * Position verweist mit RESTRICT auf das Angebot). Mit $sperren als sperrende Lesung (in einer laufenden Transaktion).
+     *
+     * @return list<array{id:int, status:string, positionen:int}>
+     */
+    public function fuerPerson(int $personId, bool $sperren = false): array
+    {
+        $st = $this->pdo->prepare('SELECT id, status FROM boerse_angebot WHERE person_id = ? ORDER BY id' . ($sperren ? ' FOR UPDATE' : ''));
+        $st->execute([$personId]);
+        $zeilen = $st->fetchAll(\PDO::FETCH_ASSOC);
+        $pos = $this->pdo->prepare('SELECT COUNT(*) FROM boerse_verkauf_position WHERE angebot_id = ?');
+        $liste = [];
+        foreach ($zeilen as $z) {
+            $pos->execute([(int) $z['id']]);
+            $liste[] = ['id' => (int) $z['id'], 'status' => (string) $z['status'], 'positionen' => (int) $pos->fetchColumn()];
+        }
+        return $liste;
+    }
+
+    /** Löscht ein Angebot ohne Verkaufspositionen (Fotos und Zuordnungen räumt der Aufrufer vorher ab). */
+    public function loesche(int $id): void
+    {
+        $this->pdo->prepare('DELETE FROM boerse_angebot WHERE id = ?')->execute([$id]);
+    }
+
+    /**
+     * Ohne Personenbezug behalten (DSGVO, Angebot mit storniertem Verkauf): offen → zurück, nicht öffentlich, ohne
+     * Beschreibung, Notiz, Titelbild und Person. Bezeichnung, Nummer und Preis bleiben für die Verkaufsliste.
+     */
+    public function anonymisiere(int $id): void
+    {
+        $this->pdo->prepare(
+            "UPDATE boerse_angebot SET status = IF(status IN ('angeboten', 'reserviert'), 'zurueck', status), oeffentlich = 'nein', "
+            . 'beschreibung = NULL, notiz = NULL, titelbild_dokument_id = NULL, person_id = NULL WHERE id = ?'
+        )->execute([$id]);
+    }
+
+    /**
      * Sperrt das Angebot (SELECT … FOR UPDATE); nur in einer laufenden Transaktion.
      *
      * @return ?array<string,mixed> die gesperrte Zeile

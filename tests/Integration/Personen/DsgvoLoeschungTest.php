@@ -445,6 +445,8 @@ final class DsgvoLoeschungTest extends DbTestCase
         (new AusnahmeRepository($this->pdo))->speichere('fahrzeug', $s['fz2'], $this->zaehle("SELECT id FROM wartungsart WHERE name = 'Kupplungen prüfen'"), 'aus', null, null);
         $reparatur = $this->reparatur('fahrzeug', $s['fz2'], $s['konto'], $s['person'], 'rollback-reparatur.jpg');
         $vereinsReparatur = $this->reparatur('fahrzeug', $this->fahrzeug('EMC-0010', null), $s['konto'], $s['person']);
+        $boerse = $this->boersenDienste();
+        $angebot = $this->mitgliedsAngebot($boerse, $s['person'], $this->boerseLaeuft(), '5.00', 'rollback-angebot.jpg');
         $vorher = $this->zaehle('SELECT COUNT(*) FROM aenderungsprotokoll');
         // Scheitert im letzten Schritt (Person löschen) – alles davor muss zurückgerollt werden.
         $this->pdo->exec("CREATE TRIGGER test_person_sperre BEFORE DELETE ON person FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'gesperrt'");
@@ -485,6 +487,10 @@ final class DsgvoLoeschungTest extends DbTestCase
         }
         $this->assertSame(1, $this->zaehle("SELECT COUNT(*) FROM dokument_zuordnung WHERE objekt_typ = 'reparatur' AND objekt_id = ?", [$reparatur]));
         $this->assertTrue($this->dateienDa('rollback-reparatur.jpg'));
+        // Börsenangebot samt Foto unverändert.
+        $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM boerse_angebot WHERE id = ? AND person_id = ? AND notiz IS NOT NULL', [$angebot, $s['person']]));
+        $this->assertSame(1, $this->zaehle("SELECT COUNT(*) FROM dokument_zuordnung WHERE objekt_typ = 'boerse_angebot' AND objekt_id = ?", [$angebot]));
+        $this->assertTrue($this->dateienDa('rollback-angebot.jpg'));
     }
 
     public function test_eigene_person_und_letzter_admin_verweigert(): void
@@ -869,5 +875,158 @@ final class DsgvoLoeschungTest extends DbTestCase
         $this->assertSame(1, $this->zaehle("SELECT COUNT(*) FROM reparatur WHERE id = ? AND beschreibung = 'Motor brummt laut' AND zustaendig_person_id IS NULL", [$alt]));
         $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM fahrzeug WHERE id = ? AND angelegt_von_benutzer_id IS NULL', [$verein]));
         $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM person WHERE id = ?', [$s['person']]));
+    }
+
+    // ---- Börse und Magazin ---------------------------------------------------------------------------------------
+
+    /** @return array{angebote:\Emc\Boerse\AngebotDienst, kasse:\Emc\Boerse\KasseDienst, boersen:\Emc\Boerse\BoerseDienst, magazin:\Emc\Magazin\MagazinDienst, wart:\Emc\Auth\Benutzer} */
+    private function boersenDienste(): array
+    {
+        $rep = new \Emc\Boerse\AngebotRepository($this->pdo);
+        $magazinRep = new \Emc\Magazin\MagazinRepository($this->pdo);
+        $magazin = new \Emc\Magazin\MagazinDienst($this->pdo, $magazinRep, $this->protokoll, $rep);
+        $person = (int) $this->pdo->query("SELECT person_id FROM benutzer WHERE id = {$this->admin}")->fetchColumn();
+        return [
+            'angebote' => new \Emc\Boerse\AngebotDienst($this->pdo, $rep, $magazinRep, $this->protokoll, new \Emc\Boerse\BoerseRepository($this->pdo)),
+            'kasse' => new \Emc\Boerse\KasseDienst($this->pdo, $rep, $magazin, $this->protokoll),
+            'boersen' => new \Emc\Boerse\BoerseDienst($this->pdo, new \Emc\Boerse\BoerseRepository($this->pdo), $rep, $this->protokoll),
+            'magazin' => $magazin,
+            'wart' => new \Emc\Auth\Benutzer($this->admin, $person, 'admin@verein.de', 'admin@verein.de', \Emc\Auth\Rolle::Admin, false, '', true),
+        ];
+    }
+
+    private function boerseLaeuft(): int
+    {
+        $this->pdo->exec("INSERT INTO boerse (name, datum, status, provision_prozent) VALUES ('Herbstbörse', CURDATE(), 'laeuft', '10.00')");
+        return (int) $this->pdo->lastInsertId();
+    }
+
+    private function mitgliedsAngebot(array $d, int $person, int $boerse, string $preis = '12.50', ?string $foto = null): int
+    {
+        $kat = $this->zaehle("SELECT id FROM magazin_kategorie WHERE schluessel = 'sonstiges'");
+        $id = $d['angebote']->anlegen([
+            'bezeichnung' => 'BR 50 Märklin', 'beschreibung' => 'Aus der Sammlung von Carla Beispiel', 'kategorie_id' => $kat, 'spurweite_id' => null,
+            'zustand' => 'gebraucht', 'wunschpreis' => $preis, 'menge' => 1, 'herkunft' => 'mitglied', 'person_id' => $person,
+            'erloes_spende' => 0, 'boerse_id' => $boerse, 'notiz' => 'Carla ruft an, Tel. 0345 987654',
+        ], $d['wart'], new \DateTimeImmutable());
+        if ($foto !== null) {
+            $dok = $this->dokument($foto, []);
+            $this->dokumente->zuordnen($dok, 'boerse_angebot', $id);
+            $this->pdo->exec("UPDATE boerse_angebot SET titelbild_dokument_id = $dok WHERE id = $id");
+        }
+        return $id;
+    }
+
+    /**
+     * Börsenangebote der Person: nicht verkaufte werden samt Fotos und Protokoll gelöscht; verkaufte bleiben ohne
+     * Personenbezug in der Abrechnung („ehemaliges Mitglied“, Auszahlungsbetrag unverändert), die vermerkte Auszahlung
+     * ebenso. Ein Angebot mit storniertem Verkauf (Position verweist darauf, RESTRICT) bleibt zurückgezogen ohne
+     * Fotos, Beschreibung und Notiz. Name in Freitexten des Magazins wird ersetzt.
+     */
+    public function test_angebote_der_person(): void
+    {
+        $d = $this->boersenDienste();
+        $carla = $this->person();
+        $this->konto($carla);
+        $andere = $this->person('Eva', 'Exempel', 'eva@privat.de', null);
+        $b = $this->boerseLaeuft();
+        $offen = $this->mitgliedsAngebot($d, $carla, $b, '5.00', 'angebot-offen.jpg');
+        $verkauft = $this->mitgliedsAngebot($d, $carla, $b, '12.50', 'angebot-verkauft.jpg');
+        $storno = $this->mitgliedsAngebot($d, $carla, $b, '3.00', 'angebot-storno.jpg');
+        $fremd = $this->mitgliedsAngebot($d, $andere, $b, '7.00');
+        $d['kasse']->abschliessen($b, [['angebot_id' => $verkauft, 'preis' => '12.50']], 'bar', $this->admin, new \DateTimeImmutable());
+        $v2 = $d['kasse']->abschliessen($b, [['angebot_id' => $storno, 'preis' => '3.00']], 'bar', $this->admin, new \DateTimeImmutable());
+        $d['kasse']->storniere($v2, 'vertippt', $this->admin, new \DateTimeImmutable());
+        $d['boersen']->vermerkeAuszahlung($b, $carla, date('Y-m-d'), $this->admin, new \DateTimeImmutable());
+        // Kaufanfrage zum offenen Angebot (öffentlicher Bereich, ohne Mitgliedsbezug)
+        $this->pdo->exec("INSERT INTO boerse_anfrage (art, angebot_id, name, email, nachricht, einwilligung_am, eingegangen_am) VALUES ('kaufanfrage', $offen, 'Rudi', 'rudi@test.emc78.de', 'Noch da?', NOW(), NOW())");
+        $anfrage = (int) $this->pdo->lastInsertId();
+        $artikel = $d['magazin']->legeAnMitEingang(['bezeichnung' => 'Fahrpult', 'kategorie_id' => $this->zaehle("SELECT id FROM magazin_kategorie WHERE schluessel = 'sonstiges'")],
+            ['datum' => date('Y-m-d'), 'menge' => 1, 'herkunft' => 'spende', 'freitext' => 'Spende von Carla Beispiel', 'betrag' => null], $this->admin);
+        $vorher = (new \Emc\Boerse\AbrechnungRepository($this->pdo))->positionen($b);
+        $auszahlungVorher = \Emc\Boerse\Abrechnung::berechne($vorher)['mitglieder'][0]['auszahlung'];
+        $this->assertSame(1125, $auszahlungVorher);
+
+        $this->dienst->loesche($carla, [], $this->admin);
+
+        // nicht verkauft → gelöscht samt Foto (Datensatz, Dateien) und Protokoll
+        $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM boerse_angebot WHERE id = ?', [$offen]));
+        $this->assertFalse($this->dateienDa('angebot-offen.jpg'));
+        $this->assertSame(0, $this->zaehle("SELECT COUNT(*) FROM aenderungsprotokoll WHERE objekt_typ = 'boerse_angebot' AND objekt_id = ?", [$offen]));
+        $this->assertSame(0, $this->zaehle("SELECT COUNT(*) FROM dokument_zuordnung WHERE objekt_typ = 'boerse_angebot' AND objekt_id = ?", [$offen]));
+        $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM boerse_anfrage WHERE id = ? AND angebot_id IS NULL', [$anfrage]));
+        // verkauft → bleibt ohne Person, Abrechnung „ehemaliges Mitglied“ mit unverändertem Betrag
+        $this->assertSame(1, $this->zaehle("SELECT COUNT(*) FROM boerse_angebot WHERE id = ? AND person_id IS NULL AND status = 'verkauft'", [$verkauft]));
+        $this->assertTrue($this->dateienDa('angebot-verkauft.jpg'));
+        $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM boerse_verkauf_position WHERE person_id IS NOT NULL'));
+        $r = \Emc\Boerse\Abrechnung::berechne((new \Emc\Boerse\AbrechnungRepository($this->pdo))->positionen($b));
+        $this->assertSame([Aenderungsprotokoll::EHEMALIGES_MITGLIED], array_column($r['mitglieder'], 'name'));
+        $this->assertSame($auszahlungVorher, $r['mitglieder'][0]['auszahlung']);
+        $this->assertSame(1, $this->zaehle("SELECT COUNT(*) FROM boerse_auszahlung WHERE boerse_id = ? AND person_id IS NULL AND betrag = '11.25'", [$b]));
+        // stornierter Verkauf → Angebot bleibt (Position verweist darauf), zurückgezogen, ohne Fotos, Beschreibung, Notiz
+        $z = $this->pdo->query("SELECT * FROM boerse_angebot WHERE id = $storno")->fetch(\PDO::FETCH_ASSOC);
+        $this->assertNotFalse($z);
+        $this->assertEquals(['person_id' => null, 'status' => 'zurueck', 'oeffentlich' => 'nein', 'beschreibung' => null, 'notiz' => null, 'titelbild_dokument_id' => null],
+            array_intersect_key($z, array_flip(['person_id', 'status', 'oeffentlich', 'beschreibung', 'notiz', 'titelbild_dokument_id'])));
+        $this->assertFalse($this->dateienDa('angebot-storno.jpg'));
+        // fremdes Angebot unberührt
+        $this->assertSame(1, $this->zaehle("SELECT COUNT(*) FROM boerse_angebot WHERE id = ? AND person_id = ? AND status = 'angeboten'", [$fremd, $andere]));
+        // Freitext im Magazin ohne Namen, Bestand unverändert
+        $this->assertSame('Spende von ' . Aenderungsprotokoll::EHEMALIGES_MITGLIED, (string) $this->pdo->query("SELECT freitext FROM magazin_buchung WHERE artikel_id = $artikel AND art = 'eingang'")->fetchColumn());
+        $this->assertSame(1, $this->zaehle('SELECT SUM(menge) FROM magazin_buchung WHERE artikel_id = ?', [$artikel]));
+        // nirgends mehr Name oder Telefonnummer in Börse und Magazin
+        foreach (['boerse_angebot' => ['bezeichnung', 'beschreibung', 'notiz'], 'magazin_buchung' => ['freitext'], 'boerse_verkauf' => ['storno_grund']] as $tabelle => $spalten) {
+            foreach ($spalten as $spalte) {
+                $this->assertSame(0, $this->zaehle("SELECT COUNT(*) FROM $tabelle WHERE $spalte LIKE '%Carla Beispiel%' OR $spalte LIKE '%0345 987654%'"), "$tabelle.$spalte");
+            }
+        }
+    }
+
+    public function test_vorschau_zaehlt_angebote(): void
+    {
+        $d = $this->boersenDienste();
+        $carla = $this->person();
+        $b = $this->boerseLaeuft();
+        $this->mitgliedsAngebot($d, $carla, $b);
+        $this->mitgliedsAngebot($d, $carla, $b, '1.00');
+        $verkauft = $this->mitgliedsAngebot($d, $carla, $b, '2.00');
+        $storno = $this->mitgliedsAngebot($d, $carla, $b, '3.00');
+        $d['kasse']->abschliessen($b, [['angebot_id' => $verkauft, 'preis' => '2.00']], 'bar', null, new \DateTimeImmutable());
+        $v = $d['kasse']->abschliessen($b, [['angebot_id' => $storno, 'preis' => '3.00']], 'bar', null, new \DateTimeImmutable());
+        $d['kasse']->storniere($v, 'vertippt', null, new \DateTimeImmutable());
+        $d['magazin']->legeAnMitEingang(['bezeichnung' => 'Gleise', 'kategorie_id' => $this->zaehle("SELECT id FROM magazin_kategorie WHERE schluessel = 'sonstiges'")],
+            ['datum' => date('Y-m-d'), 'menge' => 2, 'herkunft' => 'nachlass', 'freitext' => 'Nachlass Beispiel, Carla', 'betrag' => null], null);
+
+        $v = $this->dienst->vorschau($carla, $this->admin);
+
+        $this->assertSame(2, $v['angebote_geloescht']);
+        $this->assertSame(1, $v['angebote_verkauft']);
+        $this->assertSame(1, $v['angebote_storniert']);
+        $this->assertSame(9, $v['freitexte'], 'Buchung „Nachlass Beispiel, Carla“ sowie Beschreibung und Notiz der vier Angebote');
+        $this->assertSame(4, $this->zaehle('SELECT COUNT(*) FROM boerse_angebot'), 'Vorschau ändert nichts');
+
+        $sitzung = ['_csrf' => str_repeat('a', 64)];
+        $this->sitzungAnmelden($sitzung, $this->admin);
+        $html = App::erzeuge(self::testConfig(), new Session($sitzung))->handle(new \Emc\Core\Request('GET', "/personen/$carla/dsgvo"))->body;
+        $this->assertStringContainsString('2 nicht verkaufte Börsenangebote werden gelöscht, 1 verkaufte bleiben ohne Namen in der Abrechnung.', $html);
+    }
+
+    /** Vor Migration 017 gibt es keine Angebote: Vorschau und Löschung laufen trotzdem. */
+    public function test_ohne_boersentabellen(): void
+    {
+        $carla = $this->person();
+        $this->pdo->exec('SET FOREIGN_KEY_CHECKS = 0');
+        $this->pdo->exec('RENAME TABLE boerse_angebot TO boerse_angebot_weg');
+        $this->pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
+        try {
+            $v = $this->dienst->vorschau($carla, $this->admin);
+            $this->assertSame(0, $v['angebote_geloescht']);
+            $this->dienst->loesche($carla, [], $this->admin);
+        } finally {
+            $this->pdo->exec('SET FOREIGN_KEY_CHECKS = 0');
+            $this->pdo->exec('RENAME TABLE boerse_angebot_weg TO boerse_angebot');
+            $this->pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
+        }
+        $this->assertSame(0, $this->zaehle('SELECT COUNT(*) FROM person WHERE id = ?', [$carla]));
     }
 }
