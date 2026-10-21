@@ -10,13 +10,20 @@ Fenster öffnet (``?kennung=…&modul=…&tutor=…&direkt=1``).
 Ergebnis: ``moodle/dist/<modul-id>/`` und ``moodle/dist/<modul-id>_SCORM.zip``, alle Dateien
 im ZIP-Wurzelverzeichnis. ``hsl-ci.css`` und ``logo-hsl.jpeg`` (Firmen-CI) werden nur
 übernommen, wenn sie lokal in ``moodle/template/`` liegen; sie gehören nicht ins Repository.
+
+Mit ``--audio`` liest jeder Tutor jedes Modul einmal über Cartesia ein (``CARTESIA_API_KEY``
+nötig). Die MP3-Dateien landen unter ``audio/`` im Paket, jedes Modul bekommt einen Player
+zum Vorlesenlassen, auch ohne laufenden Tutor-Server.
 """
 
 from __future__ import annotations
 
 import argparse
 import html
+import json
+import os
 import re
+import urllib.request
 import shutil
 import sys
 import zipfile
@@ -65,7 +72,53 @@ def quiz_html(module: Module, objective_id: str, n: int) -> str:
     )
 
 
-def build_index(module: Module, tutors: list[tuple[str, str]], tutor_url: str, has_logo: bool) -> str:
+def spoken_text(module: Module, n: int) -> str:
+    objective, section = module.objectives[n - 1], module.sections[n - 1]
+    body = "\n\n".join(" ".join(p.split()) for p in re.split(r"\n\s*\n", section.text) if p.strip())
+    return f"Modul {n}: {section.title}.\n\nLernziel: {objective.text}\n\n{body}"
+
+
+def synthesize(text: str, voice: str, model: str, target: Path) -> None:
+    request = urllib.request.Request(
+        "https://api.cartesia.ai/tts/bytes",
+        data=json.dumps(
+            {
+                "model_id": model,
+                "transcript": text,
+                "voice": {"mode": "id", "id": voice},
+                "language": "de",
+                "output_format": {"container": "mp3", "sample_rate": 44100, "bit_rate": 128000},
+            }
+        ).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {os.environ['CARTESIA_API_KEY']}",
+            "Cartesia-Version": "2025-04-16",
+            "Content-Type": "application/json",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=300) as response:
+        target.write_bytes(response.read())
+
+
+def read_aloud_html(players: list[tuple[str, str]]) -> str:
+    if not players:
+        return ""
+    items = "".join(
+        f'<figure><figcaption>{esc(name)} liest vor</figcaption>'
+        f'<audio controls preload="none" src="{esc(src)}"></audio></figure>'
+        for name, src in players
+    )
+    return f'<div class="ls-read" role="group" aria-label="Modul vorlesen lassen"><strong>Vorlesen lassen</strong>{items}</div>'
+
+
+def build_index(
+    module: Module,
+    tutors: list[tuple[str, str]],
+    tutor_url: str,
+    has_logo: bool,
+    audio: dict[int, list[tuple[str, str]]] | None = None,
+) -> str:
+    audio = audio or {}
     blocks, toc = [], []
     for n, (objective, section) in enumerate(zip(module.objectives, module.sections), start=1):
         toc.append(f'<li><a href="#modul-{n}">Modul {n}: {esc(section.title)}</a></li>')
@@ -74,7 +127,7 @@ def build_index(module: Module, tutors: list[tuple[str, str]], tutor_url: str, h
             f'<button type="button" class="ls-mod-head" data-mod-toggle>'
             f'<span class="ls-mod-kicker">Modul {n}</span><span class="ls-mod-title">{esc(section.title)}</span>'
             f'<span class="ls-mod-state" data-mod-state></span><span class="ls-mod-arrow" data-mod-arrow>+</span></button>'
-            f'<div class="ls-mod-body" data-mod-body>'
+            f'<div class="ls-mod-body" data-mod-body>{read_aloud_html(audio.get(n, []))}'
             f'<div class="hsl-note"><strong>Lernziel:</strong> {esc(objective.text)}</div>'
             f"{paragraphs(section.text)}{quiz_html(module, objective.id, n)}</div></section>"
         )
@@ -172,9 +225,10 @@ def build_manifest(module: Module, files: list[str]) -> str:
 """
 
 
-def build(module_path: Path, tutor_url: str, out_dir: Path) -> Path:
+def build(module_path: Path, tutor_url: str, out_dir: Path, with_audio: bool = False) -> Path:
     module = load_module(module_path)
-    tutors = [(t.id, t.name) for t in load_settings().tutors.values()]
+    settings = load_settings()
+    tutors = [(t.id, t.name) for t in settings.tutors.values()]
     target = out_dir / module.id
     if target.exists():
         shutil.rmtree(target)
@@ -186,7 +240,19 @@ def build(module_path: Path, tutor_url: str, out_dir: Path) -> Path:
     for name in files[1:]:
         shutil.copy(TEMPLATE / name, target / name)
     has_logo = "logo-hsl.jpeg" in files
-    (target / "index.html").write_text(build_index(module, tutors, tutor_url.rstrip("/"), has_logo), encoding="utf-8")
+
+    audio: dict[int, list[tuple[str, str]]] = {}
+    if with_audio:
+        (target / "audio").mkdir()
+        for n in range(1, min(len(module.objectives), len(module.sections)) + 1):
+            for tutor in settings.tutors.values():
+                name = f"audio/modul{n}-{tutor.id}.mp3"
+                print(f"Vertone {name} …", flush=True)
+                synthesize(spoken_text(module, n), tutor.voice, settings.tts_model, target / name)
+                audio.setdefault(n, []).append((tutor.name, name))
+                files.append(name)
+    index = build_index(module, tutors, tutor_url.rstrip("/"), has_logo, audio)
+    (target / "index.html").write_text(index, encoding="utf-8")
     (target / "imsmanifest.xml").write_text(build_manifest(module, files), encoding="utf-8")
 
     archive = out_dir / f"{module.id}_SCORM.zip"
@@ -201,8 +267,9 @@ def main() -> None:
     parser.add_argument("module", type=Path, help="Moduldatei (YAML)")
     parser.add_argument("--tutor-url", default="http://localhost:8000", help="Adresse des Voice-Tutors")
     parser.add_argument("--out", type=Path, default=HERE / "dist")
+    parser.add_argument("--audio", action="store_true", help="Module mit den Tutor-Stimmen vertonen (Cartesia)")
     args = parser.parse_args()
-    print(build(args.module, args.tutor_url, args.out))
+    print(build(args.module, args.tutor_url, args.out, args.audio))
 
 
 if __name__ == "__main__":
