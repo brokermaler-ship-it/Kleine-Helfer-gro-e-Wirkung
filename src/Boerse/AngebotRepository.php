@@ -143,6 +143,12 @@ final class AngebotRepository
         $this->pdo->prepare('UPDATE boerse_angebot SET status = ?, geaendert_am = geaendert_am WHERE id = ?')->execute([$status, $id]);
     }
 
+    /** Neuer Stand ohne Feldänderung (Foto eines Mitglieds geändert): offene Freigabe-Seiten werden veraltet. */
+    public function beruehre(int $id): void
+    {
+        $this->pdo->prepare('UPDATE boerse_angebot SET geaendert_am = NOW(6) WHERE id = ?')->execute([$id]);
+    }
+
     /** nein, vorgeschlagen oder freigegeben; ändert bewusst nicht geaendert_am. */
     public function setzeOeffentlich(int $id, string $wert): void
     {

@@ -168,6 +168,7 @@ final class BoerseController
                 'id' => (int) $a['id'],
                 'nummer' => (string) $a['nummer'],
                 'bezeichnung' => (string) $a['bezeichnung'],
+                'menge' => (int) $a['menge'],
                 'preis' => ReparaturValidator::betrag((string) $a['wunschpreis']),
                 'link' => $link,
                 'linkText' => (string) preg_replace('~^https?://~', '', $link),

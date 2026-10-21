@@ -55,4 +55,17 @@ final class BoerseValidatorTest extends TestCase
         [, $f] = AngebotValidator::pruefe(['kategorie_id' => '8'] + $eingabe, true, [4], [1], [9]);
         $this->assertArrayHasKey('kategorie_id', $f);
     }
+
+    /** M6: Konto ohne Person – keine Angebote als „meine“, verständliche Meldung beim Anlegen. */
+    public function test_ohne_person(): void
+    {
+        $b = new \Emc\Auth\Benutzer(5, 0, 'x@verein.de', 'X', \Emc\Auth\Rolle::Mitglied, false);
+        $f = \Emc\Boerse\AngebotFilter::ausRequest(new \Emc\Core\Request('GET', '/angebote', ['meine' => '1']), $b);
+        $this->assertSame([], $f->ids);
+        $this->assertTrue($f->meine);
+        $eingabe = ['bezeichnung' => 'Lok', 'kategorie_id' => '9', 'zustand' => 'gebraucht', 'wunschpreis' => '5'];
+        [, $fehler] = AngebotValidator::pruefe($eingabe, false, [0], []);
+        $this->assertSame(AngebotValidator::KEINE_PERSON, $fehler['person_id']);
+        $this->assertSame('Deinem Konto ist keine Person zugeordnet.', AngebotValidator::KEINE_PERSON);
+    }
 }

@@ -743,7 +743,7 @@ final class App
     /** Pfade, die vor dem Datenbank-Update zu /admin/update führen (siehe 3c in handle()). */
     private static function brauchtNeuesSchema(string $pfad): bool
     {
-        foreach (['/anlagen', '/wartung', '/admin/wartungsarten', '/code', '/defekt', '/meine-meldungen', '/reparaturen', '/etiketten', '/magazin', '/admin/magazin-kategorien', '/angebote', '/boersen', '/kasse', '/verkaeufe'] as $p) {
+        foreach (['/anlagen', '/wartung', '/admin/wartungsarten', '/code', '/defekt', '/meine-meldungen', '/reparaturen', '/etiketten', '/magazin', '/admin/magazin-kategorien', '/angebote', '/boersen', '/kasse', '/verkaeufe', '/c'] as $p) {
             if ($pfad === $p || str_starts_with($pfad, $p . '/')) {
                 return true;
             }

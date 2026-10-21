@@ -97,6 +97,7 @@ $abgeschlossen = $a['boerse_status'] === 'abgeschlossen';
                 <form method="post" action="<?= e(url('/angebote/' . $id . '/oeffentlich')) ?>" class="m-0">
                     <?php include dirname(__DIR__) . '/partials/csrf.php'; ?>
                     <input type="hidden" name="nach" value="<?= e($nach) ?>">
+                    <?php if ($nach === 'freigegeben'): ?><input type="hidden" name="stand" value="<?= e((string) $a['geaendert_am']) ?>"><?php endif; ?>
                     <button type="submit" class="btn <?= $nach === 'nein' ? 'btn-outline-secondary' : 'btn-success' ?>"><?= e($freigabeText[$nach]) ?></button>
                 </form>
             <?php endforeach; ?>

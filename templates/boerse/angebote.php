@@ -19,7 +19,7 @@ $herkunftText = function (array $a) use ($istBoersenwart, $personId): string {
     }
     return $istBoersenwart ? 'Mitglied: ' . ($a['person_name'] ?? \Emc\Protokoll\Aenderungsprotokoll::EHEMALIGES_MITGLIED) : 'Mitglied';
 };
-$meine = $filter->personId !== null;
+$meine = $filter->meine;
 $filterAktiv = $filter->boerseId !== null || $filter->dauerhaft || $filter->status !== 'offen' || $filter->oeffentlich !== null || $filter->herkunft !== null || $filter->text !== null;
 ?>
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
@@ -90,7 +90,7 @@ $filterAktiv = $filter->boerseId !== null || $filter->dauerhaft || $filter->stat
 </form>
 
 <?php if ($angebote === []): ?>
-    <p class="text-muted"><?= $meine ? 'Du hast gerade keine Angebote in dieser Auswahl.' : 'Keine Angebote gefunden.' ?></p>
+    <p class="text-muted"><?= $meine && $filter->personId === null ? e(\Emc\Boerse\AngebotValidator::KEINE_PERSON) : ($meine ? 'Du hast gerade keine Angebote in dieser Auswahl.' : 'Keine Angebote gefunden.') ?></p>
 <?php else: ?>
     <p class="small text-muted mb-2"><?= count($angebote) === 1 ? '1 Angebot' : count($angebote) . ' Angebote' ?></p>
     <div class="d-md-none list-group">

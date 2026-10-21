@@ -33,6 +33,7 @@ final class AngebotController
 {
     private const FELDER = ['bezeichnung', 'beschreibung', 'kategorie_id', 'spurweite_id', 'zustand', 'wunschpreis', 'menge', 'herkunft', 'person_id', 'erloes_spende', 'boerse_id', 'notiz'];
     public const RUECKFALL = 'Das Angebot wurde gespeichert. Weil es öffentlich war, muss der Börsenwart es erneut freigeben.';
+    public const RUECKFALL_FOTO = 'Weil das Angebot öffentlich war, muss der Börsenwart es erneut freigeben.';
 
     public function __construct(
         private View $view,
@@ -56,7 +57,7 @@ final class AngebotController
         $b = $this->benutzer();
         $filter = AngebotFilter::ausRequest($r, $b);
         return $this->seite('boerse/angebote', [
-            'titel' => $filter->personId !== null ? 'Meine Angebote' : 'Angebote',
+            'titel' => $filter->meine ? 'Meine Angebote' : 'Angebote',
             'filter' => $filter,
             'angebote' => $this->angebote->suche($filter),
             'boersen' => $this->boersen->alle(),
@@ -184,6 +185,13 @@ final class AngebotController
             $this->session->meldung('fehler', 'Es wurde kein Foto ausgewählt.');
             return $ziel;
         }
+        // Rückfall der Freigabe vor dem Speichern: nie ein ungeprüftes Foto an einem freigegebenen Angebot.
+        try {
+            $rueckfall = $this->dienst->fotoGeaendert($id, $b);
+        } catch (DomainFehler $e) {
+            $this->session->meldung('fehler', $e->getMessage());
+            return $ziel;
+        }
         $gespeichert = (new ObjektFotos($this->upload, $this->dokumente, $this->session))
             ->speichere($r->file('fotos'), AngebotDienst::OBJEKT, $id, $b->id, 'ein Angebot');
         foreach ($gespeichert as $foto) {
@@ -193,9 +201,9 @@ final class AngebotController
         $n = count($gespeichert);
         if ($n > 0) {
             $this->session->meldung('erfolg', $n === 1 ? 'Das Foto wurde hinzugefügt.' : $n . ' Fotos wurden hinzugefügt.');
-            if ($this->dienst->fotoGeaendert($id, $b)) {
-                $this->session->meldung('warnung', 'Weil das Angebot öffentlich war, muss der Börsenwart es erneut freigeben.');
-            }
+        }
+        if ($rueckfall) {
+            $this->session->meldung('warnung', self::RUECKFALL_FOTO);
         }
         return $ziel;
     }
@@ -210,12 +218,14 @@ final class AngebotController
             throw new HttpFehler(403);
         }
         try {
-            $this->dienst->setzeOeffentlich((int) $a['id'], $nach, $b);
+            $this->dienst->setzeOeffentlich((int) $a['id'], $nach, $b, $nach === 'freigegeben' ? $r->text('stand') : null);
             $this->session->meldung('erfolg', match ($nach) {
                 'freigegeben' => 'Das Angebot ist jetzt öffentlich.',
                 'vorgeschlagen' => 'Das Angebot ist zur Freigabe vorgeschlagen.',
                 default => 'Das Angebot ist nicht mehr öffentlich.',
             });
+        } catch (KonfliktFehler $e) {
+            return $this->detail($this->lade($p), $e->getMessage(), 409);
         } catch (DomainFehler $e) {
             $this->session->meldung('fehler', $e->getMessage());
         }

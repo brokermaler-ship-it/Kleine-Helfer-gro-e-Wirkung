@@ -10,6 +10,7 @@ use Emc\Codes\Code;
 use Emc\Core\DomainFehler;
 use Emc\Core\HttpFehler;
 use Emc\Core\Transaktion;
+use Emc\Fahrzeuge\KonfliktFehler;
 use Emc\Magazin\MagazinDienst;
 use Emc\Magazin\MagazinRepository;
 use Emc\Protokoll\Aenderungsprotokoll;
@@ -183,54 +184,88 @@ final class AngebotDienst
 
     /**
      * Löst ein geteiltes Foto nur vom Angebot (das Dokument bleibt am Magazinartikel). War es das Titelbild, rückt das
-     * älteste verbliebene Foto nach.
+     * älteste verbliebene Foto nach. Rückfall der Freigabe (durch ein Mitglied) in derselben Transaktion.
+     *
+     * @return bool true bei Rückfall auf „vorgeschlagen“
+     * @throws HttpFehler 403 ohne Recht am Angebot
+     * @throws DomainFehler verkauft, Börse abgeschlossen, Sperrkonflikt; nichts geändert
      */
-    public function loeseFoto(int $id, int $dokumentId, Benutzer $b): void
+    public function loeseFoto(int $id, int $dokumentId, Benutzer $b): bool
     {
-        Transaktion::readCommitted($this->pdo, function () use ($id, $dokumentId, $b): void {
-            $a = $this->rep->sperre($id) ?? throw new DomainFehler(self::NICHT_GEFUNDEN);
+        return Transaktion::readCommitted($this->pdo, function () use ($id, $dokumentId, $b): bool {
+            $a = $this->sperreAngebot($id, []);
+            if (!Berechtigung::darfAngebotBearbeiten($b, $a)) {
+                throw new HttpFehler(403);
+            }
+            $this->verlangeAenderbar($a);
+            $rueckfall = $this->rueckfallNachFoto($a, $b);
             $titel = $this->rep->loeseFoto($id, $dokumentId, (int) ($a['titelbild_dokument_id'] ?? 0) === $dokumentId);
             if ($titel !== null) {
                 $this->protokoll->schreibe($b->id, self::OBJEKT, $id, 'geaendert', ['datei' => ['alt' => $titel, 'neu' => null]]);
             }
+            return $rueckfall;
         });
     }
 
     /**
-     * Foto hinzugefügt oder gelöscht: durch ein Mitglied fällt ein freigegebenes Angebot auf „vorgeschlagen“ zurück.
+     * VOR dem Hinzufügen oder Löschen eines Fotos aufrufen: durch ein Mitglied fällt ein freigegebenes Angebot auf
+     * „vorgeschlagen“ zurück, und der Stand (geaendert_am) ändert sich – eine Freigabe auf einer vorher geöffneten Seite
+     * scheitert dann am Stand-Schutz. So bleibt kein ungeprüftes Foto an einem freigegebenen Angebot, auch wenn das
+     * Speichern danach scheitert (dann ist der Rückfall harmlos). Prüft Recht und Änderbarkeit unter der Sperre.
      *
      * @return bool true bei Rückfall
+     * @throws HttpFehler 403 ohne Recht am Angebot
+     * @throws DomainFehler verkauft, Börse abgeschlossen, Sperrkonflikt
      */
     public function fotoGeaendert(int $id, Benutzer $b): bool
+    {
+        return Transaktion::readCommitted($this->pdo, function () use ($id, $b): bool {
+            $a = $this->sperreAngebot($id, []);
+            if (!Berechtigung::darfAngebotBearbeiten($b, $a)) {
+                throw new HttpFehler(403);
+            }
+            $this->verlangeAenderbar($a);
+            return $this->rueckfallNachFoto($a, $b);
+        });
+    }
+
+    /** @param array<string,mixed> $a gesperrtes Angebot */
+    private function rueckfallNachFoto(array $a, Benutzer $b): bool
     {
         if (Berechtigung::istBoersenwart($b)) {
             return false;
         }
-        return Transaktion::readCommitted($this->pdo, function () use ($id, $b): bool {
-            $a = $this->rep->sperre($id);
-            if ($a === null || $a['oeffentlich'] !== 'freigegeben') {
-                return false;
-            }
-            $this->rep->setzeOeffentlich($id, 'vorgeschlagen');
-            $this->protokoll->schreibe($b->id, self::OBJEKT, $id, 'geaendert', ['oeffentlich' => ['alt' => 'freigegeben', 'neu' => 'vorgeschlagen']]);
-            return true;
-        });
+        $id = (int) $a['id'];
+        $this->rep->beruehre($id);
+        if ($a['oeffentlich'] !== 'freigegeben') {
+            return false;
+        }
+        $this->rep->setzeOeffentlich($id, 'vorgeschlagen');
+        $this->protokoll->schreibe($b->id, self::OBJEKT, $id, 'geaendert', ['oeffentlich' => ['alt' => 'freigegeben', 'neu' => 'vorgeschlagen']]);
+        return true;
     }
 
     /**
      * Veröffentlichung: Mitglied schlägt vor bzw. zieht zurück, der Börsenwart gibt frei oder nimmt heraus.
      *
+     * @param ?string $stand Stand (geaendert_am), den der Börsenwart beim Freigeben gesehen hat; bei „freigegeben“ muss
+     *                       er stimmen, sonst KonfliktFehler (null: ohne Prüfung, nur für Dienste/Beispieldaten)
      * @throws HttpFehler 403, wenn der Übergang nicht erlaubt ist
+     * @throws KonfliktFehler Freigabe auf veraltetem Stand
      */
-    public function setzeOeffentlich(int $id, string $nach, Benutzer $b): void
+    public function setzeOeffentlich(int $id, string $nach, Benutzer $b, ?string $stand = null): void
     {
-        Transaktion::readCommitted($this->pdo, function () use ($id, $nach, $b): void {
+        Transaktion::readCommitted($this->pdo, function () use ($id, $nach, $b, $stand): void {
             $a = $this->sperreAngebot($id, []);
             $boersenwart = Berechtigung::istBoersenwart($b);
             if (!Berechtigung::darfAngebotBearbeiten($b, $a) || !Freigabe::erlaubt((string) $a['oeffentlich'], $nach, $boersenwart, (string) $a['herkunft'])) {
                 throw new HttpFehler(403);
             }
             $this->verlangeAenderbar($a);
+            if ($nach === 'freigegeben' && $stand !== null && $stand !== (string) $a['geaendert_am']) {
+                // Inzwischen geändert (Text, Preis, Fotos): nichts Ungesehenes freigeben.
+                throw new KonfliktFehler(AngebotRepository::KONFLIKT);
+            }
             $this->rep->setzeOeffentlich($id, $nach);
             $this->protokoll->schreibe($b->id, self::OBJEKT, $id, 'geaendert', ['oeffentlich' => ['alt' => $a['oeffentlich'], 'neu' => $nach]]);
         });

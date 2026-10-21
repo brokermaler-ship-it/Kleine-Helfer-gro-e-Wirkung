@@ -169,6 +169,11 @@ final class DateiController
                     $this->angebote->pruefeAenderbar($angebotId, $benutzer);
                 }
             } catch (DomainFehler $e) {
+                $magazin = $this->dokumente->objekte((int) $dok['id'], 'magazin_artikel');
+                if ($nurAngebot === null && $magazin !== [] && Berechtigung::istBoersenwart($benutzer)) {
+                    // Von der Magazinseite: das Foto bleibt am verkauften Angebot, nur vom Magazinartikel lösen.
+                    return $this->vomMagazinLoesen($dok, $magazin);
+                }
                 $this->session->meldung('fehler', $e->getMessage());
                 return $this->zurueck('boerse_angebot', $angebotId);
             } catch (HttpFehler) {
@@ -186,6 +191,17 @@ final class DateiController
             $objekte = ['boerse_angebot' => [$nurAngebot]] + $objekte;
         }
         try {
+            // Rückfall der Freigabe vor dem Löschen (ein Mitglied ändert die Fotos eines freigegebenen Angebots).
+            $rueckfall = false;
+            foreach ($angebotIds as $angebotId) {
+                try {
+                    if ($benutzer !== null && $this->angebote?->fotoGeaendert($angebotId, $benutzer) === true) {
+                        $rueckfall = true;
+                    }
+                } catch (HttpFehler) {
+                    // Kein Recht am Angebot, aber an der Datei (geteiltes Dokument, z. B. Bearbeiter): kein Rückfall nötig.
+                }
+            }
             $this->dokumente->loeschen((int) $dok['id']);
         } catch (DomainFehler $e) {
             // Sperrkonflikt (z. B. eine Kasse schließt gerade ab): nichts gelöscht, Meldung statt 500.
@@ -193,10 +209,8 @@ final class DateiController
             return $this->zielNachLoeschen($objekte, $bezuege);
         }
         $this->raeumeOneDriveAuf();
-        foreach ($angebotIds as $angebotId) {
-            if ($benutzer !== null && $this->angebote?->fotoGeaendert($angebotId, $benutzer) === true) {
-                $this->session->meldung('warnung', 'Weil das Angebot öffentlich war, muss der Börsenwart es erneut freigeben.');
-            }
+        if ($rueckfall) {
+            $this->session->meldung('warnung', 'Weil das Angebot öffentlich war, muss der Börsenwart es erneut freigeben.');
         }
         foreach ($objekte as $typ => $ids) {
             foreach ($ids as $objektId) {
@@ -443,17 +457,34 @@ final class DateiController
             throw new HttpFehler(404);
         }
         try {
-            $this->angebote->pruefeAenderbar($angebotId, $benutzer);
+            // Recht, Änderbarkeit, Lösen und Rückfall der Freigabe in einer Transaktion.
+            $rueckfall = $this->angebote->loeseFoto($angebotId, (int) $dok['id'], $benutzer);
         } catch (DomainFehler $e) {
             $this->session->meldung('fehler', $e->getMessage());
             return $this->zurueck('boerse_angebot', $angebotId);
         }
-        $this->angebote->loeseFoto($angebotId, (int) $dok['id'], $benutzer);
         $this->session->meldung('erfolg', 'Das Foto wurde vom Angebot entfernt.');
-        if ($this->angebote->fotoGeaendert($angebotId, $benutzer)) {
+        if ($rueckfall) {
             $this->session->meldung('warnung', 'Weil das Angebot öffentlich war, muss der Börsenwart es erneut freigeben.');
         }
         return $this->zurueck('boerse_angebot', $angebotId);
+    }
+
+    /**
+     * Foto, das auch an einem verkauften Angebot (bzw. einer abgeschlossenen Börse) hängt: bleibt dort und wird nur von
+     * den Magazinartikeln gelöst (Titelbild rückt nach).
+     *
+     * @param array<string,mixed> $dok
+     * @param list<int> $artikelIds
+     */
+    private function vomMagazinLoesen(array $dok, array $artikelIds): Response
+    {
+        foreach ($artikelIds as $artikelId) {
+            $this->dokumente->loeseZuordnung((int) $dok['id'], 'magazin_artikel', $artikelId);
+            $this->protokoll->schreibe($this->auth->benutzer()?->id, 'magazin_artikel', $artikelId, 'geaendert', ['datei' => ['alt' => $dok['titel'], 'neu' => null]]);
+        }
+        $this->session->meldung('warnung', 'Das Foto gehört auch zu einem verkauften Angebot und bleibt dort; vom Magazinartikel wurde es entfernt.');
+        return $this->zurueck('magazin_artikel', $artikelIds[0]);
     }
 
     private function zurueck(string $typ, int $objektId): Response

@@ -28,6 +28,8 @@ final class AngebotFilter
         public readonly ?int $personId = null,
         public readonly ?string $text = null,
         public readonly ?array $ids = null,
+        /** „Meine Angebote“ (meine=1); ohne Person am Konto bleibt die Liste leer statt alle zu zeigen. */
+        public readonly bool $meine = false,
     ) {
     }
 
@@ -38,14 +40,17 @@ final class AngebotFilter
         $oeffentlich = $r->text('oeffentlich');
         $herkunft = $r->text('herkunft');
         $text = mb_substr(trim($r->text('q')), 0, 100);
+        $meine = $r->text('meine') === '1';
         return new self(
             preg_match('/^\d{1,10}$/', $boerse) === 1 && (int) $boerse > 0 ? (int) $boerse : null,
             $boerse === 'dauerhaft',
             in_array($status, [...self::STATUS, self::ALLE], true) ? $status : self::OFFEN,
             in_array($oeffentlich, Freigabe::WERTE, true) ? $oeffentlich : null,
             in_array($herkunft, ['verein', 'mitglied'], true) ? $herkunft : null,
-            $r->text('meine') === '1' && $b !== null ? $b->personId : null,
+            $meine && $b !== null && $b->personId > 0 ? $b->personId : null,
             $text === '' ? null : $text,
+            $meine && ($b === null || $b->personId <= 0) ? [] : null,
+            $meine,
         );
     }
 
@@ -58,6 +63,6 @@ final class AngebotFilter
     public function istGesetzt(): bool
     {
         return $this->boerseId !== null || $this->dauerhaft || $this->status !== self::OFFEN || $this->oeffentlich !== null
-            || $this->herkunft !== null || $this->personId !== null || $this->text !== null;
+            || $this->herkunft !== null || $this->meine || $this->text !== null;
     }
 }

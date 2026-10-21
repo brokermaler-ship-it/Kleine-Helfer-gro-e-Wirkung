@@ -108,6 +108,27 @@ final class DokumentRepository
             ->execute([$dokumentId, $objektId]);
     }
 
+    /**
+     * Entfernt nur eine Zuordnung (das Dokument bleibt an anderen Objekten). War es das Titelbild eines Magazinartikels
+     * bzw. Angebots, rückt das älteste verbliebene Foto nach.
+     */
+    public function loeseZuordnung(int $dokumentId, string $objektTyp, int $objektId): void
+    {
+        $this->pdo->prepare('DELETE FROM dokument_zuordnung WHERE dokument_id = ? AND objekt_typ = ? AND objekt_id = ?')->execute([$dokumentId, $objektTyp, $objektId]);
+        $tabelle = self::TITELBILD_TABELLEN[$objektTyp] ?? null;
+        if ($tabelle === null) {
+            return;
+        }
+        $st = $this->pdo->prepare("UPDATE $tabelle SET titelbild_dokument_id = NULL, geaendert_am = geaendert_am WHERE id = ? AND titelbild_dokument_id = ?");
+        $st->execute([$objektId, $dokumentId]);
+        if ($st->rowCount() > 0) {
+            $naechstes = $this->aeltestesFoto($objektTyp, $objektId);
+            if ($naechstes !== null) {
+                $this->setzeTitelbildWennLeer($objektTyp, $objektId, $naechstes);
+            }
+        }
+    }
+
     /** Ältestes Foto (mit Anzeige-Variante) am Objekt, Kandidat für das Titelbild; null, wenn keins da ist. */
     public function aeltestesFoto(string $objektTyp, int $objektId): ?int
     {

@@ -18,6 +18,7 @@ final class AngebotValidator
     public const NOTIZ_MAX = 5000;
     public const MENGE_MAX = 9999;
     public const KEIN_MITGLIED = 'Bitte das Mitglied wählen.';
+    public const KEINE_PERSON = 'Deinem Konto ist keine Person zugeordnet.';
     public const KEIN_PREIS = 'Bitte den Betrag angeben, z. B. 12,50.';
     public const KEINE_BOERSE = 'Bitte eine offene Börse wählen oder „dauerhaft“.';
 
@@ -108,9 +109,9 @@ final class AngebotValidator
         } else {
             // Mitglieder bieten nur eigene Sachen an – Herkunft und Person nie aus dem Formular.
             $d['herkunft'] = 'mitglied';
-            $d['person_id'] = $personIds[0] ?? null;
+            $d['person_id'] = ($personIds[0] ?? 0) > 0 ? (int) $personIds[0] : null;
             if ($d['person_id'] === null) {
-                $f['person_id'] = self::KEIN_MITGLIED;
+                $f['person_id'] = self::KEINE_PERSON;
             }
         }
         $d['erloes_spende'] = $d['herkunft'] === 'mitglied' && in_array((string) ($eingabe['erloes_spende'] ?? ''), ['1', 'on'], true) ? 1 : 0;

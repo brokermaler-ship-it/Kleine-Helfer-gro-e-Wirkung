@@ -22,6 +22,9 @@ final class AngebotHttpTest extends DbTestCase
     /** @var list<string> */
     private array $temp = [];
     private string $jahr;
+    /** App nutzt die Verbindung des Tests (für Sperrversuche mit kurzer Wartezeit). */
+    private bool $gleicheVerbindung = false;
+    private ?\PDO $zweite = null;
 
     protected function setUp(): void
     {
@@ -38,6 +41,10 @@ final class AngebotHttpTest extends DbTestCase
         foreach ($this->temp as $t) {
             @unlink($t);
         }
+        if ($this->zweite !== null && $this->zweite->inTransaction()) {
+            $this->zweite->rollBack();
+        }
+        $this->zweite = null;
     }
 
     private function app(array $config = []): App
@@ -46,7 +53,16 @@ final class AngebotHttpTest extends DbTestCase
         $app->container()->set(UploadService::class, fn() => new UploadService(
             $this->pdo, $this->speicher, 64 * 1048576, new Bildbearbeitung(), fn($t) => is_file($t), fn($a, $b) => copy($a, $b)
         ));
+        if ($this->gleicheVerbindung) {
+            $app->container()->set('pdo', fn() => $this->pdo);
+        }
         return $app;
+    }
+
+    /** Freigabe wie aus dem Formular der Angebotsseite (mit aktuellem Stand). */
+    private function freigeben(int $id, ?string $stand = null): Response
+    {
+        return $this->post("/angebote/$id/oeffentlich", ['nach' => 'freigegeben', 'stand' => $stand ?? (string) $this->zeile($id)['geaendert_am']]);
     }
 
     /** @return int Benutzer-ID */
@@ -194,7 +210,7 @@ final class AngebotHttpTest extends DbTestCase
         $this->anmelden('fahrzeugwart');
         $this->assertSame(403, $this->post("/angebote/$id/oeffentlich", ['nach' => 'freigegeben'])->status, 'Fahrzeugwart ohne Häkchen');
         $this->anmelden('bearbeiter');
-        $this->assertSame(303, $this->post("/angebote/$id/oeffentlich", ['nach' => 'freigegeben'])->status);
+        $this->assertSame(303, $this->freigeben($id)->status);
         $this->assertSame('freigegeben', $this->zeile($id)['oeffentlich']);
 
         // Mitglied ändert den Preis: Rückfall mit Meldung.
@@ -207,7 +223,7 @@ final class AngebotHttpTest extends DbTestCase
 
         // Börsenwart gibt frei, Mitglied lädt ein Foto hoch: wieder Rückfall.
         $this->anmelden('mitglied', true);
-        $this->post("/angebote/$id/oeffentlich", ['nach' => 'freigegeben']);
+        $this->freigeben($id);
         $this->anmelden('mitglied', false, 'carla@verein.de');
         $this->assertSame(303, $this->post("/angebote/$id/fotos", [], $this->foto())->status);
         $dok = $this->zahl("SELECT dokument_id FROM dokument_zuordnung WHERE objekt_typ = 'boerse_angebot' AND objekt_id = $id");
@@ -217,7 +233,7 @@ final class AngebotHttpTest extends DbTestCase
 
         // Foto löschen durch das Mitglied (eigenes Angebot) nach erneuter Freigabe: Rückfall.
         $this->anmelden('mitglied', true);
-        $this->post("/angebote/$id/oeffentlich", ['nach' => 'freigegeben']);
+        $this->freigeben($id);
         $this->anmelden('mitglied', false, 'eva@verein.de');
         $this->assertSame(403, $this->post("/dateien/$dok/loeschen")->status, 'fremdes Angebot');
         $this->anmelden('mitglied', false, 'carla@verein.de');
@@ -232,6 +248,88 @@ final class AngebotHttpTest extends DbTestCase
         $this->post("/angebote/$id/status", ['aktion' => 'zurueckziehen']);
         $this->assertSame('zurueck', $this->zeile($id)['status']);
         $this->assertSame(403, $this->get("/angebote/$id/bearbeiten")->status);
+    }
+
+    /** I1: Hält die Kasse (zweite Verbindung) das Angebot gesperrt, gibt es bei Fotoänderungen eine Meldung statt 500 und keine Änderung. */
+    public function test_foto_bei_sperrkonflikt(): void
+    {
+        $this->anmelden('mitglied', false, 'carla@verein.de');
+        $id = $this->neuesAngebot();
+        $this->post("/angebote/$id/fotos", [], $this->foto());
+        $dok = $this->zahl('SELECT MAX(id) FROM dokument');
+        $this->anmelden('mitglied', true);
+        $this->freigeben($id);
+        $this->assertSame('freigegeben', $this->zeile($id)['oeffentlich']);
+
+        $this->zweite = self::verbindung();
+        $this->zweite->beginTransaction();
+        $this->zweite->query("SELECT id FROM boerse_angebot WHERE id = $id FOR UPDATE")->fetchAll();
+        $this->gleicheVerbindung = true;
+        $this->pdo->exec('SET SESSION innodb_lock_wait_timeout = 1');
+        try {
+            $this->anmelden('mitglied', false, 'carla@verein.de');
+            $r = $this->post("/angebote/$id/fotos", [], $this->foto());
+            $this->assertSame(303, $r->status);
+            $this->assertSame(url("/angebote/$id") . '#fotos', $r->headers['Location']);
+            $this->assertContains(\Emc\Core\Transaktion::SPERRKONFLIKT, $this->meldungen('fehler'));
+            $this->assertSame(1, $this->zahl('SELECT COUNT(*) FROM dokument'), 'kein Foto gespeichert');
+
+            $this->sitzung['_meldungen'] = [];
+            $r = $this->post("/dateien/$dok/loeschen", ['angebot_id' => (string) $id]);
+            $this->assertSame(303, $r->status);
+            $this->assertSame(url("/angebote/$id") . '#fotos', $r->headers['Location']);
+            $this->assertContains(\Emc\Core\Transaktion::SPERRKONFLIKT, $this->meldungen('fehler'));
+            $this->assertSame(1, $this->zahl('SELECT COUNT(*) FROM dokument'), 'Foto nicht gelöscht');
+
+            // Geteiltes Foto nur lösen (Börsenwart, Vereinsangebot aus dem Magazin): ebenfalls Meldung statt 500.
+            $this->pdo->exec("INSERT INTO dokument_zuordnung (dokument_id, objekt_typ, objekt_id) VALUES ($dok, 'magazin_artikel', 1)");
+            $this->anmelden('mitglied', true);
+            $r = $this->post("/dateien/$dok/loeschen", ['angebot_id' => (string) $id]);
+            $this->assertSame(303, $r->status);
+            $this->assertContains(\Emc\Core\Transaktion::SPERRKONFLIKT, $this->meldungen('fehler'));
+            $this->assertSame(1, $this->zahl("SELECT COUNT(*) FROM dokument_zuordnung WHERE objekt_typ = 'boerse_angebot'"));
+            $this->assertFalse($this->pdo->inTransaction());
+        } finally {
+            $this->pdo->exec('SET SESSION innodb_lock_wait_timeout = 50');
+            $this->zweite->rollBack();
+            $this->gleicheVerbindung = false;
+        }
+        $this->assertSame('freigegeben', $this->zeile($id)['oeffentlich'], 'nichts geändert');
+
+        // Ohne Sperre: Lösen durch das Mitglied setzt den Rückfall in derselben Transaktion.
+        $this->anmelden('mitglied', false, 'carla@verein.de');
+        $r = $this->post("/dateien/$dok/loeschen", ['angebot_id' => (string) $id]);
+        $this->assertSame(303, $r->status);
+        $this->assertSame(0, $this->zahl("SELECT COUNT(*) FROM dokument_zuordnung WHERE objekt_typ = 'boerse_angebot'"));
+        $this->assertSame('vorgeschlagen', $this->zeile($id)['oeffentlich']);
+        $this->assertContains('Weil das Angebot öffentlich war, muss der Börsenwart es erneut freigeben.', $this->meldungen('warnung'));
+    }
+
+    /** M1: Freigabe nur auf dem Stand, den der Börsenwart gesehen hat; Fotoänderungen des Mitglieds ändern den Stand. */
+    public function test_freigabe_mit_stand(): void
+    {
+        $this->anmelden('mitglied', false, 'carla@verein.de');
+        $id = $this->neuesAngebot(['veroeffentlichen' => '1']);
+        $alt = (string) $this->zeile($id)['geaendert_am'];
+        $this->anmelden('mitglied', true);
+        $this->assertStringContainsString('name="stand" value="' . $alt . '"', $this->get("/angebote/$id")->body);
+
+        usleep(2000);
+        $this->anmelden('mitglied', false, 'carla@verein.de');
+        $this->post("/angebote/$id/fotos", [], $this->foto());
+        $this->assertNotSame($alt, (string) $this->zeile($id)['geaendert_am'], 'Foto ändert den Stand');
+
+        $this->anmelden('mitglied', true);
+        $r = $this->freigeben($id, $alt);
+        $this->assertSame(409, $r->status);
+        $this->assertStringContainsString('inzwischen von jemand anderem geändert', $r->body);
+        $this->assertSame('vorgeschlagen', $this->zeile($id)['oeffentlich']);
+        $this->assertSame(409, $this->post("/angebote/$id/oeffentlich", ['nach' => 'freigegeben'])->status, 'ohne Stand');
+        $this->assertSame(303, $this->freigeben($id)->status);
+        $this->assertSame('freigegeben', $this->zeile($id)['oeffentlich']);
+        // Zurücknehmen braucht keinen Stand.
+        $this->assertSame(303, $this->post("/angebote/$id/oeffentlich", ['nach' => 'nein'])->status);
+        $this->assertSame('nein', $this->zeile($id)['oeffentlich']);
     }
 
     public function test_vereinsangebot_aus_dem_magazin(): void
@@ -318,6 +416,17 @@ final class AngebotHttpTest extends DbTestCase
         $this->assertSame(1, $this->zahl('SELECT COUNT(*) FROM dokument'));
         $this->assertSame(303, $this->post("/angebote/$angebot/fotos", [], $this->foto())->status);
         $this->assertSame(1, $this->zahl('SELECT COUNT(*) FROM dokument'), 'kein Upload an verkaufte Angebote');
+
+        // M2: Magazinfoto, das auch am verkauften Angebot hängt: von der Magazinseite nur vom Artikel lösen.
+        $this->pdo->exec("INSERT INTO dokument_zuordnung (dokument_id, objekt_typ, objekt_id) VALUES ($foto, 'magazin_artikel', $artikel)");
+        $this->pdo->exec("UPDATE magazin_artikel SET titelbild_dokument_id = $foto WHERE id = $artikel");
+        $r = $this->post("/dateien/$foto/loeschen");
+        $this->assertSame(303, $r->status);
+        $this->assertSame(url("/magazin/$artikel") . '#fotos', $r->headers['Location']);
+        $this->assertContains('Das Foto gehört auch zu einem verkauften Angebot und bleibt dort; vom Magazinartikel wurde es entfernt.', $this->meldungen('warnung'));
+        $this->assertSame(0, $this->zahl("SELECT COUNT(*) FROM dokument_zuordnung WHERE objekt_typ = 'magazin_artikel'"));
+        $this->assertSame(1, $this->zahl("SELECT COUNT(*) FROM dokument_zuordnung WHERE objekt_typ = 'boerse_angebot' AND dokument_id = $foto"));
+        $this->assertSame(0, $this->zahl("SELECT COUNT(*) FROM magazin_artikel WHERE titelbild_dokument_id IS NOT NULL"));
     }
 
     public function test_sammlung_in_die_boerse(): void
@@ -459,6 +568,9 @@ final class AngebotHttpTest extends DbTestCase
         $this->assertSame(6, substr_count($r->body, 'class="feld-leer"'), 'Start auf Feld 2: 1 leer davor, 5 danach');
         $this->assertStringNotContainsString('Mustermann', $r->body);
 
+        $this->pdo->exec("UPDATE boerse_angebot SET menge = 6 WHERE id = $verein");
+        $this->assertStringContainsString('6 Stück', $this->get("/boersen/$boerse/preisschilder", ['auswahl' => 'boerse'])->body);
+
         $mitUrl = $this->get("/boersen/$boerse/preisschilder", ['auswahl' => 'einzeln', 'ids' => [(string) $mitglied]], ['oeffentliche_url' => 'https://lokschuppen.example']);
         $this->assertStringContainsString('lokschuppen.example/c/B' . $this->jahr . '-2', $mitUrl->body);
         $this->assertStringNotContainsString($nr . '<', $mitUrl->body);
@@ -474,6 +586,22 @@ final class AngebotHttpTest extends DbTestCase
         $this->assertStringNotContainsString('Mustermann', $liste->body);
         $this->assertStringNotContainsString('Carla', $liste->body);
         $this->assertSame($verein, $this->zahl("SELECT id FROM boerse_angebot WHERE herkunft = 'verein'"));
+    }
+
+    /** M3: Kurzlink vor dem Datenbank-Update führt Administratoren zum Update statt zu einem Fehler. */
+    public function test_kurzlink_vor_dem_update(): void
+    {
+        $this->anmelden('admin');
+        $this->pdo->exec("DELETE FROM schema_migration WHERE version = '017_boerse'");
+        try {
+            foreach (['/c/B2026-1', '/code', '/angebote', '/boersen/1'] as $pfad) {
+                $r = $this->get($pfad, $pfad === '/code' ? ['q' => 'B2026-1'] : []);
+                $this->assertSame(303, $r->status, $pfad);
+                $this->assertSame(url('/admin/update'), $r->headers['Location'], $pfad);
+            }
+        } finally {
+            $this->pdo->exec("INSERT INTO schema_migration (version) VALUES ('017_boerse')");
+        }
     }
 
     public function test_menue_und_anmeldung(): void

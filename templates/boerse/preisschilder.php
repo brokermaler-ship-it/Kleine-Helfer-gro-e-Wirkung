@@ -61,6 +61,7 @@ $feldStil = function (int $i) use ($bogen, $mm): string {
                 <div class="etikett etikett-preisschild" style="<?= e($feldStil($i)) ?>">
                     <span class="nummer"><?= e($ps['nummer']) ?></span>
                     <span class="bezeichnung"><?= e($ps['bezeichnung']) ?></span>
+                    <?php if ($ps['menge'] > 1): ?><span class="menge"><?= (int) $ps['menge'] ?> Stück</span><?php endif; ?>
                     <div class="unten">
                         <div class="links">
                             <span class="preis"><?= e($ps['preis']) ?></span>
