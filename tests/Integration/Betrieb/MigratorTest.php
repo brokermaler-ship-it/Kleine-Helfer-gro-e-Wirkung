@@ -19,14 +19,14 @@ final class MigratorTest extends DbTestCase
         self::alleTabellenLoeschen($this->pdo);
         $migrator = new Migrator($this->pdo, $this->migrationen());
         $this->assertFalse($migrator->istInstalliert());
-        $this->assertSame(['001_grundgeruest', '002_spurweiten_start', '003_fahrzeug_angelegt_von', '004_onedrive', '005_onedrive_auftrag_sperre', '006_onedrive_sperr_token_index', '007_onedrive_laufwerk', '008_rolle_fahrzeugwart', '009_abstellgleis', '010_kennwort_vergessen', '011_anlage', '012_wartungsart', '013_wartung', '014_reparatur', '015_etikett', '016_magazin'], $migrator->ausstehend());
+        $this->assertSame(['001_grundgeruest', '002_spurweiten_start', '003_fahrzeug_angelegt_von', '004_onedrive', '005_onedrive_auftrag_sperre', '006_onedrive_sperr_token_index', '007_onedrive_laufwerk', '008_rolle_fahrzeugwart', '009_abstellgleis', '010_kennwort_vergessen', '011_anlage', '012_wartungsart', '013_wartung', '014_reparatur', '015_etikett', '016_magazin', '017_boerse'], $migrator->ausstehend());
     }
 
     public function test_ausfuehren_legt_tabellen_an_und_ist_idempotent(): void
     {
         self::alleTabellenLoeschen($this->pdo);
         $migrator = new Migrator($this->pdo, $this->migrationen());
-        $this->assertSame(['001_grundgeruest', '002_spurweiten_start', '003_fahrzeug_angelegt_von', '004_onedrive', '005_onedrive_auftrag_sperre', '006_onedrive_sperr_token_index', '007_onedrive_laufwerk', '008_rolle_fahrzeugwart', '009_abstellgleis', '010_kennwort_vergessen', '011_anlage', '012_wartungsart', '013_wartung', '014_reparatur', '015_etikett', '016_magazin'], $migrator->ausfuehren());
+        $this->assertSame(['001_grundgeruest', '002_spurweiten_start', '003_fahrzeug_angelegt_von', '004_onedrive', '005_onedrive_auftrag_sperre', '006_onedrive_sperr_token_index', '007_onedrive_laufwerk', '008_rolle_fahrzeugwart', '009_abstellgleis', '010_kennwort_vergessen', '011_anlage', '012_wartungsart', '013_wartung', '014_reparatur', '015_etikett', '016_magazin', '017_boerse'], $migrator->ausfuehren());
         $this->assertTrue($migrator->istInstalliert());
         $this->assertSame([], $migrator->ausstehend());
         $this->assertSame([], $migrator->ausfuehren());
@@ -244,6 +244,56 @@ final class MigratorTest extends DbTestCase
         }
         $this->pdo->exec("DELETE FROM fahrzeug WHERE id = $fz");
         $this->assertNull($this->pdo->query("SELECT fahrzeug_id FROM magazin_artikel WHERE id = $a1")->fetchColumn());
+    }
+
+    /** Migration 017: Börse, Angebote mit Nummer je Jahr, Verkäufe, Auszahlungen und der Fremdschlüssel der Kassenbuchung. */
+    public function test_migration_017_boerse(): void
+    {
+        foreach (['boerse', 'boerse_angebot_zaehler', 'boerse_angebot', 'boerse_verkauf', 'boerse_verkauf_position', 'boerse_auszahlung'] as $tabelle) {
+            $this->assertSame(1, (int) $this->pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = '$tabelle'")->fetchColumn(), $tabelle);
+        }
+        $this->pdo->exec("INSERT INTO boerse (name, datum) VALUES ('Herbstbörse', '2026-11-08')");
+        $boerse = $this->pdo->query('SELECT * FROM boerse')->fetch(\PDO::FETCH_ASSOC);
+        $this->assertSame(['10.00', 'in_vorbereitung'], [$boerse['provision_prozent'], $boerse['status']]);
+        $sonst = (int) $this->pdo->query("SELECT id FROM magazin_kategorie WHERE schluessel = 'sonstiges'")->fetchColumn();
+        $angebot = $this->pdo->prepare("INSERT INTO boerse_angebot (jahr, laufnummer, bezeichnung, kategorie_id, wunschpreis, herkunft) VALUES (2026, ?, 'Lok', ?, '12.50', 'verein')");
+        $angebot->execute([1, $sonst]);
+        $a = (int) $this->pdo->lastInsertId();
+        $z = $this->pdo->query("SELECT status, oeffentlich, menge, wunschpreis, erloes_spende FROM boerse_angebot WHERE id = $a")->fetch(\PDO::FETCH_ASSOC);
+        $this->assertSame(['angeboten', 'nein', '1', '12.50', '0'], array_map('strval', array_values($z)));
+        $this->assertDoppelt(fn() => $angebot->execute([1, $sonst]), 'Nummer je Jahr eindeutig');
+
+        // Kassenbuchung → Position: Fremdschlüssel aus 017 (SET NULL).
+        $this->pdo->exec("INSERT INTO magazin_artikel (bezeichnung, kategorie_id) VALUES ('Gleis', $sonst)");
+        $artikel = (int) $this->pdo->lastInsertId();
+        try {
+            $this->pdo->exec("INSERT INTO magazin_buchung (artikel_id, art, datum, menge, verkauf_position_id, erstellt_am) VALUES ($artikel, 'ausgang', '2026-11-08', -1, 999, NOW())");
+            $this->fail('verkauf_position_id ohne Position');
+        } catch (\PDOException $e) {
+            $this->assertSame('23000', $e->getCode());
+        }
+        $this->pdo->exec("INSERT INTO boerse_verkauf (boerse_id, summe, zahlart, verkauft_am) VALUES ({$boerse['id']}, '12.50', 'bar', NOW())");
+        $verkauf = (int) $this->pdo->lastInsertId();
+        $this->pdo->exec("INSERT INTO boerse_verkauf_position (verkauf_id, angebot_id, preis, provision, herkunft, erloes_spende) VALUES ($verkauf, $a, '12.50', '0.00', 'verein', 0)");
+        $position = (int) $this->pdo->lastInsertId();
+        $this->pdo->exec("INSERT INTO magazin_buchung (artikel_id, art, datum, menge, verkauf_position_id, erstellt_am) VALUES ($artikel, 'ausgang', '2026-11-08', -1, $position, NOW())");
+        $this->pdo->exec("DELETE FROM boerse_verkauf WHERE id = $verkauf");
+        $this->assertSame(0, (int) $this->pdo->query('SELECT COUNT(*) FROM boerse_verkauf_position')->fetchColumn(), 'Positionen gehören zum Verkauf');
+        $this->assertNull($this->pdo->query("SELECT verkauf_position_id FROM magazin_buchung WHERE artikel_id = $artikel")->fetchColumn());
+
+        $this->pdo->exec("INSERT INTO person (vorname, nachname) VALUES ('Carla', 'Beispiel')");
+        $person = (int) $this->pdo->lastInsertId();
+        $this->pdo->exec("INSERT INTO boerse_auszahlung (boerse_id, person_id, betrag, ausgezahlt_am) VALUES ({$boerse['id']}, $person, '11.29', '2026-11-08')");
+        $this->assertDoppelt(fn() => $this->pdo->exec("INSERT INTO boerse_auszahlung (boerse_id, person_id, betrag, ausgezahlt_am) VALUES ({$boerse['id']}, $person, '1.00', '2026-11-08')"), 'eine Auszahlung je Person und Börse');
+        $this->pdo->exec("INSERT INTO boerse_verkauf (boerse_id, summe, zahlart, verkauft_am) VALUES ({$boerse['id']}, '12.50', 'bar', NOW())");
+        $verkauf = (int) $this->pdo->lastInsertId();
+        $this->pdo->exec("INSERT INTO boerse_verkauf_position (verkauf_id, angebot_id, preis, provision, herkunft, erloes_spende) VALUES ($verkauf, $a, '12.50', '0.00', 'verein', 0)");
+        try {
+            $this->pdo->exec("DELETE FROM boerse_angebot WHERE id = $a");
+            $this->fail('verkauftes Angebot (Position) darf nicht gelöscht werden');
+        } catch (\PDOException $e) {
+            $this->assertSame('23000', $e->getCode());
+        }
     }
 
     private function assertDoppelt(callable $aktion, string $grund): void

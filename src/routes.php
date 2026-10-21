@@ -12,6 +12,8 @@ use Emc\Core\Router;
 use Emc\Betrieb\SicherungController;
 use Emc\Betrieb\TestdatenController;
 use Emc\Betrieb\UpdateController;
+use Emc\Boerse\AngebotController;
+use Emc\Boerse\BoerseController;
 use Emc\Codes\CodeController;
 use Emc\Dateien\DateiController;
 use Emc\Digital\AdressenController;
@@ -131,6 +133,30 @@ return function (Router $router, App $app): void {
     $router->add('POST', '/magazin/{id}', $app->erfordert('lesen', $mag('aendern')));
     $router->add('POST', '/magazin/{id}/buchungen', $app->erfordert('lesen', $mag('buchen')));
     $router->add('POST', '/magazin/{id}/fotos', $app->erfordert('lesen', $mag('fotos')));
+
+    // Börse intern: lesen alle; eigene Angebote alle Mitglieder, Rechte am Angebot prüft der AngebotDienst (403),
+    // Börsenwart-Aktionen prüft der Controller. „/boersen…“ bleibt hinter der Anmeldung (nicht der öffentliche Bereich
+    // „/boerse“). Statische Pfade vor /angebote/{id}.
+    $ang = fn(string $m) => fn(Request $r, array $p = []) => $c->get(AngebotController::class)->$m($r, $p);
+    $router->add('GET', '/angebote', $app->erfordert('lesen', $ang('liste')));
+    $router->add('GET', '/angebote/neu', $app->erfordert('lesen', $ang('neu')));
+    $router->add('POST', '/angebote', $app->erfordert('lesen', $ang('anlegen')));
+    $router->add('GET', '/angebote/{id}', $app->erfordert('lesen', $ang('anzeigen')));
+    $router->add('GET', '/angebote/{id}/bearbeiten', $app->erfordert('lesen', $ang('bearbeiten')));
+    $router->add('POST', '/angebote/{id}', $app->erfordert('lesen', $ang('aendern')));
+    $router->add('POST', '/angebote/{id}/fotos', $app->erfordert('lesen', $ang('fotos')));
+    $router->add('POST', '/angebote/{id}/oeffentlich', $app->erfordert('lesen', $ang('oeffentlich')));
+    $router->add('POST', '/angebote/{id}/status', $app->erfordert('lesen', $ang('status')));
+    $brs = fn(string $m) => fn(Request $r, array $p = []) => $c->get(BoerseController::class)->$m($r, $p);
+    $router->add('GET', '/boersen', $app->erfordert('lesen', $brs('liste')));
+    $router->add('GET', '/boersen/neu', $app->erfordert('lesen', $brs('neu')));
+    $router->add('POST', '/boersen', $app->erfordert('lesen', $brs('anlegen')));
+    $router->add('GET', '/boersen/{id}', $app->erfordert('lesen', $brs('anzeigen')));
+    $router->add('GET', '/boersen/{id}/bearbeiten', $app->erfordert('lesen', $brs('bearbeiten')));
+    $router->add('POST', '/boersen/{id}', $app->erfordert('lesen', $brs('aendern')));
+    $router->add('POST', '/boersen/{id}/starten', $app->erfordert('lesen', $brs('starten')));
+    $router->add('GET', '/boersen/{id}/preisschilder', $app->erfordert('lesen', $brs('preisschilder')));
+    $router->add('GET', '/boersen/{id}/liste', $app->erfordert('lesen', $brs('gesamtliste')));
 
     // Etiketten (ab Fahrzeugwart): nur der POST „Als gedruckt vermerken“ setzt etikett_gedruckt_am.
     $etk = fn(string $m) => fn(Request $r, array $p = []) => $c->get(EtikettController::class)->$m($r);

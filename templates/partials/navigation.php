@@ -36,6 +36,14 @@ use Emc\Auth\Berechtigung;
                 </li>
                 <li class="nav-item"><a class="nav-link" href="<?= e(url('/anlagen')) ?>">Anlagen</a></li>
                 <li class="nav-item"><a class="nav-link" href="<?= e(url('/magazin')) ?>">Magazin</a></li>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="<?= e(url('/angebote')) ?>" role="button" data-bs-toggle="dropdown" aria-expanded="false">Börse</a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="<?= e(url('/angebote')) ?>">Angebote</a></li>
+                        <li><a class="dropdown-item" href="<?= e(url('/angebote', ['meine' => '1'])) ?>">Meine Angebote</a></li>
+                        <li><a class="dropdown-item" href="<?= e(url('/boersen')) ?>">Börsen</a></li>
+                    </ul>
+                </li>
                 <li class="nav-item"><a class="nav-link" href="<?= e(url('/wartung')) ?>">Wartung</a></li>
                 <?php $neu = $neueDefekte !== null ? $neueDefekte() : null; ?>
                 <li class="nav-item"><a class="nav-link" href="<?= e(url('/reparaturen')) ?>">Reparaturen<?php if ($neu !== null && $neu > 0): ?> <span class="badge rounded-pill text-bg-warning" data-neue-defekte="<?= (int) $neu ?>" title="<?= e($neu === 1 ? '1 neue Defektmeldung' : $neu . ' neue Defektmeldungen') ?>"><?= $neu > 99 ? '99+' : (int) $neu ?> <span class="visually-hidden">neue Meldungen</span></span><?php endif; ?></a></li>

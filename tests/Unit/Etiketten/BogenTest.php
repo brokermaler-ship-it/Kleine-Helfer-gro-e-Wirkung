@@ -77,4 +77,15 @@ final class BogenTest extends TestCase
         $this->assertCount(2, $boegen);
         $this->assertSame([25], $boegen[1]);
     }
+
+    public function test_preisschild_acht_je_a4(): void
+    {
+        $p = Bogen::preisschild();
+        $this->assertSame(8, $p->proBogen());
+        $this->assertSame([105.0, 74.0, 2, 4], [$p->breite, $p->hoehe, $p->spalten, $p->zeilen]);
+        $this->assertSame([0.0, 0.0, 0.0, 0.0], [$p->randOben, $p->randLinks, $p->abstandX, $p->abstandY]);
+        $this->assertLessThanOrEqual(210.0, $p->randLinks + $p->spalten * $p->breite);
+        $this->assertLessThanOrEqual(297.0, $p->randOben + $p->zeilen * $p->hoehe);
+        $this->assertEqualsWithDelta(['links' => 105.0, 'oben' => 222.0], $p->position(7), 0.001);
+    }
 }

@@ -41,6 +41,16 @@ final readonly class Bogen
         return new self(70.0, 37.0, 3, 8, 0.5, 0.0, 0.0, 0.0);
     }
 
+    /**
+     * Preisschild der Börse: 105 × 74 mm, 2 × 4 = 8 je A4 ohne Ränder und Abstände (A4 quer in Achtel geteilt; auf
+     * Normalpapier drucken und schneiden, oder auf einem Etikettenbogen 105 × 74 mm, z. B. Avery Zweckform 3427 – dann
+     * zuerst einen Probedruck auf Normalpapier).
+     */
+    public static function preisschild(): self
+    {
+        return new self(105.0, 74.0, 2, 4, 0.0, 0.0, 0.0, 0.0);
+    }
+
     public function proBogen(): int
     {
         return $this->spalten * $this->zeilen;

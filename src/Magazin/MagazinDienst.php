@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Emc\Magazin;
 
+use Emc\Boerse\AngebotRepository;
 use Emc\Codes\Code;
 use Emc\Core\DomainFehler;
 use Emc\Core\Transaktion;
@@ -28,6 +29,7 @@ final class MagazinDienst
     public const FAHRZEUG_FEHLT = 'Dieses Fahrzeug gibt es nicht mehr.';
     public const NUR_ABSTELLGLEIS = 'Nur Fahrzeuge vom Abstellgleis können ans Magazin übergeben werden.';
     public const NUR_VEREIN = 'Nur Vereinsfahrzeuge können ans Magazin übergeben werden.';
+    public const SAMMLUNG_IM_ANGEBOT = 'Die Sammlung ist in der Börse angeboten. Ihre Artikel lassen sich erst wieder ändern, wenn das Angebot verkauft oder zurück ist.';
     /** Alle Ausgangsarten der Datenbank (das Formular bietet verkauft_boerse nicht an). */
     private const AUSGANG_ARTEN = ['gegen_spende', 'verkauft_boerse', 'verschrottet', 'ausgeliehen', 'sonstiges'];
 
@@ -35,7 +37,10 @@ final class MagazinDienst
         private \PDO $pdo,
         private MagazinRepository $rep,
         private Aenderungsprotokoll $protokoll,
+        private ?AngebotRepository $angebote = null,
     ) {
+        // Offene Börsenangebote binden Bestand: ein Ausgang von Hand darf sie nicht unterlaufen.
+        $this->angebote ??= new AngebotRepository($pdo);
     }
 
     /**
@@ -180,7 +185,7 @@ final class MagazinDienst
                 throw new DomainFehler(BuchungValidator::KEINE_MENGE);
             }
             if ($art === 'ausgang') {
-                $this->pruefeBestand($artikelId, $menge);
+                $this->pruefeBestand($artikelId, $menge, true);
             }
             return $this->schreibeBuchung($artikelId, [
                 'art' => $art,
@@ -235,7 +240,8 @@ final class MagazinDienst
             throw new \InvalidArgumentException('Betrag als DECIMAL-Zeichenkette erwartet, z. B. 12.50.');
         }
         $this->rep->sperreArtikel($artikelId) ?? throw new DomainFehler(self::NICHT_GEFUNDEN);
-        $this->pruefeBestand($artikelId, $menge);
+        // Die Kasse verkauft gerade das Angebot, das den Bestand bindet: hier zählt nur der Bestand.
+        $this->pruefeBestand($artikelId, $menge, false);
         return $this->schreibeBuchung($artikelId, [
             'art' => 'ausgang',
             'datum' => $jetzt->format('Y-m-d'),
@@ -308,6 +314,11 @@ final class MagazinDienst
         Transaktion::readCommitted($this->pdo, function () use ($id, $name, $notiz, $artikelIds, $stand, $benutzerId): void {
             $alt = $this->rep->sperreSammlung($id) ?? throw new \Emc\Fahrzeuge\KonfliktFehler(MagazinRepository::KONFLIKT_SAMMLUNG);
             $altArtikel = $this->rep->artikelDerSammlung($id);
+            $neuArtikel = array_values(array_unique(array_map('intval', $artikelIds)));
+            sort($neuArtikel);
+            if ($neuArtikel !== $altArtikel && $this->angebote->offenFuerSammlung($id)) {
+                throw new DomainFehler(self::SAMMLUNG_IM_ANGEBOT);
+            }
             $this->setzeSammlung($id, $name, $notiz, $artikelIds, $stand);
             $diff = Aenderungsprotokoll::diff(
                 ['name' => $alt['name'], 'notiz' => $alt['notiz'], 'artikel' => $this->codes($altArtikel)],
@@ -366,7 +377,7 @@ final class MagazinDienst
         }
         $menge = -(int) $b['menge'];
         if ($menge < 0) {
-            $this->pruefeBestand($artikelId, -$menge);
+            $this->pruefeBestand($artikelId, -$menge, !$ausKasse);
         }
         try {
             return $this->schreibeBuchung($artikelId, [
@@ -387,12 +398,29 @@ final class MagazinDienst
         }
     }
 
-    /** Nach der Sperre des Artikels: reicht der Bestand für einen Ausgang von $menge? */
-    private function pruefeBestand(int $artikelId, int $menge): void
+    /**
+     * Nach der Sperre des Artikels: reicht der Bestand für einen Ausgang von $menge? Mit $angeboteBeachten (Buchung von
+     * Hand) zählt nur, was nicht in offenen Börsenangeboten steckt: die Menge offener Einzelangebote bzw. der ganze
+     * Bestand, wenn die Sammlung des Artikels angeboten ist.
+     */
+    private function pruefeBestand(int $artikelId, int $menge, bool $angeboteBeachten): void
     {
         $bestand = $this->rep->bestand($artikelId);
-        if ($menge > $bestand) {
-            throw new DomainFehler('Der Bestand reicht nicht: verfügbar sind nur ' . max(0, $bestand) . '.');
+        $gebunden = 0;
+        $hinweis = '';
+        if ($angeboteBeachten) {
+            $sammlung = $this->rep->sammlungVonArtikel($artikelId);
+            if ($sammlung !== null && $this->angebote->offenFuerSammlung($sammlung['id'])) {
+                $gebunden = $bestand;
+                $hinweis = ' Der Artikel gehört zur Sammlung „' . $sammlung['name'] . '“, die in der Börse angeboten ist.';
+            } else {
+                $gebunden = $this->angebote->offeneMengeFuerArtikel($artikelId);
+                $hinweis = $gebunden > 0 ? ' ' . $gebunden . ' Stück sind in der Börse angeboten.' : '';
+            }
+        }
+        $frei = $bestand - $gebunden;
+        if ($menge > $frei) {
+            throw new DomainFehler('Der Bestand reicht nicht: verfügbar sind nur ' . max(0, $frei) . '.' . ($gebunden > 0 ? $hinweis : ''));
         }
     }
 

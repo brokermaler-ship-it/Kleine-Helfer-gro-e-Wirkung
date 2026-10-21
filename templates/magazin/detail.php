@@ -31,7 +31,12 @@ $zeile = function (string $label, ?string $wert, bool $html = false): void {
         </div>
     </div>
     <?php if ($istBoersenwart): ?>
-        <a class="btn btn-primary" href="<?= e(url('/magazin/' . $id . '/bearbeiten')) ?>">Bearbeiten</a>
+        <div class="d-flex flex-wrap gap-2">
+            <?php if ((int) $a['bestand'] > 0): ?>
+                <a class="btn btn-outline-primary" href="<?= e(url('/angebote/neu', ['magazin' => $id])) ?>">In die Börse übernehmen</a>
+            <?php endif; ?>
+            <a class="btn btn-primary" href="<?= e(url('/magazin/' . $id . '/bearbeiten')) ?>">Bearbeiten</a>
+        </div>
     <?php endif; ?>
 </div>
 

@@ -7,6 +7,8 @@ namespace Emc\Dateien;
 use Emc\Anlagen\AnlageRepository;
 use Emc\Auth\Auth;
 use Emc\Auth\Berechtigung;
+use Emc\Boerse\AngebotDienst;
+use Emc\Core\DomainFehler;
 use Emc\Core\HttpFehler;
 use Emc\Core\Request;
 use Emc\Core\Response;
@@ -40,6 +42,7 @@ final class DateiController
         private ?Graph $graph = null,
         private ?WartungRepository $wartungen = null,
         private ?ReparaturRepository $reparaturen = null,
+        private ?AngebotDienst $angebote = null,
     ) {
     }
 
@@ -150,15 +153,45 @@ final class DateiController
     public function loeschen(Request $r, array $p): Response
     {
         $dok = $this->ladeDokument($p);
+        $angebotIds = $this->dokumente->objekte((int) $dok['id'], 'boerse_angebot');
+        // Von der Seite eines Angebots: ein geteiltes Foto (z. B. vom Magazinartikel übernommen) nur vom Angebot lösen.
+        $nurAngebot = $r->ganzzahl('angebot_id', 1, 4294967295);
+        if ($nurAngebot !== null && in_array($nurAngebot, $angebotIds, true) && count($this->dokumente->zuordnungen((int) $dok['id'])) > 1) {
+            return $this->vomAngebotLoesen($dok, $nurAngebot);
+        }
         $bezuege = $this->bezuege((int) $dok['id']);
         $this->verlangeLoeschrecht($dok, $bezuege);
+        $benutzer = $this->auth->benutzer();
+        // Fotos verkaufter Angebote und von Angeboten einer abgeschlossenen Börse bleiben (für alle).
+        foreach ($angebotIds as $angebotId) {
+            try {
+                if ($benutzer !== null && $this->angebote !== null) {
+                    $this->angebote->pruefeAenderbar($angebotId, $benutzer);
+                }
+            } catch (DomainFehler $e) {
+                $this->session->meldung('fehler', $e->getMessage());
+                return $this->zurueck('boerse_angebot', $angebotId);
+            } catch (HttpFehler) {
+                // Recht am Angebot: hat verlangeLoeschrecht schon geprüft (Börsenwart oder geteiltes Dokument).
+            }
+        }
         $objekte = [
             'fahrzeug' => $this->dokumente->objekte((int) $dok['id'], 'fahrzeug'),
             'anlage' => $this->dokumente->objekte((int) $dok['id'], 'anlage'),
             'magazin_artikel' => $this->dokumente->objekte((int) $dok['id'], 'magazin_artikel'),
+            'boerse_angebot' => $angebotIds,
         ];
+        if ($nurAngebot !== null && in_array($nurAngebot, $angebotIds, true)) {
+            // Zurück auf die Seite, von der gelöscht wurde.
+            $objekte = ['boerse_angebot' => [$nurAngebot]] + $objekte;
+        }
         $this->dokumente->loeschen((int) $dok['id']);
         $this->raeumeOneDriveAuf();
+        foreach ($angebotIds as $angebotId) {
+            if ($benutzer !== null && $this->angebote?->fotoGeaendert($angebotId, $benutzer) === true) {
+                $this->session->meldung('warnung', 'Weil das Angebot öffentlich war, muss der Börsenwart es erneut freigeben.');
+            }
+        }
         foreach ($objekte as $typ => $ids) {
             foreach ($ids as $objektId) {
                 $this->protokoll->schreibe($this->auth->benutzer()?->id, $typ, $objektId, 'geaendert', ['datei' => ['alt' => $dok['titel'], 'neu' => null]]);
@@ -216,9 +249,10 @@ final class DateiController
      * Löschregel für Dateien (die Route kennt keinen Fahrzeugkontext, daher wird er aus den Zuordnungen abgeleitet):
      * Bearbeiter und Admin (Dateien bearbeiten) dürfen jede Datei löschen. Alle anderen nur eine Datei mit genau einer
      * Zuordnung: an einem Fahrzeug, das sie bearbeiten dürfen, als Foto einer Wartung bzw. Reparatur mit demselben
-     * Recht wie beim Eintragen der Wartung bzw. Bearbeiten der Reparatur, oder als Foto eines Magazinartikels als
-     * Börsenwart. Geteilte Dokumente bleiben damit Bearbeitern
-     * vorbehalten.
+     * Recht wie beim Eintragen der Wartung bzw. Bearbeiten der Reparatur, als Foto eines Magazinartikels als
+     * Börsenwart oder als Foto eines Angebots mit Berechtigung::darfAngebotBearbeiten (Börsenwart; Mitglied am eigenen,
+     * noch angebotenen Angebot). Ein Foto, das nur an Magazinartikeln und Angeboten hängt (aus dem Magazin übernommen),
+     * löscht auch der Börsenwart. Andere geteilte Dokumente bleiben Bearbeitern vorbehalten.
      *
      * @param array<string,mixed> $dok
      * @param list<array{art:string, id:int, typ:string, objekt:array<string,mixed>, datum:string}> $bezuege
@@ -244,6 +278,20 @@ final class DateiController
         if ($art === 'magazin_artikel') {
             // Fotos eines Magazinartikels pflegt der Börsenwart (wie das Hochladen).
             Berechtigung::verlangeBoersenwart($benutzer);
+            return;
+        }
+        if ($art === 'boerse_angebot') {
+            // Foto eines Angebots: der Börsenwart oder das Mitglied an seinem eigenen Angebot, solange es angeboten ist.
+            $angebot = $this->angebote?->angebot($zuordnungen[0]['objekt_id']);
+            if ($angebot === null || !Berechtigung::darfAngebotBearbeiten($benutzer, $angebot)) {
+                throw new HttpFehler(403);
+            }
+            return;
+        }
+        if ($zuordnungen !== [] && Berechtigung::istBoersenwart($benutzer)
+            && array_diff(array_column($zuordnungen, 'objekt_typ'), ['magazin_artikel', 'boerse_angebot']) === []
+        ) {
+            // Vom Magazinartikel ins Angebot übernommenes Foto: Magazin und Börse pflegt der Börsenwart.
             return;
         }
         if ($art !== 'fahrzeug') {
@@ -366,8 +414,36 @@ final class DateiController
         return $liste;
     }
 
+    /**
+     * Löst ein geteiltes Foto nur vom Angebot (das Dokument bleibt z. B. am Magazinartikel).
+     *
+     * @param array<string,mixed> $dok
+     */
+    private function vomAngebotLoesen(array $dok, int $angebotId): Response
+    {
+        $benutzer = $this->auth->benutzer() ?? throw new HttpFehler(403);
+        if ($this->angebote === null) {
+            throw new HttpFehler(404);
+        }
+        try {
+            $this->angebote->pruefeAenderbar($angebotId, $benutzer);
+        } catch (DomainFehler $e) {
+            $this->session->meldung('fehler', $e->getMessage());
+            return $this->zurueck('boerse_angebot', $angebotId);
+        }
+        $this->angebote->loeseFoto($angebotId, (int) $dok['id'], $benutzer);
+        $this->session->meldung('erfolg', 'Das Foto wurde vom Angebot entfernt.');
+        if ($this->angebote->fotoGeaendert($angebotId, $benutzer)) {
+            $this->session->meldung('warnung', 'Weil das Angebot öffentlich war, muss der Börsenwart es erneut freigeben.');
+        }
+        return $this->zurueck('boerse_angebot', $angebotId);
+    }
+
     private function zurueck(string $typ, int $objektId): Response
     {
+        if ($typ === 'boerse_angebot') {
+            return Response::redirect(url('/angebote/' . $objektId) . '#fotos');
+        }
         if ($typ === 'magazin_artikel') {
             return Response::redirect(url('/magazin/' . $objektId) . '#fotos');
         }

@@ -13,6 +13,12 @@ use Emc\Auth\InstallController;
 use Emc\Auth\KennwortController;
 use Emc\Auth\KennwortVergessen;
 use Emc\Betrieb\DemoDaten;
+use Emc\Boerse\AngebotController;
+use Emc\Boerse\AngebotDienst;
+use Emc\Boerse\AngebotRepository;
+use Emc\Boerse\BoerseController;
+use Emc\Boerse\BoerseDienst;
+use Emc\Boerse\BoerseRepository;
 use Emc\Betrieb\Einstellungen;
 use Emc\Betrieb\Migrator;
 use Emc\Betrieb\Sicherung;
@@ -345,13 +351,54 @@ final class App
         $this->container->set(CodeAufloesung::class, fn(Container $c) => new CodeAufloesung(
             $c->get(FahrzeugRepository::class),
             $c->get(AnlageRepository::class),
-            $c->get(MagazinRepository::class)
+            $c->get(MagazinRepository::class),
+            $c->get(AngebotRepository::class)
         ));
         $this->container->set(MagazinRepository::class, fn(Container $c) => new MagazinRepository($c->get('pdo')));
         $this->container->set(MagazinDienst::class, fn(Container $c) => new MagazinDienst(
             $c->get('pdo'),
             $c->get(MagazinRepository::class),
+            $c->get(Aenderungsprotokoll::class),
+            $c->get(AngebotRepository::class)
+        ));
+        $this->container->set(AngebotRepository::class, fn(Container $c) => new AngebotRepository($c->get('pdo')));
+        $this->container->set(BoerseRepository::class, fn(Container $c) => new BoerseRepository($c->get('pdo')));
+        $this->container->set(AngebotDienst::class, fn(Container $c) => new AngebotDienst(
+            $c->get('pdo'),
+            $c->get(AngebotRepository::class),
+            $c->get(MagazinRepository::class),
+            $c->get(Aenderungsprotokoll::class),
+            $c->get(BoerseRepository::class)
+        ));
+        $this->container->set(BoerseDienst::class, fn(Container $c) => new BoerseDienst(
+            $c->get('pdo'),
+            $c->get(BoerseRepository::class),
+            $c->get(AngebotRepository::class),
             $c->get(Aenderungsprotokoll::class)
+        ));
+        $this->container->set(AngebotController::class, fn(Container $c) => new AngebotController(
+            $this->view,
+            $c->get(AngebotRepository::class),
+            $c->get(AngebotDienst::class),
+            $c->get(BoerseRepository::class),
+            $c->get(MagazinRepository::class),
+            $c->get(SpurweiteRepository::class),
+            $c->get(PersonRepository::class),
+            $c->get(DokumentRepository::class),
+            $c->get(UploadService::class),
+            $c->get(Aenderungsprotokoll::class),
+            $c->get(Auth::class),
+            $c->get('session')
+        ));
+        $this->container->set(BoerseController::class, fn(Container $c) => new BoerseController(
+            $this->view,
+            $c->get(BoerseRepository::class),
+            $c->get(BoerseDienst::class),
+            $c->get(AngebotRepository::class),
+            $c->get(Aenderungsprotokoll::class),
+            $c->get(Auth::class),
+            $c->get('session'),
+            $this->config
         ));
         $this->container->set(MagazinController::class, fn(Container $c) => new MagazinController(
             $this->view,
@@ -458,7 +505,8 @@ final class App
             $c->get(Uebertragung::class),
             $c->get(Uebertragung::class) !== null ? $c->get(Graph::class) : null,
             $c->get(WartungRepository::class),
-            $c->get(ReparaturRepository::class)
+            $c->get(ReparaturRepository::class),
+            $c->get(AngebotDienst::class)
         ));
         $this->container->set(Sicherung::class, fn(Container $c) => new Sicherung(
             $c->get('pdo'),
@@ -654,7 +702,7 @@ final class App
                 return Response::redirect(url('/admin/update'));
             }
             // 3c. Anlagen, Wartungsarten, die Übersicht „Wartung“, das Feld „Code“ (sucht auch Anlagen) sowie Defekt
-            //     melden, Reparaturen, Etiketten und das Magazin brauchen die Tabellen aus Migration 011–016.
+            //     melden, Reparaturen, Etiketten, das Magazin und die Börse brauchen die Tabellen aus Migration 011–017.
             //     Geprüft wird bewusst „irgendeine Migration steht aus“ (nicht einzeln 011 … 015): Administratoren
             //     sollen ohnehin zuerst das Update ausführen. Nicht-Administratoren sehen schon die Wartungsseite (3a).
             if (self::brauchtNeuesSchema($pfad) && $this->ausstehend() !== []) {
@@ -673,7 +721,7 @@ final class App
     /** Pfade, die vor dem Datenbank-Update zu /admin/update führen (siehe 3c in handle()). */
     private static function brauchtNeuesSchema(string $pfad): bool
     {
-        foreach (['/anlagen', '/wartung', '/admin/wartungsarten', '/code', '/defekt', '/meine-meldungen', '/reparaturen', '/etiketten', '/magazin', '/admin/magazin-kategorien'] as $p) {
+        foreach (['/anlagen', '/wartung', '/admin/wartungsarten', '/code', '/defekt', '/meine-meldungen', '/reparaturen', '/etiketten', '/magazin', '/admin/magazin-kategorien', '/angebote', '/boersen'] as $p) {
             if ($pfad === $p || str_starts_with($pfad, $p . '/')) {
                 return true;
             }
@@ -808,13 +856,13 @@ final class App
         // Fotoformulare (Defekt melden, Fotos an einer Reparatur): PHP hat alle Felder verworfen, also zurück zum
         // Formular mit einem Hinweis, was zu tun ist. Ziel nur aus den Ziffern der ID gebaut.
         if (preg_match('~^/(fahrzeuge|anlagen)/(\d{1,10})/defekt$~', $request->path(), $m) === 1
-            || preg_match('~^/(reparaturen|magazin)/(\d{1,10})/fotos$~', $request->path(), $m) === 1
+            || preg_match('~^/(reparaturen|magazin|angebote)/(\d{1,10})/fotos$~', $request->path(), $m) === 1
         ) {
             $this->container->get('session')->meldung('fehler', 'Die Fotos sind zusammen zu groß (höchstens ' . Uploadgrenzen::mb($max)
                 . ' MB). Bitte weniger oder kleinere Fotos auswählen und den Text noch einmal eingeben.');
             return Response::redirect(url('/' . $m[1] . '/' . $m[2] . match ($m[1]) {
                 'reparaturen' => '',
-                'magazin' => '#fotos',
+                'magazin', 'angebote' => '#fotos',
                 default => '/defekt',
             }));
         }

@@ -44,6 +44,18 @@ final class Pfadbildner
     }
 
     /**
+     * Foto eines Börsenangebots: „Boerse/<Nummer> <Bezeichnung>/<Datei>“ (Nummer wie B2026-118).
+     *
+     * @param array<string,mixed> $dokument titel, endung
+     * @param array<string,mixed> $angebot nummer, bezeichnung
+     */
+    public static function fuerAngebot(array $dokument, array $angebot): string
+    {
+        $ordner = self::bereinige(trim((string) ($angebot['nummer'] ?? '') . ' ' . (string) ($angebot['bezeichnung'] ?? '')));
+        return 'Boerse/' . $ordner . '/' . self::dateiname($dokument);
+    }
+
+    /**
      * Dateiname aus Titel und Endung (die Endung wird nicht verdoppelt, wenn der Titel schon darauf endet).
      *
      * @param array<string,mixed> $dokument titel, endung

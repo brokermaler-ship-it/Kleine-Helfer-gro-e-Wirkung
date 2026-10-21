@@ -172,14 +172,23 @@ final class MagazinDienstTest extends DbTestCase
     public function test_gegenbuchung_einer_kassenbuchung_nur_in_der_kasse(): void
     {
         $id = $this->artikel(2);
+        // Verkaufsposition der Kasse (Fremdschlüssel ab Migration 017).
+        $this->pdo->exec("INSERT INTO boerse (name, datum, status) VALUES ('Herbstbörse', '2026-10-21', 'laeuft')");
+        $boerse = (int) $this->pdo->lastInsertId();
+        $this->pdo->exec("INSERT INTO boerse_angebot (jahr, laufnummer, bezeichnung, kategorie_id, wunschpreis, herkunft, magazin_artikel_id, status) VALUES (2026, 1, 'Gleis', {$this->kategorie()}, '12.50', 'verein', $id, 'verkauft')");
+        $angebot = (int) $this->pdo->lastInsertId();
+        $this->pdo->exec("INSERT INTO boerse_verkauf (boerse_id, summe, zahlart, verkauft_am) VALUES ($boerse, '12.50', 'bar', '2026-10-21 10:00:00')");
+        $verkauf = (int) $this->pdo->lastInsertId();
+        $this->pdo->exec("INSERT INTO boerse_verkauf_position (verkauf_id, angebot_id, preis, provision, herkunft, erloes_spende) VALUES ($verkauf, $angebot, '12.50', '0.00', 'verein', 0)");
+        $position = (int) $this->pdo->lastInsertId();
         $buchung = Transaktion::readCommitted($this->pdo, fn() => $this->dienst->ausgangInLaufenderTransaktion(
-            $id, 1, 'verkauft_boerse', '12.50', 'B2026-1', 77, $this->benutzer, new \DateTimeImmutable('2026-10-21 10:00')
+            $id, 1, 'verkauft_boerse', '12.50', 'B2026-1', $position, $this->benutzer, new \DateTimeImmutable('2026-10-21 10:00')
         ));
         $z = $this->pdo->query("SELECT * FROM magazin_buchung WHERE id = $buchung")->fetch(\PDO::FETCH_ASSOC);
         $this->assertSame(-1, (int) $z['menge']);
         $this->assertSame('verkauft_boerse', $z['ausgang_art']);
         $this->assertSame('12.50', $z['betrag']);
-        $this->assertSame(77, (int) $z['verkauf_position_id']);
+        $this->assertSame($position, (int) $z['verkauf_position_id']);
         $this->assertSame('2026-10-21', $z['datum']);
         $this->assertSame(1, $this->rep->bestand($id));
 

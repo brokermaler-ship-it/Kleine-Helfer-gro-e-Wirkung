@@ -44,6 +44,12 @@ final class PfadbildnerTest extends TestCase
         self::assertSame('Magazin/M5 Buch_ Teil 2/Seite.jpg', Pfadbildner::fuerMagazin(['titel' => 'Seite.jpg', 'endung' => 'jpg'], ['id' => '5', 'bezeichnung' => 'Buch: Teil 2']));
     }
 
+    public function test_angebot_ordner(): void
+    {
+        self::assertSame('Boerse/B2026-118 BR 50 Märklin/Foto.jpg', Pfadbildner::fuerAngebot(['titel' => 'Foto', 'endung' => 'jpg'], ['nummer' => 'B2026-118', 'bezeichnung' => 'BR 50 Märklin']));
+        self::assertSame('Boerse/B2026-1 Kiste_ Gleise/Seite.jpg', Pfadbildner::fuerAngebot(['titel' => 'Seite.jpg', 'endung' => 'jpg'], ['nummer' => 'B2026-1', 'bezeichnung' => 'Kiste: Gleise']));
+    }
+
     public function testOhneFahrzeugSonstiges(): void
     {
         self::assertSame('Sonstiges/Anleitung.pdf', Pfadbildner::fuerDokument(['titel' => 'Anleitung', 'endung' => 'pdf'], null));

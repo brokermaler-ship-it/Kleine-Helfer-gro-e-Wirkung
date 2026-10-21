@@ -107,6 +107,37 @@ final class UebertragungTest extends OneDriveTestCase
         self::assertSame('Magazin/M' . $artikel . ' Märklin C-Gleis/Anleitung.pdf', $this->dok($id)['onedrive_pfad']);
     }
 
+    public function test_angebotsfoto_in_ordner_boerse(): void
+    {
+        $kategorie = (int) $this->pdo->query("SELECT id FROM magazin_kategorie WHERE schluessel = 'sonstiges'")->fetchColumn();
+        $this->pdo->prepare("INSERT INTO boerse_angebot (jahr, laufnummer, bezeichnung, kategorie_id, wunschpreis, herkunft) VALUES (2026, 118, ?, ?, '12.50', 'mitglied')")->execute(['BR 50 Märklin', $kategorie]);
+        $angebot = (int) $this->pdo->lastInsertId();
+        $id = $this->dokument();
+        $this->pdo->exec("INSERT INTO dokument_zuordnung (dokument_id, objekt_typ, objekt_id) VALUES ($id, 'boerse_angebot', $angebot)");
+        $this->verbinde();
+        $this->auftrag($id);
+        $this->http->antwort(201, ['id' => 'I', 'name' => 'Anleitung.pdf']);
+        $this->uebertragung()->verarbeite(5, $this->jetzt);
+        self::assertSame('Boerse/B2026-118 BR 50 Märklin/Anleitung.pdf', $this->dok($id)['onedrive_pfad']);
+    }
+
+    /** Aus dem Magazin übernommenes Foto (Artikel und Angebot) bleibt im Ordner des Artikels. */
+    public function test_geteiltes_foto_im_ordner_magazin(): void
+    {
+        $kategorie = (int) $this->pdo->query("SELECT id FROM magazin_kategorie WHERE schluessel = 'sonstiges'")->fetchColumn();
+        $this->pdo->prepare('INSERT INTO magazin_artikel (bezeichnung, kategorie_id) VALUES (?, ?)')->execute(['Fahrpult', $kategorie]);
+        $artikel = (int) $this->pdo->lastInsertId();
+        $this->pdo->prepare("INSERT INTO boerse_angebot (jahr, laufnummer, bezeichnung, kategorie_id, wunschpreis, herkunft, magazin_artikel_id) VALUES (2026, 1, 'Fahrpult', ?, '5.00', 'verein', ?)")->execute([$kategorie, $artikel]);
+        $angebot = (int) $this->pdo->lastInsertId();
+        $id = $this->dokument();
+        $this->pdo->exec("INSERT INTO dokument_zuordnung (dokument_id, objekt_typ, objekt_id) VALUES ($id, 'magazin_artikel', $artikel), ($id, 'boerse_angebot', $angebot)");
+        $this->verbinde();
+        $this->auftrag($id);
+        $this->http->antwort(201, ['id' => 'I', 'name' => 'Anleitung.pdf']);
+        $this->uebertragung()->verarbeite(5, $this->jetzt);
+        self::assertSame('Magazin/M' . $artikel . ' Fahrpult/Anleitung.pdf', $this->dok($id)['onedrive_pfad']);
+    }
+
     public function test_fotos_aus_boersenanfragen_bleiben_lokal(): void
     {
         $id = $this->dokument();

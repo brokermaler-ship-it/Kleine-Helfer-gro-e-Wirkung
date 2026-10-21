@@ -5,15 +5,21 @@ declare(strict_types=1);
 namespace Emc\Codes;
 
 use Emc\Anlagen\AnlageRepository;
+use Emc\Boerse\AngebotRepository;
+use Emc\Boerse\Angebotsnummer;
 use Emc\Fahrzeuge\FahrzeugFilter;
 use Emc\Fahrzeuge\FahrzeugRepository;
 use Emc\Magazin\MagazinRepository;
 
-/** Löst eine Eingabe im Feld „Code“ auf: F<n>/A<n>/M<n> direkt, reine Zahl als Digitaladresse, sonst Textsuche. */
+/**
+ * Löst eine Eingabe im Feld „Code“ auf: F<n>/A<n>/M<n> und Angebotsnummern B<Jahr>-<n> direkt, reine Zahl als
+ * Digitaladresse, sonst Textsuche.
+ */
 final class CodeAufloesung
 {
     public const NICHT_GEFUNDEN = 'Kein Fahrzeug und keine Anlage mit diesem Code.';
     public const NICHT_GEFUNDEN_MAGAZIN = 'Kein Magazinartikel mit diesem Code.';
+    public const NICHT_GEFUNDEN_ANGEBOT = 'Kein Angebot mit dieser Nummer.';
     public const NICHTS = 'Nichts gefunden.';
     /** Höchstens so viele Fahrzeuge bzw. Anlagen zeigt die Suche; den Rest findet die Fahrzeug- bzw. Anlagenliste. */
     public const MAX_TREFFER = 50;
@@ -22,6 +28,7 @@ final class CodeAufloesung
         private FahrzeugRepository $fahrzeuge,
         private AnlageRepository $anlagen,
         private ?MagazinRepository $magazin = null,
+        private ?AngebotRepository $angebote = null,
     ) {
     }
 
@@ -55,6 +62,19 @@ final class CodeAufloesung
                 return new CodeErgebnis(CodeErgebnis::DIREKT, $basis . (int) $objekt['id'] . $zusatz);
             }
             return $this->suche($roh, self::NICHT_GEFUNDEN);
+        }
+
+        // Angebotsnummer der Börse (B2026-118, auch vom Preisschild); für „Defekt melden“ in die Suche.
+        $nummer = Angebotsnummer::zerlege($roh);
+        if ($nummer !== null) {
+            if ($zusatz !== '') {
+                return $this->suche($roh, null);
+            }
+            $angebot = $this->angebote?->findeNachNummer($nummer['jahr'], $nummer['lauf']);
+            if ($angebot !== null) {
+                return new CodeErgebnis(CodeErgebnis::DIREKT, '/angebote/' . (int) $angebot['id']);
+            }
+            return $this->suche($roh, self::NICHT_GEFUNDEN_ANGEBOT);
         }
 
         $adresse = Code::istAdresse($roh);

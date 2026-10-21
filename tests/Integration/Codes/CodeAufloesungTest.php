@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Emc\Tests\Integration\Codes;
 
 use Emc\Anlagen\AnlageRepository;
+use Emc\Boerse\AngebotRepository;
 use Emc\Codes\CodeAufloesung;
 use Emc\Fahrzeuge\FahrzeugRepository;
 use Emc\Magazin\MagazinRepository;
@@ -19,7 +20,7 @@ final class CodeAufloesungTest extends DbTestCase
     {
         parent::setUp();
         $this->h0 = (int) $this->pdo->query("SELECT id FROM spurweite WHERE name = 'H0'")->fetchColumn();
-        $this->aufloesung = new CodeAufloesung(new FahrzeugRepository($this->pdo), new AnlageRepository($this->pdo), new MagazinRepository($this->pdo));
+        $this->aufloesung = new CodeAufloesung(new FahrzeugRepository($this->pdo), new AnlageRepository($this->pdo), new MagazinRepository($this->pdo), new AngebotRepository($this->pdo));
     }
 
     private function fahrzeug(string $nummer, string $bezeichnung, string $status = 'einsatzbereit'): int
@@ -170,6 +171,28 @@ final class CodeAufloesungTest extends DbTestCase
         $fz = $this->fahrzeug('EMC-0012', 'V 200');
         $this->assertSame('leer', $this->aufloesung->loese('   ')->art);
         $this->assertSame('/fahrzeuge/' . $fz . '/defekt', $this->aufloesung->loese('F12', '/defekt')->ziel);
+    }
+
+    public function test_angebotsnummer(): void
+    {
+        $kategorie = (int) $this->pdo->query("SELECT id FROM magazin_kategorie WHERE schluessel = 'sonstiges'")->fetchColumn();
+        $this->pdo->prepare("INSERT INTO boerse_angebot (jahr, laufnummer, bezeichnung, kategorie_id, wunschpreis, herkunft) VALUES (2026, 118, 'Lok', ?, '12.50', 'verein')")->execute([$kategorie]);
+        $id = (int) $this->pdo->lastInsertId();
+        foreach (['B2026-118', ' b2026-0118 ', '2026-118'] as $eingabe) {
+            $e = $this->aufloesung->loese($eingabe);
+            $this->assertSame('direkt', $e->art, $eingabe);
+            $this->assertSame('/angebote/' . $id, $e->ziel);
+        }
+        $e = $this->aufloesung->loese('B2026-119');
+        $this->assertSame('suche', $e->art);
+        $this->assertSame(CodeAufloesung::NICHT_GEFUNDEN_ANGEBOT, $e->meldung);
+        $this->assertSame('Kein Angebot mit dieser Nummer.', $e->meldung);
+        // Mit Zusatz („Defekt melden“) in die Suche; die reine Zahl bleibt eine Digitaladresse.
+        $this->assertSame('suche', $this->aufloesung->loese('B2026-118', '/defekt')->art);
+        $this->assertNotSame('/angebote/' . $id, $this->aufloesung->loese('118')->ziel);
+        // Ohne Repository: nicht gefunden statt Fehler.
+        $ohne = new CodeAufloesung(new FahrzeugRepository($this->pdo), new AnlageRepository($this->pdo));
+        $this->assertSame(CodeAufloesung::NICHT_GEFUNDEN_ANGEBOT, $ohne->loese('B2026-118')->meldung);
     }
 
     public function test_magazin_code(): void

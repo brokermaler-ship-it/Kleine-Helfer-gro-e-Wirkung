@@ -20,7 +20,12 @@ $summe = array_sum(array_map(fn(array $a): int => (int) $a['bestand'], $s['artik
         <div class="text-muted">Sammlung · <?= count($s['artikel']) === 1 ? '1 Artikel' : count($s['artikel']) . ' Artikel' ?> · Bestand <?= $summe ?></div>
     </div>
     <?php if ($istBoersenwart): ?>
-        <a class="btn btn-primary" href="<?= e(url('/magazin/sammlungen/' . (int) $s['id'], ['bearbeiten' => '1'])) ?>">Bearbeiten</a>
+        <div class="d-flex flex-wrap gap-2">
+            <?php if ($summe > 0): ?>
+                <a class="btn btn-outline-primary" href="<?= e(url('/angebote/neu', ['sammlung' => (int) $s['id']])) ?>">In die Börse übernehmen</a>
+            <?php endif; ?>
+            <a class="btn btn-primary" href="<?= e(url('/magazin/sammlungen/' . (int) $s['id'], ['bearbeiten' => '1'])) ?>">Bearbeiten</a>
+        </div>
     <?php endif; ?>
 </div>
 <?php if ($s['notiz'] !== null && $s['notiz'] !== ''): ?><p class="text-break"><?= nl2br(e((string) $s['notiz'])) ?></p><?php endif; ?>

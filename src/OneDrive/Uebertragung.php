@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Emc\OneDrive;
 
 use Emc\Betrieb\Einstellungen;
+use Emc\Boerse\Angebotsnummer;
 use Emc\Dateien\DokumentRepository;
 
 /** Arbeitet die OneDrive-Warteschlange ab: Hochladen, lokales Original entfernen, Löschen. */
@@ -309,6 +310,21 @@ final class Uebertragung
                 $artikel = $st->fetch(\PDO::FETCH_ASSOC);
                 if ($artikel !== false) {
                     $pfad = Pfadbildner::fuerMagazin($dok, $artikel);
+                }
+                break;
+            }
+        }
+        if ($pfad === null && $fahrzeugIds === [] && $anlageIds === []) {
+            // Foto eines Börsenangebots (nicht aus dem Magazin übernommen): Ordner „Boerse/<Nummer> <Bezeichnung>“.
+            foreach ($this->dokumente->objekte($dokumentId, 'boerse_angebot') as $angebotId) {
+                $st = $this->pdo->prepare('SELECT jahr, laufnummer, bezeichnung FROM boerse_angebot WHERE id = ?');
+                $st->execute([$angebotId]);
+                $angebot = $st->fetch(\PDO::FETCH_ASSOC);
+                if ($angebot !== false) {
+                    $pfad = Pfadbildner::fuerAngebot($dok, [
+                        'nummer' => Angebotsnummer::formatiere((int) $angebot['jahr'], (int) $angebot['laufnummer']),
+                        'bezeichnung' => $angebot['bezeichnung'],
+                    ]);
                 }
                 break;
             }

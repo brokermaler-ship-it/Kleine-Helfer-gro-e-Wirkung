@@ -150,22 +150,26 @@ final class EtikettController
         return is_array($ids) ? EtikettAuswahl::bereinige($ids) : [];
     }
 
-    private function oeffentlicheUrl(): string
+    /**
+     * @return array{0:string, 1:bool} Basis ohne Schrägstrich am Ende, true = oeffentliche_url fehlt
+     */
+    private function basis(Request $r): array
     {
-        return rtrim(trim((string) ($this->config['oeffentliche_url'] ?? '')), '/');
+        return self::kurzlinkBasis($this->config, $r);
     }
 
     /**
      * Basis der Kurzlinks im QR-Code: oeffentliche_url + basis_url (wie bei „Kennwort vergessen“). Fehlt
      * oeffentliche_url, Schema und Host dieser Anfrage (nur ein gültiger Hostname, sonst localhost) – dann warnt die
-     * Seite, denn ein später geänderter Zugang machte die gedruckten Codes ungültig.
+     * Seite, denn ein später geänderter Zugang machte die gedruckten Codes ungültig. Auch für die Preisschilder der Börse.
      *
+     * @param array<string,mixed> $config
      * @return array{0:string, 1:bool} Basis ohne Schrägstrich am Ende, true = oeffentliche_url fehlt
      */
-    private function basis(Request $r): array
+    public static function kurzlinkBasis(array $config, Request $r): array
     {
-        $pfad = rtrim((string) ($this->config['basis_url'] ?? ''), '/');
-        $oeffentlich = $this->oeffentlicheUrl();
+        $pfad = rtrim((string) ($config['basis_url'] ?? ''), '/');
+        $oeffentlich = rtrim(trim((string) ($config['oeffentliche_url'] ?? '')), '/');
         if ($oeffentlich !== '') {
             return [$oeffentlich . $pfad, false];
         }
