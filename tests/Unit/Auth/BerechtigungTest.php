@@ -85,7 +85,7 @@ final class BerechtigungTest extends TestCase
             Berechtigung::LESEN, Berechtigung::FAHRZEUG_ANLEGEN, Berechtigung::FAHRZEUG_BEARBEITEN,
             Berechtigung::PERSON_BEARBEITEN, Berechtigung::DATEI_BEARBEITEN, Berechtigung::BENUTZER_VERWALTEN,
             Berechtigung::STAMMDATEN_VERWALTEN, Berechtigung::BETRIEB, Berechtigung::PERSON_DSGVO_LOESCHEN,
-            Berechtigung::ANLAGE_BEARBEITEN, Berechtigung::WARTUNGSART_VERWALTEN,
+            Berechtigung::ANLAGE_BEARBEITEN, Berechtigung::WARTUNGSART_VERWALTEN, Berechtigung::ETIKETTEN_DRUCKEN,
         ];
         $w = $this->benutzer(Rolle::Fahrzeugwart);
         $b = $this->benutzer(Rolle::Bearbeiter);
@@ -153,6 +153,47 @@ final class BerechtigungTest extends TestCase
         $this->assertTrue(Berechtigung::darfWartungsplanAendern($b, 'anlage'));
         $this->assertFalse(Berechtigung::darfWartungsplanAendern(null, 'fahrzeug'));
         $this->assertFalse(Berechtigung::darfWartungsplanAendern($b, 'sonstwas'));
+    }
+
+    public function test_reparatur_rechte(): void
+    {
+        $m = new Benutzer(1, 10, 'a@b.de', 'A B', Rolle::Mitglied, false); // Benutzer 1, Person 10
+        $w = $this->benutzer(Rolle::Fahrzeugwart);
+        $b = $this->benutzer(Rolle::Bearbeiter);
+        $a = $this->benutzer(Rolle::Admin);
+        $eigentum = ['eigentuemer_person_id' => '10', 'angelegt_von_benutzer_id' => 2];
+        $selbstAngelegt = ['eigentuemer_person_id' => null, 'angelegt_von_benutzer_id' => '1'];
+        $fremdPrivat = ['eigentuemer_person_id' => 11, 'angelegt_von_benutzer_id' => 2];
+        $anlage = ['id' => 1];
+
+        $this->assertTrue(Berechtigung::darfReparaturBearbeiten($m, 'fahrzeug', $eigentum));
+        $this->assertTrue(Berechtigung::darfReparaturBearbeiten($m, 'fahrzeug', $selbstAngelegt));
+        $this->assertFalse(Berechtigung::darfReparaturBearbeiten($m, 'fahrzeug', $fremdPrivat));
+        $this->assertFalse(Berechtigung::darfReparaturBearbeiten($m, 'anlage', $anlage));
+        $this->assertFalse(Berechtigung::darfReparaturBearbeiten(null, 'fahrzeug', $eigentum));
+        $this->assertTrue(Berechtigung::darfReparaturBearbeiten($w, 'fahrzeug', $fremdPrivat));
+        $this->assertFalse(Berechtigung::darfReparaturBearbeiten($w, 'anlage', $anlage));
+        $this->assertTrue(Berechtigung::darfReparaturBearbeiten($b, 'anlage', $anlage));
+        $this->assertTrue(Berechtigung::darfReparaturBearbeiten($b, 'fahrzeug', $fremdPrivat));
+        $this->assertTrue(Berechtigung::darfReparaturBearbeiten($a, 'anlage', $anlage));
+        $this->assertFalse(Berechtigung::darfReparaturBearbeiten($a, 'sonstwas', $anlage));
+
+        $this->assertFalse(Berechtigung::siehtDefekthinweise($m, 'fahrzeug'));
+        $this->assertFalse(Berechtigung::siehtDefekthinweise($m, 'anlage'));
+        $this->assertFalse(Berechtigung::siehtDefekthinweise(null, 'fahrzeug'));
+        $this->assertTrue(Berechtigung::siehtDefekthinweise($w, 'fahrzeug'));
+        $this->assertFalse(Berechtigung::siehtDefekthinweise($w, 'anlage'));
+        $this->assertTrue(Berechtigung::siehtDefekthinweise($b, 'anlage'));
+        $this->assertTrue(Berechtigung::siehtDefekthinweise($b, 'fahrzeug'));
+        $this->assertTrue(Berechtigung::siehtDefekthinweise($a, 'anlage'));
+        $this->assertFalse(Berechtigung::siehtDefekthinweise($a, 'sonstwas'));
+
+        $this->assertSame('etiketten_drucken', Berechtigung::ETIKETTEN_DRUCKEN);
+        $this->assertFalse(Berechtigung::darf(null, Berechtigung::ETIKETTEN_DRUCKEN));
+        $this->assertFalse(Berechtigung::darf($m, Berechtigung::ETIKETTEN_DRUCKEN));
+        foreach ([$w, $b, $a] as $x) {
+            $this->assertTrue(Berechtigung::darf($x, Berechtigung::ETIKETTEN_DRUCKEN));
+        }
     }
 
     public function test_unbekannte_aktion_ist_verboten(): void

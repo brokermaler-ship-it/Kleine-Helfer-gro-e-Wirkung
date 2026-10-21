@@ -15,6 +15,7 @@ use Emc\Fahrzeuge\KonfliktFehler;
 use Emc\OneDrive\Uebertragung;
 use Emc\Protokoll\Aenderungsprotokoll;
 use Emc\Stammdaten\SpurweiteRepository;
+use Emc\Reparatur\ReparaturDienst;
 use Emc\Wartung\WartungDienst;
 
 /**
@@ -36,6 +37,7 @@ final class AnlageController
         private bool $onedriveKonfiguriert = false,
         private ?Uebertragung $uebertragung = null,
         private ?WartungDienst $wartung = null,
+        private ?ReparaturDienst $reparatur = null,
     ) {
     }
 
@@ -117,6 +119,7 @@ final class AnlageController
         $anlage = $this->lade($p);
         $id = (int) $anlage['id'];
         $this->wartung?->entferneFuerObjekt('anlage', $id);
+        $this->reparatur?->entferneFuerObjekt('anlage', $id);
         $this->dokumente->entferneVonObjekt('anlage', $id);
         $this->anlagen->loeschen($id);
         // Lösch-Aufträge für die OneDrive-Dateien gleich nebenbei ausführen (ohne Cronjob sonst erst später).

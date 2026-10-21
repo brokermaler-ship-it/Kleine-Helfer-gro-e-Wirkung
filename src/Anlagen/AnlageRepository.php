@@ -118,8 +118,11 @@ final class AnlageRepository
     {
         $zuweisung = implode(', ', array_map(fn(string $f) => "$f = ?", self::FELDER));
         // geaendert_am wird immer explizit gesetzt, damit auch ein unverändert gespeichertes Formular 1 Zeile trifft.
-        $st = $this->pdo->prepare("UPDATE anlage SET $zuweisung, geaendert_am = NOW(6) WHERE id = ? AND geaendert_am = ?");
-        $st->execute([...$this->werte($d), $id, $erwarteterStand]);
+        // Ein von Hand geänderter Status löscht das Kennzeichen „automatisch durch Reparatur“ (vor „status = ?“).
+        $werte = $this->werte($d);
+        $status = $werte[array_search('status', self::FELDER, true)];
+        $st = $this->pdo->prepare("UPDATE anlage SET status_automatisch = IF(status = ?, status_automatisch, 0), $zuweisung, geaendert_am = NOW(6) WHERE id = ? AND geaendert_am = ?");
+        $st->execute([$status, ...$werte, $id, $erwarteterStand]);
         if ($st->rowCount() === 0) {
             throw new KonfliktFehler(self::KONFLIKT);
         }
@@ -129,6 +132,16 @@ final class AnlageRepository
     public function loeschen(int $id): void
     {
         $this->pdo->prepare('DELETE FROM anlage WHERE id = ?')->execute([$id]);
+    }
+
+    /**
+     * Status aus dem automatischen Reparaturstatus (ReparaturDienst::wendeStatusAn) samt Kennzeichen setzen; ändert
+     * geaendert_am (ein vorher geöffnetes Formular bekommt beim Speichern den Bearbeitungskonflikt).
+     */
+    public function setzeStatusAutomatisch(int $id, string $status, bool $automatisch): void
+    {
+        $this->pdo->prepare('UPDATE anlage SET status = ?, status_automatisch = ?, geaendert_am = NOW(6) WHERE id = ?')
+            ->execute([$status, $automatisch ? 1 : 0, $id]);
     }
 
     /** Ändert bewusst nicht geaendert_am: das Titelbild darf keinen Bearbeitungskonflikt auslösen. */

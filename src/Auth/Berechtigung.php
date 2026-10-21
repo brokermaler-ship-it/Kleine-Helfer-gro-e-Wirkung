@@ -19,6 +19,7 @@ final class Berechtigung
     public const PERSON_DSGVO_LOESCHEN = 'person_dsgvo_loeschen';
     public const ANLAGE_BEARBEITEN = 'anlage_bearbeiten';
     public const WARTUNGSART_VERWALTEN = 'wartungsart_verwalten';
+    public const ETIKETTEN_DRUCKEN = 'etiketten_drucken';
 
     /** Mindestrang je Aktion: 1 Mitglied, 2 Fahrzeugwart, 3 Bearbeiter, 4 Admin. */
     private const MINDESTRANG = [
@@ -33,6 +34,7 @@ final class Berechtigung
         self::PERSON_DSGVO_LOESCHEN => 4,
         self::ANLAGE_BEARBEITEN => 3,
         self::WARTUNGSART_VERWALTEN => 2,
+        self::ETIKETTEN_DRUCKEN => 2,
     ];
 
     public static function darf(?Benutzer $b, string $aktion): bool
@@ -109,6 +111,27 @@ final class Berechtigung
             'anlage' => self::darf($b, self::ANLAGE_BEARBEITEN),
             default => false,
         };
+    }
+
+    /**
+     * Reparaturen bearbeiten (planen, abschließen, verwerfen): gleiche Regel wie Wartungen eintragen – Fahrzeugwart und
+     * höher an allen Fahrzeugen, Mitglieder an ihren eigenen, Bearbeiter und höher an Anlagen.
+     *
+     * @param string $objektTyp fahrzeug oder anlage
+     * @param array<string,mixed> $objekt
+     */
+    public static function darfReparaturBearbeiten(?Benutzer $b, string $objektTyp, array $objekt): bool
+    {
+        return self::darfWartungEintragen($b, $objektTyp, $objekt);
+    }
+
+    /**
+     * Hinweise auf neue Defektmeldungen: Fahrzeugwart und höher für Fahrzeuge, Bearbeiter und höher für Anlagen
+     * (gleiche Regel wie darfWartungsplanAendern).
+     */
+    public static function siehtDefekthinweise(?Benutzer $b, string $objektTyp): bool
+    {
+        return self::darfWartungsplanAendern($b, $objektTyp);
     }
 
     /**

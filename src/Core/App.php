@@ -56,6 +56,8 @@ use Emc\Personen\PersonRepository;
 use Emc\Stammdaten\SpurweiteController;
 use Emc\Stammdaten\SpurweiteRepository;
 use Emc\Start\StartController;
+use Emc\Reparatur\ReparaturDienst;
+use Emc\Reparatur\ReparaturRepository;
 use Emc\Wartung\AusnahmeRepository;
 use Emc\Wartung\UebersichtController;
 use Emc\Wartung\WartungController;
@@ -285,9 +287,19 @@ final class App
             $c->get(DokumentRepository::class),
             Uebertragung::konfiguriert($this->config),
             $c->get(Uebertragung::class),
-            $c->get(WartungDienst::class)
+            $c->get(WartungDienst::class),
+            $c->get(ReparaturDienst::class)
         ));
         $this->container->set(AnlageRepository::class, fn(Container $c) => new AnlageRepository($c->get('pdo')));
+        $this->container->set(ReparaturRepository::class, fn(Container $c) => new ReparaturRepository($c->get('pdo')));
+        $this->container->set(ReparaturDienst::class, fn(Container $c) => new ReparaturDienst(
+            $c->get('pdo'),
+            $c->get(ReparaturRepository::class),
+            $c->get(FahrzeugRepository::class),
+            $c->get(AnlageRepository::class),
+            $c->get(DokumentRepository::class),
+            $c->get(Aenderungsprotokoll::class)
+        ));
         $this->container->set(CodeAufloesung::class, fn(Container $c) => new CodeAufloesung(
             $c->get(FahrzeugRepository::class),
             $c->get(AnlageRepository::class)
@@ -306,7 +318,8 @@ final class App
             $c->get('session'),
             Uebertragung::konfiguriert($this->config),
             $c->get(Uebertragung::class),
-            $c->get(WartungDienst::class)
+            $c->get(WartungDienst::class),
+            $c->get(ReparaturDienst::class)
         ));
         $this->container->set(DecoderRepository::class, fn(Container $c) => new DecoderRepository($c->get('pdo')));
         $this->container->set(Adresspruefung::class, fn(Container $c) => new Adresspruefung($c->get('pdo')));

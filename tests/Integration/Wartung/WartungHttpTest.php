@@ -13,6 +13,7 @@ use Emc\Dateien\UploadService;
 use Emc\Tests\Integration\Dateien\UploadServiceTest;
 use Emc\Tests\Integration\DbTestCase;
 use Emc\Wartung\AusnahmeRepository;
+use Emc\Reparatur\ReparaturRepository;
 use Emc\Wartung\WartungRepository;
 
 final class WartungHttpTest extends DbTestCase
@@ -406,8 +407,15 @@ final class WartungHttpTest extends DbTestCase
         $this->post("/fahrzeuge/$fz/wartungsplan", ['modus' => [$this->art('Kupplungen prüfen') => 'aus']]);
         $pfad = (string) $this->pdo->query('SELECT pfad FROM dokument LIMIT 1')->fetchColumn();
         $this->assertFileExists($this->speicher . '/' . $pfad);
+        $reparaturen = new ReparaturRepository($this->pdo);
+        $rid = $reparaturen->anlegen('fahrzeug', $fz, ['beschreibung' => 'Motor brummt'], null);
+        $this->pdo->exec("INSERT INTO ersatzteil (reparatur_id, bezeichnung) VALUES ($rid, 'Haftreifen')");
+        $bleibt = $reparaturen->anlegen('fahrzeug', $anderes, ['beschreibung' => 'Licht flackert'], null);
 
         $this->assertSame(303, $this->post("/fahrzeuge/$fz/loeschen")->status);
+        $this->assertSame([$bleibt], $reparaturen->idsFuerObjekt('fahrzeug', $anderes));
+        $this->assertSame(1, $this->zahl('SELECT COUNT(*) FROM reparatur'));
+        $this->assertSame(0, $this->zahl('SELECT COUNT(*) FROM ersatzteil'));
         $this->assertSame(1, $this->zahl('SELECT COUNT(*) FROM wartung'));
         $this->assertSame($anderes, $this->zahl('SELECT objekt_id FROM wartung'));
         $this->assertSame(2, $this->zahl('SELECT COUNT(*) FROM wartung_art'));
@@ -425,7 +433,9 @@ final class WartungHttpTest extends DbTestCase
         $this->post("/anlagen/$anlage/wartungen", $this->eintrag($pid, ['arten' => [(string) $gleise]]), ['fotos' => $this->upload('foto_gedreht.jpg')]);
         $this->post("/anlagen/$anlage/wartungsplan", ['modus' => [$gleise => 'aus']]);
         $this->assertSame(1, $this->zahl('SELECT COUNT(*) FROM wartung'));
+        (new ReparaturRepository($this->pdo))->anlegen('anlage', $anlage, ['beschreibung' => 'W12 Antrieb brummt'], null);
         $this->assertSame(303, $this->post("/anlagen/$anlage/loeschen")->status);
+        $this->assertSame(0, $this->zahl('SELECT COUNT(*) FROM reparatur'));
         $this->assertSame(0, $this->zahl('SELECT COUNT(*) FROM wartung'));
         $this->assertSame(0, $this->zahl('SELECT COUNT(*) FROM wartung_art'));
         $this->assertSame(0, $this->zahl('SELECT COUNT(*) FROM wartungsplan_ausnahme'));

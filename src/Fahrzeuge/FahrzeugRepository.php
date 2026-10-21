@@ -17,6 +17,8 @@ final class FahrzeugRepository
      * Werten auswertet. „Heute“ kommt aus PHP (Zeitzone der Anwendung), nicht aus CURDATE() der DB-Sitzung.
      */
     private const AUSGEMUSTERT_AM = "CASE WHEN ? <> 'ausgemustert' THEN NULL WHEN status = 'ausgemustert' THEN COALESCE(ausgemustert_am, ?) ELSE ? END";
+    /** Kennzeichen zum künftigen Status (Platzhalter): bleibt bei unverändertem Status, sonst 0. Vor „status = ?“. */
+    private const STATUS_AUTOMATISCH = 'status_automatisch = IF(status = ?, status_automatisch, 0)';
     private const STANDARD = ['gattung' => 'lok', 'stromsystem' => '2L', 'status' => 'einsatzbereit', 'betriebsstunden' => 0];
 
     public function __construct(private \PDO $pdo)
@@ -87,16 +89,28 @@ final class FahrzeugRepository
 
     /**
      * Aufs Abstellgleis (Status „ausgemustert“, seit heute) bzw. zurück in Betrieb („einsatzbereit“, ohne Datum).
-     * Ein bereits ausgemustertes Fahrzeug behält beim erneuten Abstellen sein Datum.
+     * Ein bereits ausgemustertes Fahrzeug behält beim erneuten Abstellen sein Datum. Beides ist eine Änderung von Hand:
+     * das Kennzeichen „automatisch durch Reparatur“ wird gelöscht.
      */
     public function setzeAbgestellt(int $id, bool $abgestellt): void
     {
         if ($abgestellt) {
-            $sql = "UPDATE fahrzeug SET ausgemustert_am = " . self::AUSGEMUSTERT_AM . ", status = 'ausgemustert' WHERE id = ?";
+            $sql = "UPDATE fahrzeug SET ausgemustert_am = " . self::AUSGEMUSTERT_AM . ", status = 'ausgemustert', status_automatisch = 0 WHERE id = ?";
             $this->pdo->prepare($sql)->execute(['ausgemustert', self::heute(), self::heute(), $id]);
             return;
         }
-        $this->pdo->prepare("UPDATE fahrzeug SET ausgemustert_am = NULL, status = 'einsatzbereit' WHERE id = ?")->execute([$id]);
+        $this->pdo->prepare("UPDATE fahrzeug SET ausgemustert_am = NULL, status = 'einsatzbereit', status_automatisch = 0 WHERE id = ?")->execute([$id]);
+    }
+
+    /**
+     * Status aus dem automatischen Reparaturstatus (ReparaturDienst::wendeStatusAn) samt Kennzeichen setzen. Ändert
+     * geaendert_am: wer das Formular vorher geöffnet hat, bekommt beim Speichern den Bearbeitungskonflikt, statt den
+     * neuen Status unbemerkt zu überschreiben. Für „ausgemustert“ nicht gedacht (ausgemustert_am bleibt unberührt).
+     */
+    public function setzeStatusAutomatisch(int $id, string $status, bool $automatisch): void
+    {
+        $this->pdo->prepare('UPDATE fahrzeug SET status = ?, status_automatisch = ?, geaendert_am = NOW(6) WHERE id = ?')
+            ->execute([$status, $automatisch ? 1 : 0, $id]);
     }
 
     /** @return ?array<string,mixed> */
@@ -183,8 +197,11 @@ final class FahrzeugRepository
         // geaendert_am wird immer explizit gesetzt, damit auch ein unverändert gespeichertes Formular 1 Zeile trifft.
         $werte = $this->werte($d);
         $status = $werte[array_search('status', self::FELDER, true)];
-        $st = $this->pdo->prepare('UPDATE fahrzeug SET ausgemustert_am = ' . self::AUSGEMUSTERT_AM . ", $zuweisung, geaendert_am = NOW(6) WHERE id = ? AND geaendert_am = ?");
-        $st->execute([$status, self::heute(), self::heute(), ...$werte, $id, $erwarteterStand]);
+        // Ein von Hand geänderter Status löscht das Kennzeichen „automatisch durch Reparatur“; ein unverändert gespeicherter
+        // behält es. Steht wie ausgemustert_am vor „status = ?“ (MySQL wertet SET von links nach rechts aus).
+        $st = $this->pdo->prepare('UPDATE fahrzeug SET ausgemustert_am = ' . self::AUSGEMUSTERT_AM . ', ' . self::STATUS_AUTOMATISCH
+            . ", $zuweisung, geaendert_am = NOW(6) WHERE id = ? AND geaendert_am = ?");
+        $st->execute([$status, self::heute(), self::heute(), $status, ...$werte, $id, $erwarteterStand]);
         if ($st->rowCount() === 0) {
             throw new KonfliktFehler();
         }

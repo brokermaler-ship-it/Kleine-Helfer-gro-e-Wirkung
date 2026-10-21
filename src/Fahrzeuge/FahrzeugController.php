@@ -20,6 +20,7 @@ use Emc\OneDrive\Uebertragung;
 use Emc\Personen\PersonRepository;
 use Emc\Protokoll\Aenderungsprotokoll;
 use Emc\Stammdaten\SpurweiteRepository;
+use Emc\Reparatur\ReparaturDienst;
 use Emc\Wartung\WartungDienst;
 
 final class FahrzeugController
@@ -43,6 +44,7 @@ final class FahrzeugController
         private bool $onedriveKonfiguriert = false,
         private ?Uebertragung $uebertragung = null,
         private ?WartungDienst $wartung = null,
+        private ?ReparaturDienst $reparatur = null,
     ) {
     }
 
@@ -174,6 +176,7 @@ final class FahrzeugController
     {
         $fz = $this->lade($p);
         $this->wartung?->entferneFuerObjekt('fahrzeug', (int) $fz['id']);
+        $this->reparatur?->entferneFuerObjekt('fahrzeug', (int) $fz['id']);
         $this->dokumente->entferneVonObjekt('fahrzeug', (int) $fz['id']);
         $this->fahrzeuge->loeschen((int) $fz['id']);
         // Lösch-Aufträge für die OneDrive-Dateien gleich nebenbei ausführen (ohne Cronjob sonst erst später).
