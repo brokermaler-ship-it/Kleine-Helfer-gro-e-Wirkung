@@ -641,4 +641,77 @@ final class ReparaturHttpTest extends DbTestCase
         $this->assertStringContainsString('href="/reparaturen/' . $rid . '"', $b);
         $this->assertStringContainsString('>wartet auf Teile</span>', $b);
     }
+
+    /**
+     * Startet auf einer zweiten Verbindung eine Transaktion (REPEATABLE READ) und liest die Tabelle: Repositories auf dieser
+     * Verbindung sehen danach den alten Stand. So lässt sich nachstellen, dass jemand anderes zwischen der Prüfung vor
+     * der Transaktion und der Sperre speichert.
+     */
+    private function alterStand(string $tabelle): \PDO
+    {
+        $b = self::verbindung();
+        $b->exec('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+        $b->beginTransaction();
+        $b->query("SELECT * FROM $tabelle")->fetchAll();
+        return $b;
+    }
+
+    /** Recht wird unter der Sperre am aktuellen Objekt erneut geprüft: Eigentümer inzwischen gewechselt → 403, nichts gespeichert. */
+    public function test_recht_unter_sperre_erneut_geprueft(): void
+    {
+        $mitglied = $this->anmelden('mitglied');
+        $fz = $this->fahrzeug('EMC-0012', 'V 200', $this->personVon($mitglied));
+        $rid = $this->reparatur('fahrzeug', $fz);
+        $formular = $this->formular($rid, ['beschreibung' => 'Motor getauscht', 'status' => 'in_arbeit']);
+
+        $b = $this->alterStand('fahrzeug');
+        $neu = $this->person('Erika', 'Beispiel');
+        $this->pdo->exec("UPDATE fahrzeug SET eigentuemer_person_id = $neu WHERE id = $fz");
+        $app = $this->app();
+        // Vor der Transaktion sieht der Controller noch das Mitglied als Eigentümer.
+        $app->container()->set(\Emc\Fahrzeuge\FahrzeugRepository::class, fn() => new \Emc\Fahrzeuge\FahrzeugRepository($b));
+        $r = $app->handle(new Request('POST', "/reparaturen/$rid", [], $formular + ['_csrf' => str_repeat('a', 64)]));
+        $b->rollBack();
+
+        $this->assertSame(403, $r->status);
+        $this->assertSame('Motor brummt', $this->wert("SELECT beschreibung FROM reparatur WHERE id = $rid"));
+        $this->assertSame('gemeldet', $this->wert("SELECT status FROM reparatur WHERE id = $rid"));
+        $this->assertSame('einsatzbereit', $this->wert("SELECT status FROM fahrzeug WHERE id = $fz"));
+        $this->assertSame(0, $this->zahl("SELECT COUNT(*) FROM aenderungsprotokoll WHERE objekt_typ = 'reparatur' AND objekt_id = $rid"));
+    }
+
+    /** Zuständige Person zwischen Prüfung und Speichern gelöscht: 422 mit Hinweis statt Fehler 500 (FK 1452). */
+    public function test_zustaendige_person_inzwischen_geloescht(): void
+    {
+        $fz = $this->fahrzeug();
+        $rid = $this->reparatur('fahrzeug', $fz);
+        $weg = $this->person('Erika', 'Beispiel');
+        $this->anmelden('fahrzeugwart');
+        $formular = $this->formular($rid, ['beschreibung' => 'Motor getauscht', 'zustaendig' => (string) $weg]);
+
+        $b = $this->alterStand('person');
+        $this->pdo->exec("DELETE FROM person WHERE id = $weg");
+        $app = $this->app();
+        // Die Prüfung vor der Transaktion kennt die Person noch.
+        $app->container()->set(\Emc\Personen\PersonRepository::class, fn() => new \Emc\Personen\PersonRepository($b));
+        $r = $app->handle(new Request('POST', "/reparaturen/$rid", [], $formular + ['_csrf' => str_repeat('a', 64)]));
+        $b->rollBack();
+
+        $this->assertSame(422, $r->status);
+        $this->assertStringContainsString('Bitte eine Person aus der Liste wählen.', $r->body);
+        $this->assertStringContainsString('Motor getauscht', $r->body);
+        $this->assertSame('Motor brummt', $this->wert("SELECT beschreibung FROM reparatur WHERE id = $rid"));
+        $this->assertNull($this->wert("SELECT zustaendig_person_id FROM reparatur WHERE id = $rid"));
+    }
+
+    public function test_formular_hinweise_zu_ersatzteilen(): void
+    {
+        $fz = $this->fahrzeug();
+        $rid = $this->reparatur('fahrzeug', $fz);
+        $this->anmelden('fahrzeugwart');
+        $b = $this->get("/reparaturen/$rid/bearbeiten")->body;
+        $this->assertStringContainsString('placeholder="z. B. 12,50"', $b);
+        $this->assertStringNotContainsString('placeholder="12,50"', $b);
+        $this->assertStringContainsString('Wer eine Zeile leert, entfernt das Ersatzteil.', $b);
+    }
 }

@@ -243,6 +243,17 @@ final class ReparaturRepository
     }
 
     /**
+     * Sperrt die Person bis zum Ende der Transaktion gegen Löschen (für zustaendig_person_id beim Speichern unter der
+     * Sperre des Objekts). false, wenn es sie inzwischen nicht mehr gibt.
+     */
+    public function sperrePerson(int $personId): bool
+    {
+        $st = $this->pdo->prepare('SELECT id FROM person WHERE id = ? LOCK IN SHARE MODE');
+        $st->execute([$personId]);
+        return $st->fetchColumn() !== false;
+    }
+
+    /**
      * Vermerkt, dass ein Benutzer mit Recht auf Defekthinweise die Reparatur geöffnet hat (danach ist sie nicht mehr
      * „neu“, gleich für wen). Doppeltes Öffnen ändert nichts.
      */

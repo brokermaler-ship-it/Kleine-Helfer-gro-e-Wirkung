@@ -139,6 +139,10 @@ final class ReparaturController
                     if (!Berechtigung::darfReparaturBearbeiten($benutzer, $typ, $gesperrt)) {
                         throw new HttpFehler(403);
                     }
+                    // Zuständige Person inzwischen gelöscht (z. B. DSGVO): Hinweis statt Fehler 500 am Fremdschlüssel.
+                    if ($d['zustaendig_person_id'] !== null && !$this->reparaturen->sperrePerson((int) $d['zustaendig_person_id'])) {
+                        throw new ZustaendigFehlt();
+                    }
                     $alt = $this->reparaturen->finde($id) ?? throw new KonfliktFehler(ReparaturRepository::KONFLIKT);
                     $this->reparaturen->aktualisieren($id, $d, $teile, $stand);
                     $diff = Aenderungsprotokoll::diff(
@@ -150,6 +154,8 @@ final class ReparaturController
                     }
                     return (string) $alt['status'];
                 });
+            } catch (ZustaendigFehlt) {
+                return $this->formular($rep, $typ, $objekt, $werte, self::anzeigeTeile($eingabe['teile']), ['zustaendig' => ReparaturValidator::PERSON_WAEHLEN], $stand, 422);
             } catch (KonfliktFehler $e) {
                 if ($this->reparaturen->finde($id) === null) {
                     throw new HttpFehler(404); // zwischenzeitlich gelöscht

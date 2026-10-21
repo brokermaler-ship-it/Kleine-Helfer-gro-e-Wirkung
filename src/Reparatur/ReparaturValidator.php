@@ -15,6 +15,7 @@ final class ReparaturValidator
     public const OHNE_WAS_GEMACHT = 'Bitte kurz beschreiben, was gemacht wurde.';
     public const OHNE_BEZEICHNUNG = 'Bitte eine Bezeichnung für das Ersatzteil angeben.';
     public const KEIN_BETRAG = 'Bitte die Kosten als Betrag angeben, z. B. 12,50.';
+    public const PERSON_WAEHLEN = 'Bitte eine Person aus der Liste wählen.';
 
     /** Bis 999999,99 (DECIMAL(8,2)), ab 0, höchstens zwei Nachkommastellen, Komma oder Punkt, kein Tausendertrennzeichen. */
     private const BETRAG = '/^(\d{1,6})(?:[.,](\d{1,2}))?$/';
@@ -64,7 +65,7 @@ final class ReparaturValidator
             if (preg_match('/^\d{1,10}$/', $roh) === 1 && in_array((int) $roh, $personIds, true)) {
                 $zustaendig = (int) $roh;
             } else {
-                $f['zustaendig'] = 'Bitte eine Person aus der Liste wählen.';
+                $f['zustaendig'] = self::PERSON_WAEHLEN;
             }
         }
 

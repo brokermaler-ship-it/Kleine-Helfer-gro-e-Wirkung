@@ -48,7 +48,7 @@ $teilZeile = function (string $n, array $t) use ($fehler): void {
         <?php $feld('bezeichnung', 'Bezeichnung', 'col-12 col-md-4', ReparaturValidator::BEZEICHNUNG_MAX); ?>
         <?php $feld('artikelnummer', 'Artikelnummer', 'col-6 col-md-2', ReparaturValidator::ARTIKELNUMMER_MAX); ?>
         <?php $feld('bezugsquelle', 'Bezugsquelle', 'col-6 col-md-3', ReparaturValidator::BEZUGSQUELLE_MAX); ?>
-        <?php $feld('kosten', 'Kosten (€)', 'col-6 col-md-2', 10, ' inputmode="decimal" placeholder="12,50"'); ?>
+        <?php $feld('kosten', 'Kosten (€)', 'col-6 col-md-2', 10, ' inputmode="decimal" placeholder="z. B. 12,50"'); ?>
         <div class="col-6 col-md-1">
             <div class="form-check mt-md-4 pt-md-1">
                 <input class="form-check-input" type="checkbox" id="teil-<?= e($n) ?>-bestellt" name="teile[<?= e($n) ?>][bestellt]" value="1"<?= ($t['bestellt'] ?? '') === '1' ? ' checked' : '' ?>>
@@ -133,7 +133,7 @@ $teilZeile = function (string $n, array $t) use ($fehler): void {
             </div>
             <template id="teil-vorlage"><?php $teilZeile('__N__', []); ?></template>
             <button type="button" class="btn btn-outline-secondary btn-sm" data-teil-hinzu hidden>Zeile hinzufügen</button>
-            <div class="form-text">Leere Zeilen werden ignoriert. Kosten mit Komma oder Punkt, z. B. 12,50.</div>
+            <div class="form-text">Leere Zeilen werden ignoriert. Wer eine Zeile leert, entfernt das Ersatzteil. Kosten mit Komma oder Punkt, z. B. 12,50.</div>
         </fieldset>
 
         <div class="mb-3">
