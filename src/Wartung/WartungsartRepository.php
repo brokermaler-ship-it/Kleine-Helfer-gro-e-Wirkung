@@ -75,11 +75,29 @@ final class WartungsartRepository
     /** @throws DomainFehler wenn die Art schon in Wartungen verwendet wurde */
     public function loeschen(int $id): void
     {
+        if ($this->istVerwendet($id)) {
+            throw new DomainFehler(self::VERWENDET);
+        }
         try {
             $this->pdo->prepare('DELETE FROM wartungsart WHERE id = ?')->execute([$id]);
         } catch (\PDOException $e) {
             if ((string) $e->getCode() === '23000') { // Bezug aus Wartungen (FK RESTRICT)
                 throw new DomainFehler(self::VERWENDET, 0, $e);
+            }
+            throw $e;
+        }
+    }
+
+    /** Wurde die Art schon in einer Wartung eingetragen? (Ausnahmen im Wartungsplan zählen nicht, sie entfallen mit.) */
+    public function istVerwendet(int $id): bool
+    {
+        try {
+            $st = $this->pdo->prepare('SELECT 1 FROM wartung_art WHERE wartungsart_id = ? LIMIT 1');
+            $st->execute([$id]);
+            return $st->fetchColumn() !== false;
+        } catch (\PDOException $e) {
+            if ((string) $e->getCode() === '42S02') {
+                return false; // Datenbank-Update (Migration 013) noch nicht ausgeführt: es gibt noch keine Wartungen.
             }
             throw $e;
         }

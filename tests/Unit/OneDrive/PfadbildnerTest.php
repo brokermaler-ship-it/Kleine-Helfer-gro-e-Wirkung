@@ -23,6 +23,13 @@ final class PfadbildnerTest extends TestCase
         self::assertSame('Fahrzeuge/EMC-0001 V 200/Foto.jpg', Pfadbildner::fuerDokument(['titel' => 'Foto', 'endung' => 'jpg'], ['inventarnummer' => 'EMC-0001', 'bezeichnung' => 'V 200'], ['nummer' => 3, 'name' => 'Clubanlage']));
     }
 
+    public function test_wartungsfoto_im_unterordner_wartung(): void
+    {
+        self::assertSame('Fahrzeuge/EMC-0001 V 200/Wartung/Foto.jpg', Pfadbildner::fuerDokument(['titel' => 'Foto', 'endung' => 'jpg'], ['inventarnummer' => 'EMC-0001', 'bezeichnung' => 'V 200'], null, true));
+        self::assertSame('Anlagen/A3 Clubanlage/Wartung/Foto.jpg', Pfadbildner::fuerDokument(['titel' => 'Foto', 'endung' => 'jpg'], null, ['nummer' => 3, 'name' => 'Clubanlage'], true));
+        self::assertSame('Sonstiges/Foto.jpg', Pfadbildner::fuerDokument(['titel' => 'Foto', 'endung' => 'jpg'], null, null, true));
+    }
+
     public function testOhneFahrzeugSonstiges(): void
     {
         self::assertSame('Sonstiges/Anleitung.pdf', Pfadbildner::fuerDokument(['titel' => 'Anleitung', 'endung' => 'pdf'], null));

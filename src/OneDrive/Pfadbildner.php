@@ -13,8 +13,9 @@ final class Pfadbildner
      * @param array<string,mixed> $dokument titel, endung
      * @param ?array<string,mixed> $fahrzeug inventarnummer, bezeichnung
      * @param ?array<string,mixed> $anlage nummer, name (nur, wenn kein Fahrzeug angegeben ist)
+     * @param bool $wartung Foto einer Wartung: Unterordner „Wartung“ im Ordner des Objekts
      */
-    public static function fuerDokument(array $dokument, ?array $fahrzeug, ?array $anlage = null): string
+    public static function fuerDokument(array $dokument, ?array $fahrzeug, ?array $anlage = null, bool $wartung = false): string
     {
         $endung = self::bereinige((string) ($dokument['endung'] ?? ''));
         $endung = $endung === '_' ? '' : $endung;
@@ -26,16 +27,17 @@ final class Pfadbildner
             $schluss = $endung === '' ? '' : '.' . $endung;
         }
         $name = self::bereinige($titel, self::MAX_SEGMENT - mb_strlen($schluss)) . $schluss;
+        $unterordner = $wartung ? 'Wartung/' : '';
 
         if ($fahrzeug === null && $anlage !== null) {
             $ordner = self::bereinige(trim('A' . (int) ($anlage['nummer'] ?? 0) . ' ' . (string) ($anlage['name'] ?? '')));
-            return 'Anlagen/' . $ordner . '/' . $name;
+            return 'Anlagen/' . $ordner . '/' . $unterordner . $name;
         }
         if ($fahrzeug === null) {
             return 'Sonstiges/' . $name;
         }
         $ordner = self::bereinige(trim((string) ($fahrzeug['inventarnummer'] ?? '') . ' ' . (string) ($fahrzeug['bezeichnung'] ?? '')));
-        return 'Fahrzeuge/' . $ordner . '/' . $name;
+        return 'Fahrzeuge/' . $ordner . '/' . $unterordner . $name;
     }
 
     /** Ersetzt unzulässige Zeichen durch „_“, kürzt auf $max Zeichen und entfernt Leerzeichen/Punkte am Ende. */

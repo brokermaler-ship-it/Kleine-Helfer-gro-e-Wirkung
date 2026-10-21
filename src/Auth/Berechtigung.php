@@ -69,6 +69,49 @@ final class Berechtigung
     }
 
     /**
+     * Wartungen an einem Fahrzeug eintragen: Fahrzeugwart und höher an allen Fahrzeugen, Mitglieder an ihren eigenen
+     * (Eigentümer ist ihre Person oder sie haben das Fahrzeug selbst angelegt).
+     *
+     * @param array<string,mixed> $fahrzeug
+     */
+    public static function darfFahrzeugWarten(?Benutzer $b, array $fahrzeug): bool
+    {
+        if ($b === null) {
+            return false;
+        }
+        if (self::darf($b, self::FAHRZEUG_BEARBEITEN)) {
+            return true;
+        }
+        $eigentuemer = $fahrzeug['eigentuemer_person_id'] ?? null;
+        $anleger = $fahrzeug['angelegt_von_benutzer_id'] ?? null;
+        return ($eigentuemer !== null && (int) $eigentuemer === $b->personId)
+            || ($anleger !== null && (int) $anleger === $b->id);
+    }
+
+    /**
+     * @param string $objektTyp fahrzeug oder anlage
+     * @param array<string,mixed> $objekt
+     */
+    public static function darfWartungEintragen(?Benutzer $b, string $objektTyp, array $objekt): bool
+    {
+        return match ($objektTyp) {
+            'fahrzeug' => self::darfFahrzeugWarten($b, $objekt),
+            'anlage' => self::darf($b, self::ANLAGE_BEARBEITEN),
+            default => false,
+        };
+    }
+
+    /** Ausnahmen im Wartungsplan (abschalten, eigenes Intervall): Fahrzeugwart bei Fahrzeugen, Bearbeiter bei Anlagen. */
+    public static function darfWartungsplanAendern(?Benutzer $b, string $objektTyp): bool
+    {
+        return match ($objektTyp) {
+            'fahrzeug' => self::darf($b, self::FAHRZEUG_BEARBEITEN),
+            'anlage' => self::darf($b, self::ANLAGE_BEARBEITEN),
+            default => false,
+        };
+    }
+
+    /**
      * @param array<string,mixed> $fahrzeug
      * @throws HttpFehler 403, wenn der Benutzer dieses Fahrzeug nicht bearbeiten darf
      */

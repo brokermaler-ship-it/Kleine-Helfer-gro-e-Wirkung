@@ -123,6 +123,38 @@ final class BerechtigungTest extends TestCase
         $this->assertSame('wartungsart_verwalten', Berechtigung::WARTUNGSART_VERWALTEN);
     }
 
+    public function test_darf_fahrzeug_warten(): void
+    {
+        $m = new Benutzer(1, 10, 'a@b.de', 'A B', Rolle::Mitglied, false); // Benutzer 1, Person 10
+        $w = $this->benutzer(Rolle::Fahrzeugwart);
+        $b = $this->benutzer(Rolle::Bearbeiter);
+        $eigentum = ['eigentuemer_person_id' => '10', 'angelegt_von_benutzer_id' => 2];
+        $selbstAngelegt = ['eigentuemer_person_id' => null, 'angelegt_von_benutzer_id' => '1'];
+        $fremd = ['eigentuemer_person_id' => 11, 'angelegt_von_benutzer_id' => 2];
+        $verein = ['eigentuemer_person_id' => null, 'angelegt_von_benutzer_id' => null];
+        $this->assertTrue(Berechtigung::darfFahrzeugWarten($m, $eigentum));
+        $this->assertTrue(Berechtigung::darfFahrzeugWarten($m, $selbstAngelegt));
+        $this->assertFalse(Berechtigung::darfFahrzeugWarten($m, $fremd));
+        $this->assertFalse(Berechtigung::darfFahrzeugWarten($m, $verein));
+        $this->assertFalse(Berechtigung::darfFahrzeugWarten(null, $eigentum));
+        foreach ([$fremd, $verein, $eigentum] as $fz) {
+            $this->assertTrue(Berechtigung::darfFahrzeugWarten($w, $fz));
+            $this->assertTrue(Berechtigung::darfWartungEintragen($w, 'fahrzeug', $fz));
+        }
+        $this->assertTrue(Berechtigung::darfWartungEintragen($m, 'fahrzeug', $eigentum));
+        $this->assertFalse(Berechtigung::darfWartungEintragen($m, 'fahrzeug', $fremd));
+        $this->assertFalse(Berechtigung::darfWartungEintragen($w, 'anlage', ['id' => 1]));
+        $this->assertTrue(Berechtigung::darfWartungEintragen($b, 'anlage', ['id' => 1]));
+        $this->assertFalse(Berechtigung::darfWartungEintragen($b, 'sonstwas', ['id' => 1]));
+
+        $this->assertFalse(Berechtigung::darfWartungsplanAendern($m, 'fahrzeug'));
+        $this->assertTrue(Berechtigung::darfWartungsplanAendern($w, 'fahrzeug'));
+        $this->assertFalse(Berechtigung::darfWartungsplanAendern($w, 'anlage'));
+        $this->assertTrue(Berechtigung::darfWartungsplanAendern($b, 'anlage'));
+        $this->assertFalse(Berechtigung::darfWartungsplanAendern(null, 'fahrzeug'));
+        $this->assertFalse(Berechtigung::darfWartungsplanAendern($b, 'sonstwas'));
+    }
+
     public function test_unbekannte_aktion_ist_verboten(): void
     {
         $this->assertFalse(Berechtigung::darf($this->benutzer(Rolle::Admin), 'gibt_es_nicht'));

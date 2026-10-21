@@ -111,6 +111,26 @@ final class DateiOneDriveHttpTest extends OneDriveTestCase
         self::assertStringContainsString('/drives/D1/items/ROOT:/Anlagen/A3%20Clubanlage/foto_gedreht.jpg:/content', $this->http->anfragen[0]['url']);
     }
 
+    public function testWartungsfotoLandetImOrdnerWartungDesFahrzeugs(): void
+    {
+        $this->verbinde();
+        $this->http->antwort(201, ['id' => 'ITEM1', 'name' => 'foto_gedreht.jpg']);
+        $tmp = tempnam(sys_get_temp_dir(), 'up');
+        $this->temp[] = $tmp;
+        copy(dirname(__DIR__, 2) . '/fixtures/dateien/foto_gedreht.jpg', $tmp);
+        $datei = ['name' => ['foto_gedreht.jpg'], 'tmp_name' => [$tmp], 'error' => [UPLOAD_ERR_OK], 'size' => [filesize($tmp)]];
+        $art = (int) $this->pdo->query("SELECT id FROM wartungsart WHERE name = 'Kupplungen prüfen'")->fetchColumn();
+        $person = (int) $this->pdo->query('SELECT person_id FROM benutzer LIMIT 1')->fetchColumn();
+        $daten = ['_csrf' => str_repeat('a', 64), 'datum' => date('Y-m-d'), 'arten' => [(string) $art], 'ausgefuehrt_von' => (string) $person];
+        $r = $this->app()->handle(new Request('POST', "/fahrzeuge/{$this->fz}/wartungen", [], $daten, ['fotos' => $datei]));
+        self::assertSame(303, $r->status);
+        $d = $this->letztes();
+        self::assertSame('onedrive', $d['ablage']);
+        self::assertSame('Fahrzeuge/EMC-0001 V 200 060/Wartung/foto_gedreht.jpg', $d['onedrive_pfad']);
+        $wartung = (int) $this->pdo->query('SELECT id FROM wartung')->fetchColumn();
+        self::assertSame([['objekt_typ' => 'wartung', 'objekt_id' => $wartung]], (new \Emc\Dateien\DokumentRepository($this->pdo, $this->speicher))->zuordnungen((int) $d['id']));
+    }
+
     public function testUploadBeiServerfehlerBleibtLokalNutzbar(): void
     {
         $this->verbinde();

@@ -24,6 +24,7 @@ use Emc\Personen\BenutzerController;
 use Emc\Personen\KontoController;
 use Emc\Personen\PersonController;
 use Emc\Stammdaten\SpurweiteController;
+use Emc\Wartung\WartungController;
 use Emc\Wartung\WartungsartController;
 
 /**
@@ -71,6 +72,14 @@ return function (Router $router, App $app): void {
     $router->add('GET', '/anlagen/{id}/bearbeiten', $app->erfordert('anlage_bearbeiten', $anl('bearbeiten')));
     $router->add('POST', '/anlagen/{id}', $app->erfordert('anlage_bearbeiten', $anl('aendern')));
     $router->add('POST', '/anlagen/{id}/loeschen', $app->erfordert('anlage_bearbeiten', $anl('loeschen')));
+
+    // Wartung: Recht am konkreten Objekt prüft der Controller (403).
+    $wtg = fn(string $m) => fn(Request $r, array $p = []) => $c->get(WartungController::class)->$m($r, $p);
+    $router->add('POST', '/fahrzeuge/{id}/wartungen', $app->erfordert('lesen', $wtg('eintragenFahrzeug')));
+    $router->add('POST', '/anlagen/{id}/wartungen', $app->erfordert('lesen', $wtg('eintragenAnlage')));
+    $router->add('POST', '/wartungen/{id}/loeschen', $app->erfordert('lesen', $wtg('loeschen')));
+    $router->add('POST', '/fahrzeuge/{id}/wartungsplan', $app->erfordert('lesen', $wtg('planFahrzeug')));
+    $router->add('POST', '/anlagen/{id}/wartungsplan', $app->erfordert('lesen', $wtg('planAnlage')));
 
     $dec = fn(string $m) => fn(Request $r, array $p = []) => $c->get(DecoderController::class)->$m($r, $p);
     $router->add('POST', '/fahrzeuge/{id}/decoder', $app->erfordert('lesen', $dec('anlegen')));

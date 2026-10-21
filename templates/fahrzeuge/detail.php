@@ -46,7 +46,13 @@ $abgestellt = $fz['status'] === 'ausgemustert';
 <?php endif; ?>
 
 <ul class="nav nav-tabs" id="fahrzeug-tabs" role="tablist">
-    <?php foreach (['uebersicht' => 'Übersicht', 'digital' => 'Digital', 'dateien' => 'Dateien', 'verlauf' => 'Verlauf'] as $schluessel => $beschriftung): ?>
+    <?php
+    $tabs = ['uebersicht' => 'Übersicht', 'digital' => 'Digital', 'dateien' => 'Dateien'];
+    if (($wartung ?? null) !== null) {
+        $tabs['wartung'] = 'Wartung'; // fehlt nur, solange das Datenbank-Update aussteht
+    }
+    $tabs['verlauf'] = 'Verlauf';
+    foreach ($tabs as $schluessel => $beschriftung): ?>
         <li class="nav-item" role="presentation">
             <button class="nav-link<?= $schluessel === 'uebersicht' ? ' active' : '' ?>" id="tab-<?= e($schluessel) ?>" type="button" role="tab"
                     data-bs-toggle="tab" data-bs-target="#pane-<?= e($schluessel) ?>" aria-controls="pane-<?= e($schluessel) ?>"
@@ -64,6 +70,11 @@ $abgestellt = $fz['status'] === 'ausgemustert';
     <div class="tab-pane fade" id="pane-dateien" role="tabpanel" aria-labelledby="tab-dateien" tabindex="0">
         <?php include __DIR__ . '/tab_dateien.php'; ?>
     </div>
+    <?php if (($wartung ?? null) !== null): ?>
+    <div class="tab-pane fade" id="pane-wartung" role="tabpanel" aria-labelledby="tab-wartung" tabindex="0">
+        <?php $block = $wartung; include dirname(__DIR__) . '/wartung/_block.php'; ?>
+    </div>
+    <?php endif; ?>
     <div class="tab-pane fade" id="pane-verlauf" role="tabpanel" aria-labelledby="tab-verlauf" tabindex="0">
         <?php include __DIR__ . '/tab_verlauf.php'; ?>
     </div>

@@ -44,5 +44,12 @@ $zeile = function (string $label, ?string $wert): void { ?>
     ?>
 </section>
 
+<?php if (($wartung ?? null) !== null): ?>
+<section id="wartung" class="mt-4" aria-labelledby="wartung-titel">
+    <h2 class="h4" id="wartung-titel">Wartung</h2>
+    <?php $block = $wartung; include dirname(__DIR__) . '/wartung/_block.php'; ?>
+</section>
+<?php endif; ?>
+
 <?php include dirname(__DIR__) . '/partials/verlauf.php'; ?>
 <p class="mt-3"><a href="<?= e(url('/anlagen')) ?>">&larr; Zurück zur Liste</a></p>

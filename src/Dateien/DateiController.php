@@ -276,7 +276,7 @@ final class DateiController
      *
      * @return list<array<string,mixed>>
      */
-    private static function normalisiere(mixed $f): array
+    public static function normalisiere(mixed $f): array
     {
         if (!is_array($f) || !isset($f['error'])) {
             return [];

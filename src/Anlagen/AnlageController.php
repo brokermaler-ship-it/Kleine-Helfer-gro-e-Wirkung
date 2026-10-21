@@ -15,6 +15,7 @@ use Emc\Fahrzeuge\KonfliktFehler;
 use Emc\OneDrive\Uebertragung;
 use Emc\Protokoll\Aenderungsprotokoll;
 use Emc\Stammdaten\SpurweiteRepository;
+use Emc\Wartung\WartungDienst;
 
 /**
  * Einfache Anlagenliste: lesen für alle Angemeldeten, anlegen/ändern/löschen ab Bearbeiter
@@ -34,6 +35,7 @@ final class AnlageController
         private Session $session,
         private bool $onedriveKonfiguriert = false,
         private ?Uebertragung $uebertragung = null,
+        private ?WartungDienst $wartung = null,
     ) {
     }
 
@@ -59,6 +61,7 @@ final class AnlageController
             'verlauf' => $this->protokoll->fuerObjekt('anlage', (int) $anlage['id']),
             'dateien' => $this->dokumente->fuerObjekt('anlage', (int) $anlage['id']),
             'onedriveKonfiguriert' => $this->onedriveKonfiguriert,
+            'wartung' => $this->wartung?->blockDaten('anlage', $anlage, $this->auth->benutzer()),
         ]);
     }
 
@@ -113,6 +116,7 @@ final class AnlageController
     {
         $anlage = $this->lade($p);
         $id = (int) $anlage['id'];
+        $this->wartung?->entferneFuerObjekt('anlage', $id);
         $this->dokumente->entferneVonObjekt('anlage', $id);
         $this->anlagen->loeschen($id);
         // Lösch-Aufträge für die OneDrive-Dateien gleich nebenbei ausführen (ohne Cronjob sonst erst später).

@@ -254,8 +254,28 @@ final class Uebertragung
         if ($basis === null || !is_file($basis)) {
             throw new \RuntimeException('Die lokale Datei fehlt.');
         }
+        $fahrzeugIds = $this->dokumente->objekte($dokumentId, 'fahrzeug');
+        $anlageIds = $this->dokumente->objekte($dokumentId, 'anlage');
+        $wartung = false;
+        if ($fahrzeugIds === [] && $anlageIds === []) {
+            // Foto einer Wartung: landet im Ordner des gewarteten Objekts (Unterordner „Wartung“).
+            foreach ($this->dokumente->objekte($dokumentId, 'wartung') as $wartungId) {
+                $st = $this->pdo->prepare('SELECT objekt_typ, objekt_id FROM wartung WHERE id = ?');
+                $st->execute([$wartungId]);
+                $w = $st->fetch(\PDO::FETCH_ASSOC);
+                if ($w !== false) {
+                    $wartung = true;
+                    if ($w['objekt_typ'] === 'fahrzeug') {
+                        $fahrzeugIds = [(int) $w['objekt_id']];
+                    } else {
+                        $anlageIds = [(int) $w['objekt_id']];
+                    }
+                }
+                break;
+            }
+        }
         $fahrzeug = null;
-        foreach ($this->dokumente->objekte($dokumentId, 'fahrzeug') as $fzId) {
+        foreach ($fahrzeugIds as $fzId) {
             $st = $this->pdo->prepare('SELECT inventarnummer, bezeichnung FROM fahrzeug WHERE id = ?');
             $st->execute([$fzId]);
             $fahrzeug = $st->fetch(\PDO::FETCH_ASSOC) ?: null;
@@ -263,14 +283,14 @@ final class Uebertragung
         }
         $anlage = null;
         if ($fahrzeug === null) {
-            foreach ($this->dokumente->objekte($dokumentId, 'anlage') as $anlageId) {
+            foreach ($anlageIds as $anlageId) {
                 $st = $this->pdo->prepare('SELECT nummer, name FROM anlage WHERE id = ?');
                 $st->execute([$anlageId]);
                 $anlage = $st->fetch(\PDO::FETCH_ASSOC) ?: null;
                 break;
             }
         }
-        $e = $this->graph->hochladen($ziel['drive_id'], $ziel['item_id'], Pfadbildner::fuerDokument($dok, $fahrzeug, $anlage), $basis);
+        $e = $this->graph->hochladen($ziel['drive_id'], $ziel['item_id'], Pfadbildner::fuerDokument($dok, $fahrzeug, $anlage, $wartung), $basis);
 
         // Erst vermerken, dann das Original entfernen: bricht etwas dazwischen ab, bleibt die Datei erreichbar.
         $st = $this->pdo->prepare("UPDATE dokument SET ablage = 'onedrive', onedrive_item_id = ?, onedrive_drive_id = ?, onedrive_pfad = ?, original_lokal = 1 WHERE id = ? AND ablage = 'lokal'");

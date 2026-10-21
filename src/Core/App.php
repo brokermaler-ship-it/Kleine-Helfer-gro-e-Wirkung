@@ -53,6 +53,10 @@ use Emc\Personen\PersonController;
 use Emc\Personen\PersonRepository;
 use Emc\Stammdaten\SpurweiteController;
 use Emc\Stammdaten\SpurweiteRepository;
+use Emc\Wartung\AusnahmeRepository;
+use Emc\Wartung\WartungController;
+use Emc\Wartung\WartungDienst;
+use Emc\Wartung\WartungRepository;
 use Emc\Wartung\WartungsartController;
 use Emc\Wartung\WartungsartRepository;
 use Emc\Protokoll\Aenderungsprotokoll;
@@ -211,6 +215,32 @@ final class App
             $c->get(Auth::class),
             $c->get('session')
         ));
+        $this->container->set(WartungRepository::class, fn(Container $c) => new WartungRepository($c->get('pdo')));
+        $this->container->set(AusnahmeRepository::class, fn(Container $c) => new AusnahmeRepository($c->get('pdo')));
+        $this->container->set(WartungDienst::class, fn(Container $c) => new WartungDienst(
+            $c->get('pdo'),
+            $c->get(WartungRepository::class),
+            $c->get(AusnahmeRepository::class),
+            $c->get(WartungsartRepository::class),
+            $c->get(PersonRepository::class),
+            $c->get(DokumentRepository::class)
+        ));
+        $this->container->set(WartungController::class, fn(Container $c) => new WartungController(
+            $this->view,
+            $c->get('pdo'),
+            $c->get(WartungDienst::class),
+            $c->get(WartungRepository::class),
+            $c->get(AusnahmeRepository::class),
+            $c->get(FahrzeugRepository::class),
+            $c->get(AnlageRepository::class),
+            $c->get(PersonRepository::class),
+            $c->get(DokumentRepository::class),
+            $c->get(UploadService::class),
+            $c->get(Aenderungsprotokoll::class),
+            $c->get(Auth::class),
+            $c->get('session'),
+            $c->get(Uebertragung::class)
+        ));
         $this->container->set(FahrzeugRepository::class, fn(Container $c) => new FahrzeugRepository($c->get('pdo')));
         $this->container->set(FahrzeugController::class, fn(Container $c) => new FahrzeugController(
             $this->view,
@@ -224,7 +254,8 @@ final class App
             $c->get(Adresspruefung::class),
             $c->get(DokumentRepository::class),
             Uebertragung::konfiguriert($this->config),
-            $c->get(Uebertragung::class)
+            $c->get(Uebertragung::class),
+            $c->get(WartungDienst::class)
         ));
         $this->container->set(AnlageRepository::class, fn(Container $c) => new AnlageRepository($c->get('pdo')));
         $this->container->set(AnlageController::class, fn(Container $c) => new AnlageController(
@@ -236,7 +267,8 @@ final class App
             $c->get(Auth::class),
             $c->get('session'),
             Uebertragung::konfiguriert($this->config),
-            $c->get(Uebertragung::class)
+            $c->get(Uebertragung::class),
+            $c->get(WartungDienst::class)
         ));
         $this->container->set(DecoderRepository::class, fn(Container $c) => new DecoderRepository($c->get('pdo')));
         $this->container->set(Adresspruefung::class, fn(Container $c) => new Adresspruefung($c->get('pdo')));
