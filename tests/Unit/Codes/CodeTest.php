@@ -45,7 +45,10 @@ final class CodeTest extends TestCase
     {
         $this->assertSame(3, Code::istAdresse('0003'));
         $this->assertSame(3, Code::istAdresse(' 3 '));
-        $this->assertSame(0, Code::istAdresse('0'));
+        // 0 ist keine Digitaladresse (Platzhalter in alten Daten): die Eingabe geht in die Textsuche.
+        $this->assertNull(Code::istAdresse('0'));
+        $this->assertNull(Code::istAdresse('000000'));
+        $this->assertSame(10, Code::istAdresse('010'));
         $this->assertSame(123456, Code::istAdresse('123456'));
         $this->assertNull(Code::istAdresse('1234567'));
         $this->assertNull(Code::istAdresse('F3'));

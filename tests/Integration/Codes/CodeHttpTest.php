@@ -92,6 +92,23 @@ final class CodeHttpTest extends DbTestCase
         $this->assertStringContainsString('F1', $r->body);
         $this->assertStringContainsString('href="/fahrzeuge/' . $b . '"', $r->body);
         $this->assertSame(1, substr_count($r->body, '>Abstellgleis</span>'));
+        $this->assertStringContainsString('DCC 3', $r->body);
+    }
+
+    public function test_viele_treffer_verweisen_auf_die_listen(): void
+    {
+        for ($i = 1; $i <= 51; $i++) {
+            $this->fahrzeug(sprintf('EMC-%04d', $i), 'Güterwagen ' . $i);
+            $this->anlage($i, 'Güterbahnhof ' . $i);
+        }
+        $this->anmelden();
+        $r = $this->get('/code', ['q' => 'Güter']);
+        $this->assertSame(200, $r->status);
+        $this->assertStringContainsString('Es werden nur die ersten 50 Fahrzeuge gezeigt.', $r->body);
+        $this->assertStringContainsString('href="/fahrzeuge?q=G%C3%BCter"', $r->body);
+        $this->assertStringContainsString('Es werden nur die ersten 50 Anlagen gezeigt.', $r->body);
+        $this->assertStringContainsString('href="/anlagen?q=G%C3%BCter"', $r->body);
+        $this->assertStringNotContainsString('Güterwagen 51<', $r->body);
     }
 
     public function test_unbekannter_code_zeigt_meldung(): void

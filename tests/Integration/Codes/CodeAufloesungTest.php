@@ -83,6 +83,37 @@ final class CodeAufloesungTest extends DbTestCase
         $this->assertSame('H0', $e->fahrzeuge[0]['spurweite_name']);
         $this->assertArrayHasKey('titelbild_dokument_id', $e->fahrzeuge[0]);
         $this->assertSame('ausgemustert', $e->fahrzeuge[1]['status']);
+        // Protokolle der passenden Decoder, damit DCC 3 und Motorola 3 unterscheidbar sind.
+        $this->assertSame('dcc', $e->fahrzeuge[0]['adress_protokolle']);
+        $this->assertSame('dcc,motorola', $e->fahrzeuge[1]['adress_protokolle']);
+    }
+
+    public function test_adresse_null_ist_text(): void
+    {
+        $fz = $this->fahrzeug('EMC-0001', 'Platzhalter 0');
+        $this->decoder($fz, 0);
+        $this->decoder($this->fahrzeug('EMC-0002', 'Noch ein Platzhalter'), 0);
+        foreach (['0', '000'] as $eingabe) {
+            $e = $this->aufloesung->loese($eingabe);
+            $this->assertSame('suche', $e->art, $eingabe);
+            $this->assertNull($e->ziel, $eingabe);
+        }
+    }
+
+    public function test_textsuche_hoechstens_50_je_art(): void
+    {
+        for ($i = 1; $i <= 51; $i++) {
+            $this->fahrzeug(sprintf('EMC-%04d', $i), 'Güterwagen ' . $i);
+            $this->anlage($i, 'Güterbahnhof ' . $i);
+        }
+        $e = $this->aufloesung->loese('Güter');
+        $this->assertCount(CodeAufloesung::MAX_TREFFER, $e->fahrzeuge);
+        $this->assertCount(CodeAufloesung::MAX_TREFFER, $e->anlagen);
+        $this->assertTrue($e->weitereFahrzeuge);
+        $this->assertTrue($e->weitereAnlagen);
+        $e = $this->aufloesung->loese('Güterwagen 5');
+        $this->assertFalse($e->weitereFahrzeuge);
+        $this->assertFalse($e->weitereAnlagen);
     }
 
     public function test_adresse_ein_treffer_auch_ausgemustert_direkt(): void

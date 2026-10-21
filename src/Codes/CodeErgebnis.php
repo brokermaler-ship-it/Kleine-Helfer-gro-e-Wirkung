@@ -17,6 +17,7 @@ final class CodeErgebnis
      * @param ?string $ziel Pfad ohne Basis-URL (nur bei direkt), z. B. /fahrzeuge/5
      * @param list<array<string,mixed>> $fahrzeuge
      * @param list<array<string,mixed>> $anlagen
+     * @param bool $weitereFahrzeuge bzw. $weitereAnlagen: die Suche fand mehr als CodeAufloesung::MAX_TREFFER
      */
     public function __construct(
         public readonly string $art,
@@ -24,6 +25,8 @@ final class CodeErgebnis
         public readonly array $fahrzeuge = [],
         public readonly array $anlagen = [],
         public readonly ?string $meldung = null,
+        public readonly bool $weitereFahrzeuge = false,
+        public readonly bool $weitereAnlagen = false,
     ) {
     }
 }

@@ -11,7 +11,7 @@ use Emc\Auth\Berechtigung;
     <div class="container">
         <a class="navbar-brand d-flex align-items-center gap-2" href="<?= e(url('/')) ?>" aria-label="<?= e($app_name ?? '') ?>">
             <span class="navbar-logo"><img src="<?= e(url('assets/marke/logo-128.png')) ?>" alt="" width="36" height="36"></span>
-            <span>Lokschuppen</span>
+            <span<?= $benutzer !== null ? ' class="d-none d-sm-inline"' : '' ?>>Lokschuppen</span>
         </a>
         <?php if ($benutzer !== null): ?>
         <form method="get" action="<?= e(url('/code')) ?>" role="search" class="emc-codefeld d-flex ms-auto me-2 order-lg-last ms-lg-3 me-lg-0">

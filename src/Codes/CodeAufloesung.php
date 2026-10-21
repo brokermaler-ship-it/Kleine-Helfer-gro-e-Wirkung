@@ -13,6 +13,8 @@ final class CodeAufloesung
 {
     public const NICHT_GEFUNDEN = 'Kein Fahrzeug und keine Anlage mit diesem Code.';
     public const NICHTS = 'Nichts gefunden.';
+    /** Höchstens so viele Fahrzeuge bzw. Anlagen zeigt die Suche; den Rest findet die Fahrzeug- bzw. Anlagenliste. */
+    public const MAX_TREFFER = 50;
 
     public function __construct(private FahrzeugRepository $fahrzeuge, private AnlageRepository $anlagen)
     {
@@ -56,11 +58,20 @@ final class CodeAufloesung
 
     private function suche(string $text, ?string $meldung): CodeErgebnis
     {
+        // Bei Vereinsgröße genügt es, die Liste in PHP zu kürzen (die Abfragen liefern Fotos und Adressen gleich mit).
         $fahrzeuge = $this->fahrzeuge->suche(new FahrzeugFilter(text: $text));
         $anlagen = $this->anlagen->alle(null, $text);
         if ($meldung === null && $fahrzeuge === [] && $anlagen === []) {
             $meldung = self::NICHTS;
         }
-        return new CodeErgebnis(CodeErgebnis::SUCHE, null, $fahrzeuge, $anlagen, $meldung);
+        return new CodeErgebnis(
+            CodeErgebnis::SUCHE,
+            null,
+            array_slice($fahrzeuge, 0, self::MAX_TREFFER),
+            array_slice($anlagen, 0, self::MAX_TREFFER),
+            $meldung,
+            count($fahrzeuge) > self::MAX_TREFFER,
+            count($anlagen) > self::MAX_TREFFER,
+        );
     }
 }

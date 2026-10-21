@@ -122,6 +122,22 @@ final class VorMigrationTest extends DbTestCase
         self::assertSame(200, $app->handle(new \Emc\Core\Request('GET', '/fahrzeuge'))->status);
     }
 
+    /** Vor Migration 011 führen Feld „Code“ und Kurzlink (suchen auch Anlagen) Administratoren zum Update. */
+    public function test_code_und_kurzlink_vor_migration_011(): void
+    {
+        $id = $this->legeBenutzerAn('admin@verein.de', 'geheim-passwort-1', 'admin');
+        $this->dokumentMitFahrzeug();
+        $this->stand010();
+        $sitzung = ['_csrf' => str_repeat('a', 64)];
+        $this->sitzungAnmelden($sitzung, $id);
+        $app = \Emc\Core\App::erzeuge(self::testConfig(), new \Emc\Core\Session($sitzung));
+        foreach ([['/code', ['q' => 'F1']], ['/code', ['q' => 'V 200']], ['/c/A1', []], ['/c/F1', []]] as [$pfad, $query]) {
+            $r = $app->handle(new \Emc\Core\Request('GET', $pfad, $query));
+            self::assertSame(303, $r->status, $pfad);
+            self::assertSame('/admin/update', $r->headers['Location'], $pfad);
+        }
+    }
+
     /** Vor Migration 012 führt die Wartungsarten-Seite Administratoren zum Update statt zu einem Fehler 500. */
     public function test_wartungsarten_vor_migration_012(): void
     {

@@ -34,10 +34,13 @@ final class Code
         return ['typ' => $m[1] === 'F' ? 'fahrzeug' : 'anlage', 'nummer' => (int) $m[2]];
     }
 
-    /** Reine Zahl (höchstens sechs Ziffern, führende Nullen egal) als Digitaladresse; sonst null. */
+    /**
+     * Reine Zahl (höchstens sechs Ziffern, führende Nullen egal) als Digitaladresse; sonst null. 0 ist keine Adresse
+     * (in alten Daten ein Platzhalter) und geht wie anderer Text in die Suche.
+     */
     public static function istAdresse(string $eingabe): ?int
     {
         $n = self::normalisiere($eingabe);
-        return preg_match('/^[0-9]{1,6}$/', $n) === 1 ? (int) $n : null;
+        return preg_match('/^(?=[0-9]{1,6}$)0*[1-9][0-9]*$/', $n) === 1 ? (int) $n : null;
     }
 }

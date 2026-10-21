@@ -146,16 +146,20 @@ final class FahrzeugRepository
     /**
      * Verschiedene Fahrzeuge mit einem Decoder dieser Adresse (alle Protokolle, auch ausgemusterte), nach Inventarnummer.
      *
-     * @return list<array<string,mixed>> mit spurweite_name, titelbild_dokument_id, bezeichnung, status, inventarnummer
+     * @return list<array<string,mixed>> mit spurweite_name, titelbild_dokument_id, bezeichnung, status, inventarnummer und
+     *         adress_protokolle (Protokolle der Decoder mit dieser Adresse, z. B. „dcc,motorola“)
      */
     public function nachAdresse(int $adresse): array
     {
         $st = $this->pdo->prepare(
-            'SELECT f.*, s.name AS spurweite_name FROM fahrzeug f JOIN spurweite s ON s.id = f.spurweite_id '
+            'SELECT f.*, s.name AS spurweite_name, '
+            . "(SELECT GROUP_CONCAT(DISTINCT d2.protokoll ORDER BY d2.protokoll SEPARATOR ',') FROM decoder d2 "
+            . 'WHERE d2.fahrzeug_id = f.id AND d2.adresse = ?) AS adress_protokolle '
+            . 'FROM fahrzeug f JOIN spurweite s ON s.id = f.spurweite_id '
             . 'WHERE EXISTS (SELECT 1 FROM decoder d WHERE d.fahrzeug_id = f.id AND d.adresse = ?) '
             . 'ORDER BY f.inventarnummer, f.id'
         );
-        $st->execute([$adresse]);
+        $st->execute([$adresse, $adresse]);
         return $st->fetchAll(\PDO::FETCH_ASSOC);
     }
 

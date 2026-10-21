@@ -8,6 +8,7 @@
  * @var string $zusatz an jeden Link gehängt (z. B. „/defekt“)
  */
 use Emc\Codes\Code;
+use Emc\Codes\CodeAufloesung;
 use Emc\Codes\CodeErgebnis;
 
 include dirname(__DIR__) . '/fahrzeuge/_labels.php';
@@ -44,12 +45,22 @@ $auswahl = $ergebnis->art === CodeErgebnis::AUSWAHL;
                     </div>
                     <div class="small text-muted">
                         <?= $code !== null ? e((string) $fz['inventarnummer']) . ' · ' : '' ?><?= e((string) $fz['spurweite_name']) ?>
+                        <?php if ($auswahl && ($fz['adress_protokolle'] ?? null) !== null): ?>
+                            · <?= e(implode(', ', array_map(
+                                fn(string $p): string => (\Emc\Digital\Protokoll::tryFrom($p)?->label() ?? $p) . ' ' . (int) $adresse,
+                                explode(',', (string) $fz['adress_protokolle'])
+                            ))) ?>
+                        <?php endif; ?>
                     </div>
                 </div>
                 <div><?= $statusBadge($fz) ?></div>
             </a>
         <?php endforeach; ?>
     </div>
+    <?php if ($ergebnis->weitereFahrzeuge): ?>
+        <p class="small mb-4">Es werden nur die ersten <?= CodeAufloesung::MAX_TREFFER ?> Fahrzeuge gezeigt.
+            <a href="<?= e(url('/fahrzeuge', ['q' => $q])) ?>">Alle in der Fahrzeugliste</a></p>
+    <?php endif; ?>
 <?php endif; ?>
 
 <?php if ($ergebnis->anlagen !== []): ?>
@@ -66,4 +77,8 @@ $auswahl = $ergebnis->art === CodeErgebnis::AUSWAHL;
             </a>
         <?php endforeach; ?>
     </div>
+    <?php if ($ergebnis->weitereAnlagen): ?>
+        <p class="small mb-4">Es werden nur die ersten <?= CodeAufloesung::MAX_TREFFER ?> Anlagen gezeigt.
+            <a href="<?= e(url('/anlagen', ['q' => $q])) ?>">Alle in der Anlagenliste</a></p>
+    <?php endif; ?>
 <?php endif; ?>
