@@ -18,13 +18,14 @@ final class AbrechnungRepository
     /**
      * Positionen der nicht stornierten Verkäufe dieser Börse, mit zahlart des Verkaufs und Name der Person.
      *
-     * @return list<array{preis:string, provision:string, herkunft:string, person_id:?int, person_name:?string, erloes_spende:bool, zahlart:string}>
+     * @return list<array{preis:string, provision:string, herkunft:string, person_id:?int, person_name:?string, erloes_spende:bool, zahlart:string, person_sortname:?string}>
      */
     public function positionen(int $boerseId): array
     {
         $st = $this->pdo->prepare(
             "SELECT p.preis, p.provision, p.herkunft, p.person_id, p.erloes_spende, v.zahlart, "
-            . "NULLIF(TRIM(CONCAT(COALESCE(pe.vorname, ''), ' ', COALESCE(pe.nachname, ''))), '') AS person_name "
+            . "NULLIF(TRIM(CONCAT(COALESCE(pe.vorname, ''), ' ', COALESCE(pe.nachname, ''))), '') AS person_name, "
+            . "NULLIF(TRIM(CONCAT(COALESCE(pe.nachname, ''), ' ', COALESCE(pe.vorname, ''))), '') AS person_sortname "
             . 'FROM boerse_verkauf_position p JOIN boerse_verkauf v ON v.id = p.verkauf_id LEFT JOIN person pe ON pe.id = p.person_id '
             . 'WHERE v.boerse_id = ? AND v.storniert_am IS NULL ORDER BY p.id'
         );
@@ -37,7 +38,16 @@ final class AbrechnungRepository
             'person_name' => $z['person_name'] === null ? null : (string) $z['person_name'],
             'erloes_spende' => (int) $z['erloes_spende'] === 1,
             'zahlart' => (string) $z['zahlart'],
+            'person_sortname' => $z['person_sortname'] === null ? null : (string) $z['person_sortname'],
         ], $st->fetchAll(\PDO::FETCH_ASSOC));
+    }
+
+    /** Summe der Verkaufsköpfe (boerse_verkauf.summe) der nicht stornierten Verkäufe dieser Börse in Cent (Gegenprobe). */
+    public function summeVerkaeufe(int $boerseId): int
+    {
+        $st = $this->pdo->prepare('SELECT COALESCE(SUM(summe), 0) FROM boerse_verkauf WHERE boerse_id = ? AND storniert_am IS NULL');
+        $st->execute([$boerseId]);
+        return Geld::cent((string) $st->fetchColumn());
     }
 
     /**

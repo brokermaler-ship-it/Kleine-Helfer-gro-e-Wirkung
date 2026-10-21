@@ -205,6 +205,22 @@ final class Uebertragung
     }
 
     /**
+     * Merkt ein vorhandenes lokales Dokument zum Hochladen vor, ohne es sofort zu übertragen (z. B. beim Aufräumen
+     * während eines öffentlichen Seitenaufrufs). Nur, wenn ein Zielordner gewählt ist und kein Auftrag wartet.
+     */
+    public function vormerken(int $dokumentId): void
+    {
+        if (!$this->bereit()) {
+            return;
+        }
+        $st = $this->pdo->prepare("SELECT 1 FROM onedrive_auftrag WHERE dokument_id = ? AND art = 'hochladen' AND status = 'wartet' LIMIT 1");
+        $st->execute([$dokumentId]);
+        if ($st->fetchColumn() === false) {
+            $this->auftraege->neu('hochladen', $dokumentId, null);
+        }
+    }
+
+    /**
      * Nach dem Löschen (Datei oder Fahrzeug): zuerst Lösch-Aufträge, dann weitere fällige Aufträge, alles im
      * Zeitbudget. Fehler bleiben unsichtbar (nur Log), die Aufträge werden später wiederholt.
      */
@@ -273,9 +289,10 @@ final class Uebertragung
         if ($dok === null || $dok['ablage'] === 'onedrive') {
             return;
         }
-        // Fotos aus öffentlichen Börsenanfragen gehen nie nach OneDrive (auch nicht, wenn sie inzwischen zusätzlich an
-        // einem Magazinartikel hängen); sie bleiben lokal und werden mit der Anfrage gelöscht. Vor der Dateiprüfung:
-        // eine fehlende Datei einer Anfrage ist kein Fehler des Auftrags.
+        // Fotos aus öffentlichen Börsenanfragen gehen nie nach OneDrive, solange sie der Anfrage zugeordnet sind (auch
+        // wenn sie inzwischen zusätzlich an einem Magazinartikel hängen). Nur der Anfrage zugeordnete werden mit ihr
+        // gelöscht; geteilte bleiben am Artikel und werden beim Löschen der Anfrage zum Hochladen vorgemerkt
+        // (AnfrageDienst). Vor der Dateiprüfung: eine fehlende Datei einer Anfrage ist kein Fehler des Auftrags.
         if ($this->dokumente->objekte($dokumentId, 'boerse_anfrage') !== []) {
             return;
         }

@@ -24,6 +24,7 @@ final class BoerseDienst
     public const SCHON_VERMERKT = 'Für dieses Mitglied ist schon eine Auszahlung vermerkt.';
     public const KEINE_AUSZAHLUNG = 'Für dieses Mitglied ist keine Auszahlung vermerkt.';
     public const DATUM_UNGUELTIG = 'Bitte ein gültiges Datum für die Auszahlung angeben.';
+    public const DATUM_ZUKUNFT = 'Das Auszahlungsdatum darf nicht in der Zukunft liegen.';
 
     public function __construct(
         private \PDO $pdo,
@@ -125,7 +126,7 @@ final class BoerseDienst
                 $this->angebote->setzeStatus($id, 'zurueck');
                 $this->protokoll->schreibe($benutzerId, AngebotDienst::OBJEKT, $id, 'geaendert', [
                     'status' => ['alt' => $a['status'], 'neu' => 'zurueck'],
-                    'boerse' => ['alt' => null, 'neu' => 'Börse abgeschlossen'],
+                    'grund' => ['alt' => null, 'neu' => 'Börse abgeschlossen'],
                 ]);
                 $anzahl++;
             }
@@ -161,12 +162,15 @@ final class BoerseDienst
      * der Börse – ein gleichzeitiger Verkauf oder ein Storno ist dann entweder ganz enthalten oder wartet. Auch nach dem
      * Abschluss erlaubt (Dokumentation der Auszahlung). Das Protokoll der Börse nennt nur die Personen-id, keinen Namen.
      *
-     * @param string $datum Y-m-d
-     * @throws DomainFehler unbekannt, Datum, nichts auszuzahlen, schon vermerkt, Sperrkonflikt
+     * @param string $datum Y-m-d, höchstens heute (App-Zeitzone, aus $jetzt)
+     * @throws DomainFehler unbekannt, Datum, Datum in der Zukunft, nichts auszuzahlen, schon vermerkt, Sperrkonflikt
      */
-    public function vermerkeAuszahlung(int $boerseId, int $personId, string $datum, ?int $benutzerId): void
+    public function vermerkeAuszahlung(int $boerseId, int $personId, string $datum, ?int $benutzerId, \DateTimeImmutable $jetzt): void
     {
         $datum = self::datum($datum) ?? throw new DomainFehler(self::DATUM_UNGUELTIG);
+        if ($datum > $jetzt->setTimezone(new \DateTimeZone(date_default_timezone_get()))->format('Y-m-d')) {
+            throw new DomainFehler(self::DATUM_ZUKUNFT);
+        }
         Transaktion::readCommitted($this->pdo, function () use ($boerseId, $personId, $datum, $benutzerId): void {
             $this->boersen->sperre($boerseId) ?? throw new DomainFehler(self::NICHT_GEFUNDEN);
             if ($this->abrechnung->auszahlungVermerkt($boerseId, $personId)) {

@@ -11,6 +11,7 @@ use Emc\Core\HttpFehler;
 use Emc\Core\Request;
 use Emc\Core\Response;
 use Emc\Core\Session;
+use Emc\Core\Transaktion;
 use Emc\Core\View;
 use Emc\Dateien\DokumentRepository;
 use Emc\Digital\Adresspruefung;
@@ -267,6 +268,9 @@ final class FahrzeugController
         if ($imMagazin !== null && $daten['status'] !== 'ausgemustert' && !isset($fehler['status'])) {
             $fehler['status'] = 'Das Fahrzeug wurde ans Magazin übergeben (' . $imMagazin['code'] . ') und bleibt auf dem Abstellgleis.';
         }
+        if ($imMagazin !== null && $daten['eigentuemer_person_id'] !== null && !isset($fehler['eigentuemer_person_id'])) {
+            $fehler['eigentuemer_person_id'] = 'Das Fahrzeug wurde ans Magazin übergeben (' . $imMagazin['code'] . ') und bleibt Eigentum des Vereins.';
+        }
         if ($fehler !== []) {
             return $this->formular($this->anzeigeWerte($daten, $r), $fehler, $fz, 422, null, $stand);
         }
@@ -292,12 +296,22 @@ final class FahrzeugController
         $id = (int) $fz['id'];
         // Unter der Sperre des Fahrzeugs: eine gleichzeitige Defektmeldung wird mitgelöscht oder bekommt 404.
         $dienst = $this->reparatur ?? throw new \LogicException('FahrzeugController braucht den ReparaturDienst zum Löschen.');
-        $geloescht = $dienst->loescheObjekt('fahrzeug', $id, function () use ($id): array {
-            $pfade = $this->wartung?->entferneFuerObjektInTransaktion('fahrzeug', $id) ?? [];
-            array_push($pfade, ...$this->dokumente->loeseVonObjekt('fahrzeug', $id));
-            $this->fahrzeuge->loeschen($id); // Decoder, Funktionen, CVs per CASCADE
-            return $pfade;
-        });
+        try {
+            $geloescht = $dienst->loescheObjekt('fahrzeug', $id, function () use ($id): array {
+                $pfade = $this->wartung?->entferneFuerObjektInTransaktion('fahrzeug', $id) ?? [];
+                array_push($pfade, ...$this->dokumente->loeseVonObjekt('fahrzeug', $id));
+                $this->fahrzeuge->loeschen($id); // Decoder, Funktionen, CVs per CASCADE
+                return $pfade;
+            });
+        } catch (\Throwable $t) {
+            if (!Transaktion::istSperrkonflikt($t)) {
+                throw $t;
+            }
+            // Verklemmung (z. B. zwei Löschungen mit geteiltem Dokument) oder Wartezeit überschritten: zurückgerollt,
+            // nichts gelöscht.
+            $this->session->meldung('fehler', 'Das Fahrzeug konnte gerade nicht gelöscht werden. Bitte erneut versuchen.');
+            return Response::redirect(url('/fahrzeuge/' . $id));
+        }
         if (!$geloescht) {
             throw new HttpFehler(404); // zwischenzeitlich gelöscht
         }

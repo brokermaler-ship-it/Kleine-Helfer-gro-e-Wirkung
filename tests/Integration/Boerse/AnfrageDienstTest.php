@@ -305,4 +305,50 @@ final class AnfrageDienstTest extends DbTestCase
         $this->expectExceptionMessage(AnfrageDienst::NUR_SAMMLUNG);
         $this->dienst->uebernimmInsMagazin($kaufId, $artikel, ['menge' => 1] + $eingang, null);
     }
+
+    /** Automatische Löschung nach einer echten Übernahme: der Artikel behält Fotos, Titelbild, Bezeichnung und Dateien. */
+    public function test_aufraeumen_nach_uebernahme_behaelt_artikelfotos(): void
+    {
+        $jetzt = new \DateTimeImmutable('2026-10-21 12:00:00');
+        $this->dienst->nimmEntgegen('sammlung', null, $this->daten(), [$this->foto(ExifJpeg::erzeuge(), 'a.jpg'), $this->foto(ExifJpeg::erzeuge(), 'b.jpg')], '203.0.113.7', $jetzt->modify('-12 months -1 day'));
+        $id = $this->zahl('SELECT MAX(id) FROM boerse_anfrage');
+        $fotos = $this->dok->idsFuerObjekt('boerse_anfrage', $id);
+        [$artikel, $eingang] = $this->uebernahme();
+        $artikelId = $this->dienst->uebernimmInsMagazin($id, $artikel, $eingang, null);
+        $titel = $this->zahl("SELECT titelbild_dokument_id FROM magazin_artikel WHERE id = $artikelId");
+        $this->assertSame($fotos[0], $titel);
+
+        $this->assertSame(1, $this->dienst->raeumeAuf($jetzt));
+
+        $this->assertSame(0, $this->zahl('SELECT COUNT(*) FROM boerse_anfrage'));
+        $this->assertSame($fotos, $this->dok->idsFuerObjekt('magazin_artikel', $artikelId));
+        $this->assertSame($titel, $this->zahl("SELECT titelbild_dokument_id FROM magazin_artikel WHERE id = $artikelId"));
+        $this->assertSame('Kiste', (string) $this->pdo->query("SELECT bezeichnung FROM magazin_artikel WHERE id = $artikelId")->fetchColumn());
+        foreach ($fotos as $f) {
+            $pfad = $this->speicher . '/' . $this->dok->finde($f)['pfad'];
+            $this->assertFileExists($pfad);
+            $this->assertFileExists($pfad . '.anzeige.jpg');
+            $this->assertSame(['magazin_artikel'], array_column($this->dok->zuordnungen($f), 'objekt_typ'));
+        }
+        $this->assertSame(1, $this->zahl("SELECT SUM(menge) FROM magazin_buchung WHERE artikel_id = $artikelId"));
+    }
+
+    /** Eine ins Magazin übernommene Anfrage bleibt erledigt (auch über ein handgebautes POST). */
+    public function test_uebernommene_anfrage_bleibt_erledigt(): void
+    {
+        $this->dienst->nimmEntgegen('sammlung', null, $this->daten(), [], '203.0.113.7', new \DateTimeImmutable('2026-10-21 12:00:00'));
+        $id = $this->zahl('SELECT MAX(id) FROM boerse_anfrage');
+        [$artikel, $eingang] = $this->uebernahme();
+        $this->dienst->uebernimmInsMagazin($id, $artikel, $eingang, null);
+        foreach (['offen', 'in_bearbeitung'] as $status) {
+            try {
+                $this->dienst->setzeStatus($id, $status, null);
+                $this->fail('DomainFehler erwartet');
+            } catch (\Emc\Core\DomainFehler $e) {
+                $this->assertSame(AnfrageDienst::BLEIBT_ERLEDIGT, $e->getMessage());
+            }
+        }
+        $this->assertFalse($this->dienst->setzeStatus($id, 'erledigt', null));
+        $this->assertSame('erledigt', (string) $this->pdo->query("SELECT status FROM boerse_anfrage WHERE id = $id")->fetchColumn());
+    }
 }

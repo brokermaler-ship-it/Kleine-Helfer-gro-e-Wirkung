@@ -243,6 +243,15 @@ final class MagazinRepository
      *
      * @return ?array<string,mixed>
      */
+    /**
+     * Die Übergabe ans Magazin ist eine Zustandsänderung des Fahrzeugs: neuer Stand, damit ein vorher geöffnetes
+     * Formular mit 409 endet (Stand-Schutz).
+     */
+    public function beruehreFahrzeug(int $id): void
+    {
+        $this->pdo->prepare('UPDATE fahrzeug SET geaendert_am = NOW(6) WHERE id = ?')->execute([$id]);
+    }
+
     public function sperreFahrzeug(int $id): ?array
     {
         $st = $this->pdo->prepare('SELECT * FROM fahrzeug WHERE id = ? FOR UPDATE');
@@ -276,7 +285,9 @@ final class MagazinRepository
         }
         $st = $this->pdo->prepare(
             'SELECT a.id, a.fahrzeug_id, ' . self::BESTAND . ' AS bestand, '
-            . "(SELECT b.datum FROM magazin_buchung b WHERE b.artikel_id = a.id AND b.art = 'ausgang' AND b.menge < 0 ORDER BY b.datum DESC, b.id DESC LIMIT 1) AS letzter_ausgang "
+            . "(SELECT b.datum FROM magazin_buchung b WHERE b.artikel_id = a.id AND b.art = 'ausgang' AND b.menge < 0 "
+            . 'AND NOT EXISTS (SELECT 1 FROM magazin_buchung g WHERE g.gegenbuchung_zu_id = b.id) '
+            . "ORDER BY b.datum DESC, b.id DESC LIMIT 1) AS letzter_ausgang "
             . 'FROM magazin_artikel a WHERE a.fahrzeug_id IN (' . implode(', ', array_fill(0, count($fahrzeugIds), '?')) . ')'
         );
         $st->execute($fahrzeugIds);
@@ -293,10 +304,13 @@ final class MagazinRepository
         return $ergebnis;
     }
 
-    /** Hängt ein vorhandenes Dokument (Titelfoto des Fahrzeugs) zusätzlich an den Artikel und macht es zum Titelbild. */
+    /**
+     * Hängt ein vorhandenes Dokument (Titelfoto des Fahrzeugs) zusätzlich an den Artikel und macht es zum Titelbild.
+     * Eine schon vorhandene Zuordnung ist harmlos; andere Fehler (z. B. Dokument fehlt, FK) werden nicht verschluckt.
+     */
     public function uebernimmTitelbild(int $artikelId, int $dokumentId): void
     {
-        $this->pdo->prepare("INSERT IGNORE INTO dokument_zuordnung (dokument_id, objekt_typ, objekt_id) VALUES (?, 'magazin_artikel', ?)")
+        $this->pdo->prepare("INSERT INTO dokument_zuordnung (dokument_id, objekt_typ, objekt_id) VALUES (?, 'magazin_artikel', ?) ON DUPLICATE KEY UPDATE objekt_id = objekt_id")
             ->execute([$dokumentId, $artikelId]);
         $this->setzeTitelbild($artikelId, $dokumentId);
     }

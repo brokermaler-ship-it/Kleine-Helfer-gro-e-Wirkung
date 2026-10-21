@@ -28,7 +28,7 @@ $filter = ['' => 'Neu und in Bearbeitung', 'offen' => 'Neu', 'in_bearbeitung' =>
         <?php foreach ($anfragen as $a): ?>
             <a class="list-group-item list-group-item-action" href="<?= e(url('/anfragen/' . (int) $a['id'])) ?>">
                 <div class="d-flex flex-wrap justify-content-between gap-2">
-                    <div class="fw-semibold text-break"><?= e((string) $a['name']) ?></div>
+                    <div class="fw-semibold text-break"><bdi dir="auto"><?= e((string) $a['name']) ?></bdi></div>
                     <div><?= $anfrageStatusBadge((string) $a['status']) ?></div>
                 </div>
                 <div class="small text-break"><?= e($anfrageArt($a)) ?></div>

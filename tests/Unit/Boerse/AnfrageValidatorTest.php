@@ -98,4 +98,16 @@ final class AnfrageValidatorTest extends TestCase
         [, $f] = AnfrageValidator::pruefe($this->eingabe(['wunsch' => 'verkaufen']), 'sammlung', 5);
         $this->assertSame([], $f);
     }
+
+    /** Unsichtbare Format- und Bidi-Zeichen (\p{Cf}) werden entfernt, ZWJ/ZWNJ (Emoji, Schriften) bleiben. */
+    public function test_format_zeichen_entfernt(): void
+    {
+        [$d, $f] = AnfrageValidator::pruefe($this->eingabe([
+            'name' => "Erika\u{202E}Beispiel\u{2066}\u{200B}",
+            'nachricht' => "Hallo\u{2067} \u{FEFF}Lok\nZeile 2 \u{1F468}\u{200D}\u{1F469} Gro\u{200C}ß",
+        ]), 'kaufanfrage');
+        $this->assertSame([], $f);
+        $this->assertSame('ErikaBeispiel', $d['name']);
+        $this->assertSame("Hallo Lok\nZeile 2 \u{1F468}\u{200D}\u{1F469} Gro\u{200C}ß", $d['nachricht']);
+    }
 }

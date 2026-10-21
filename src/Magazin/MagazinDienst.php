@@ -130,15 +130,18 @@ final class MagazinDienst
             try {
                 $id = $this->legeAnMitEingangInLaufenderTransaktion($artikel, $eingang, $benutzerId);
             } catch (\PDOException $e) {
-                // UNIQUE fahrzeug_id: nur denkbar, wenn jemand an der Sperre vorbei anlegt – dieselbe Meldung statt 500.
-                if ((string) $e->getCode() === '23000') {
-                    throw new DomainFehler(self::schonImMagazin(Code::magazin((int) ($this->rep->fuerFahrzeug($fahrzeugId)['id'] ?? 0))), 0, $e);
+                // UNIQUE fahrzeug_id (1062): nur denkbar, wenn jemand an der Sperre vorbei anlegt – dieselbe Meldung statt
+                // 500. Andere Integritätsfehler (z. B. FK 1452, Konto gerade gelöscht) bleiben echte Fehler.
+                $vorhanden = (int) ($e->errorInfo[1] ?? 0) === 1062 ? $this->rep->fuerFahrzeug($fahrzeugId) : null;
+                if ($vorhanden !== null) {
+                    throw new DomainFehler(self::schonImMagazin($vorhanden['code']), 0, $e);
                 }
                 throw $e;
             }
             if ($fz['titelbild_dokument_id'] !== null) {
                 $this->rep->uebernimmTitelbild($id, (int) $fz['titelbild_dokument_id']);
             }
+            $this->rep->beruehreFahrzeug($fahrzeugId);
             $code = Code::magazin($id);
             $this->protokoll->schreibe($benutzerId, 'fahrzeug', $fahrzeugId, 'geaendert', [
                 'magazin' => ['alt' => null, 'neu' => 'ans Magazin übergeben (' . $code . ')'],

@@ -35,7 +35,7 @@ $eingang = date('d.m.Y H:i', (int) strtotime((string) $a['eingegangen_am']));
 
 <dl class="row">
     <dt class="col-sm-4 col-lg-3">Name</dt>
-    <dd class="col-sm-8 col-lg-9 text-break"><?= e((string) $a['name']) ?></dd>
+    <dd class="col-sm-8 col-lg-9 text-break"><bdi dir="auto"><?= e((string) $a['name']) ?></bdi></dd>
     <?php if ($a['email'] !== null): ?>
         <dt class="col-sm-4 col-lg-3">E-Mail</dt>
         <dd class="col-sm-8 col-lg-9 text-break"><?= e((string) $a['email']) ?></dd>
@@ -45,7 +45,7 @@ $eingang = date('d.m.Y H:i', (int) strtotime((string) $a['eingegangen_am']));
         <dd class="col-sm-8 col-lg-9 text-break"><?php if ($tel !== null): ?><a href="<?= e($tel) ?>"><?= e((string) $a['telefon']) ?></a><?php else: ?><?= e((string) $a['telefon']) ?><?php endif; ?></dd>
     <?php endif; ?>
     <dt class="col-sm-4 col-lg-3"><?= $a['art'] === 'sammlung' ? 'Beschreibung' : 'Nachricht' ?></dt>
-    <dd class="col-sm-8 col-lg-9 text-break"><?= nl2br(e((string) $a['nachricht'])) ?></dd>
+    <dd class="col-sm-8 col-lg-9 text-break"><bdi dir="auto"><?= nl2br(e((string) $a['nachricht'])) ?></bdi></dd>
     <dt class="col-sm-4 col-lg-3">Eingegangen am</dt>
     <dd class="col-sm-8 col-lg-9"><?= e($eingang) ?> <span class="small text-muted">· wird automatisch gelöscht am <?= e($geloeschtAm->format('d.m.Y')) ?></span></dd>
 </dl>
@@ -70,7 +70,7 @@ $eingang = date('d.m.Y H:i', (int) strtotime((string) $a['eingegangen_am']));
 
 <div class="d-flex flex-wrap gap-2 mb-4" aria-label="Status">
     <?php foreach (['in_bearbeitung' => 'in Bearbeitung', 'erledigt' => 'erledigt'] as $wert => $text): ?>
-        <?php if ($a['status'] !== $wert): ?>
+        <?php if ($a['status'] !== $wert && $a['magazin_artikel_id'] === null): ?>
             <form method="post" action="<?= e(url('/anfragen/' . $id . '/status')) ?>" class="m-0">
                 <?php include dirname(__DIR__) . '/partials/csrf.php'; ?>
                 <input type="hidden" name="status" value="<?= e($wert) ?>">

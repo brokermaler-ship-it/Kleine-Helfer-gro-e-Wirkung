@@ -21,7 +21,7 @@ include __DIR__ . '/_labels.php';
                     <a class="card h-100 text-decoration-none text-reset meine-karte" href="<?= e(url('/fahrzeuge/' . $fz['id'])) ?>">
                         <div class="card-body d-flex gap-3">
                             <?= $titelbild($fz) ?>
-                            <div class="flex-grow-1">
+                            <div class="flex-grow-1 min-w-0">
                                 <h3 class="h6 mb-1"><?= e($fz['bezeichnung']) ?></h3>
                                 <div class="small text-muted"><?= e($fz['inventarnummer']) ?> · <?= e($fz['spurweite_name']) ?></div>
                                 <div class="small">Adresse: <?= $adressen($fz) ?></div>

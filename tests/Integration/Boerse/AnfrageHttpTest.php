@@ -277,7 +277,12 @@ final class AnfrageHttpTest extends DbTestCase
         $form = $this->get("/anfragen/$id/uebernehmen");
         $this->assertSame(200, $form->status, $form->body);
         $this->assertStringContainsString('action="/anfragen/' . $id . '/uebernehmen"', $form->body);
-        $this->assertStringContainsString('value="' . e(trim(mb_substr(str_repeat('Kiste mit Spur-N-Wagen und Gleisen ', 5), 0, 80))) . '"', $form->body);
+        // Keine Vorbelegung der Bezeichnung aus dem Text des Besuchers (Namen/Telefonnummern blieben sonst dauerhaft);
+        // die Beschreibung steht nur als Text daneben, mit Hinweis.
+        $this->assertMatchesRegularExpression('/id="bezeichnung" name="bezeichnung" value=""/', $form->body);
+        $this->assertStringContainsString('Bitte eine eigene Bezeichnung eingeben – ohne Namen und Kontaktdaten aus der Anfrage.', $form->body);
+        $this->assertStringContainsString('Beschreibung aus der Anfrage', $form->body);
+        $this->assertStringContainsString(e(trim(str_repeat('Kiste mit Spur-N-Wagen und Gleisen ', 5))), $form->body);
         // Der Name gehört nicht in die unveränderliche Buchung (er überlebte sonst die Löschung nach 12 Monaten).
         $this->assertStringContainsString('value="Anfrage über die Webseite (Nr. ' . $id . ')"', $form->body);
         $this->assertStringNotContainsString('value="Anfrage über die Webseite: Rudi', $form->body);
@@ -461,5 +466,47 @@ final class AnfrageHttpTest extends DbTestCase
         $this->pdo->exec("UPDATE boerse_anfrage SET eingegangen_am = DATE_SUB(NOW(), INTERVAL 13 MONTH) WHERE id = $id");
         $this->assertSame(200, $this->get('/anfragen')->status);
         $this->assertSame(0, $this->zahl('SELECT COUNT(*) FROM boerse_anfrage'));
+    }
+
+    /** Öffnen setzt den Status nur bei einer Navigation von der eigenen Seite (Sec-Fetch-Site), nie von fremden Seiten. */
+    public function test_oeffnen_nur_ohne_fremde_seite(): void
+    {
+        $id = $this->anfrage('kaufanfrage');
+        $abruf = fn(?string $seite) => $this->app()->handle(new Request('GET', '/anfragen/' . $id, [], [], [],
+            ['HTTP_HOST' => 'verein.example'] + ($seite === null ? [] : ['HTTP_SEC_FETCH_SITE' => $seite])));
+        foreach (['cross-site', 'same-site'] as $fremd) {
+            $r = $abruf($fremd);
+            $this->assertSame(200, $r->status);
+            $this->assertSame('offen', $this->anfrageStatus($id), $fremd);
+        }
+        $this->assertSame(200, $abruf('same-origin')->status);
+        $this->assertSame('in_bearbeitung', $this->anfrageStatus($id));
+        $this->pdo->exec("UPDATE boerse_anfrage SET status = 'offen' WHERE id = $id");
+        $abruf('none');
+        $this->assertSame('in_bearbeitung', $this->anfrageStatus($id), 'eingetippte Adresse oder Lesezeichen');
+    }
+
+    /** Namen und Nachrichten der Besucher stehen in <bdi dir="auto"> (Bidi-Zeichen verdrehen die Umgebung nicht). */
+    public function test_besucherangaben_in_bdi(): void
+    {
+        $id = $this->anfrage('kaufanfrage', null, ['name' => 'Erika Beispiel']);
+        $this->assertStringContainsString('<bdi dir="auto">Erika Beispiel</bdi>', $this->get('/anfragen')->body);
+        $detail = $this->get('/anfragen/' . $id)->body;
+        $this->assertStringContainsString('<bdi dir="auto">Erika Beispiel</bdi>', $detail);
+        $this->assertStringContainsString('<bdi dir="auto">Ist die Lok noch zu haben?</bdi>', $detail);
+    }
+
+    /** Übernommene Anfrage: Status bleibt erledigt, auch über ein handgebautes POST. */
+    public function test_uebernommene_bleibt_erledigt(): void
+    {
+        $id = $this->anfrage('sammlung', null, [], 0);
+        $this->post("/anfragen/$id/uebernehmen", [
+            'bezeichnung' => 'Kiste', 'kategorie_id' => (string) $this->kategorie(), 'zustand' => 'gebraucht', 'menge' => '1', 'herkunft' => 'spende', 'datum' => date('Y-m-d'),
+        ]);
+        $this->sitzung['_meldungen'] = [];
+        $r = $this->post("/anfragen/$id/status", ['status' => 'in_bearbeitung']);
+        $this->assertSame(303, $r->status);
+        $this->assertContains(AnfrageDienst::BLEIBT_ERLEDIGT, $this->meldungen('fehler'));
+        $this->assertSame('erledigt', $this->anfrageStatus($id));
     }
 }

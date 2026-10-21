@@ -90,4 +90,26 @@ final class AbrechnungTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         Abrechnung::berechne([self::pos('1.00', '0.00', 'mitglied', 1, 'A', false, 'scheck')]);
     }
+
+    /** Echte Gegenprobe: Σ Zahlarten der Positionen gegen die Summe der Verkaufsköpfe. */
+    public function test_kontrolle_gegen_summe_der_verkaeufe(): void
+    {
+        $pos = [self::pos('12.50', '1.25', 'mitglied', 7, 'Carla Beispiel'), self::pos('20.00', '0.00', 'verein', null, null)];
+        $this->assertTrue(Abrechnung::berechne($pos, 3250)['kontrolle']);
+        $this->assertFalse(Abrechnung::berechne($pos, 3249)['kontrolle']);
+        $this->assertTrue(Abrechnung::berechne($pos)['kontrolle'], 'ohne Kopfsumme nur die innere Probe');
+    }
+
+    /** Sortierung nach Nachname, dann Vorname (Sortierschlüssel aus dem Repository). */
+    public function test_sortierung_nach_nachname(): void
+    {
+        $mit = fn(string $preis, int $id, string $name, string $sortiert): array => self::pos($preis, '0.00', 'mitglied', $id, $name) + ['person_sortname' => $sortiert];
+        $r = Abrechnung::berechne([
+            $mit('1.00', 1, 'Anna Zander', 'Zander Anna'),
+            $mit('1.00', 2, 'Zoe Adler', 'Adler Zoe'),
+            $mit('1.00', 3, 'Bert Müller', 'Müller Bert'),
+            $mit('1.00', 4, 'Anton Müller', 'Müller Anton'),
+        ]);
+        $this->assertSame(['Zoe Adler', 'Anton Müller', 'Bert Müller', 'Anna Zander'], array_column($r['mitglieder'], 'name'));
+    }
 }

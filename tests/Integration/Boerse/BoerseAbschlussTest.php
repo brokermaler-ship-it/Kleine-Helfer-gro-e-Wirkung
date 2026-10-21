@@ -25,6 +25,8 @@ use Emc\Tests\Integration\DbTestCase;
 final class BoerseAbschlussTest extends DbTestCase
 {
     private const TAG = '2026-11-08 10:15:00';
+    /** Nach der Börse (Auszahlungen dürfen nicht in der Zukunft liegen). */
+    private const SPAETER = '2026-11-30 12:00:00';
 
     private AngebotRepository $rep;
     private AngebotDienst $angebote;
@@ -195,7 +197,7 @@ final class BoerseAbschlussTest extends DbTestCase
         $this->assertSame(1, $this->zahl('SELECT COUNT(*) FROM boerse_verkauf'));
 
         // Auszahlung vermerken geht weiter
-        $this->boersen->vermerkeAuszahlung($b, $this->carla->personId, '2026-11-10', $this->wart->id);
+        $this->boersen->vermerkeAuszahlung($b, $this->carla->personId, '2026-11-10', $this->wart->id, $this->jetzt(self::SPAETER));
         $this->assertSame(['11.25', '2026-11-10'], array_values($this->pdo->query("SELECT betrag, ausgezahlt_am FROM boerse_auszahlung WHERE boerse_id = $b")->fetch(\PDO::FETCH_ASSOC)));
     }
 
@@ -265,14 +267,14 @@ final class BoerseAbschlussTest extends DbTestCase
         $verkauf = $this->kasse->abschliessen($b, [['angebot_id' => $a1, 'preis' => '12.50'], ['angebot_id' => $a2, 'preis' => '0.05'], ['angebot_id' => $spende, 'preis' => '8.00']], 'bar', null, $this->jetzt());
         $this->assertSame([], $this->abrechnung->auszahlungen($b));
 
-        $this->boersen->vermerkeAuszahlung($b, $this->carla->personId, '2026-11-08', $this->wart->id);
+        $this->boersen->vermerkeAuszahlung($b, $this->carla->personId, '2026-11-08', $this->wart->id, $this->jetzt(self::SPAETER));
 
         $this->assertSame([$this->carla->personId => ['betrag' => '11.29', 'ausgezahlt_am' => '2026-11-08']], $this->abrechnung->auszahlungen($b));
         $this->assertSame((string) $this->wart->id, (string) $this->pdo->query('SELECT vermerkt_von_benutzer_id FROM boerse_auszahlung')->fetchColumn());
-        $this->assertSame(BoerseDienst::SCHON_VERMERKT, $this->fehler(fn() => $this->boersen->vermerkeAuszahlung($b, $this->carla->personId, '2026-11-09', null))->getMessage());
-        $this->assertSame(BoerseDienst::NICHTS_AUSZUZAHLEN, $this->fehler(fn() => $this->boersen->vermerkeAuszahlung($b, $this->eva->personId, '2026-11-08', null))->getMessage(), 'Spende: Auszahlung 0');
-        $this->assertSame(BoerseDienst::NICHTS_AUSZUZAHLEN, $this->fehler(fn() => $this->boersen->vermerkeAuszahlung($b, $this->wart->personId, '2026-11-08', null))->getMessage());
-        $this->assertSame(BoerseDienst::DATUM_UNGUELTIG, $this->fehler(fn() => $this->boersen->vermerkeAuszahlung($b, $this->carla->personId, '2026-02-30', null))->getMessage());
+        $this->assertSame(BoerseDienst::SCHON_VERMERKT, $this->fehler(fn() => $this->boersen->vermerkeAuszahlung($b, $this->carla->personId, '2026-11-09', null, $this->jetzt(self::SPAETER)))->getMessage());
+        $this->assertSame(BoerseDienst::NICHTS_AUSZUZAHLEN, $this->fehler(fn() => $this->boersen->vermerkeAuszahlung($b, $this->eva->personId, '2026-11-08', null, $this->jetzt(self::SPAETER)))->getMessage(), 'Spende: Auszahlung 0');
+        $this->assertSame(BoerseDienst::NICHTS_AUSZUZAHLEN, $this->fehler(fn() => $this->boersen->vermerkeAuszahlung($b, $this->wart->personId, '2026-11-08', null, $this->jetzt(self::SPAETER)))->getMessage());
+        $this->assertSame(BoerseDienst::DATUM_UNGUELTIG, $this->fehler(fn() => $this->boersen->vermerkeAuszahlung($b, $this->carla->personId, '2026-02-30', null, $this->jetzt(self::SPAETER)))->getMessage());
         // Storno gesperrt, solange der Haken gesetzt ist
         $this->assertSame(KasseDienst::AUSZAHLUNG_VERMERKT, $this->fehler(fn() => $this->kasse->storniere($verkauf, 'Vertippt', null, $this->jetzt()))->getMessage());
 
@@ -282,7 +284,7 @@ final class BoerseAbschlussTest extends DbTestCase
         $this->assertSame(2, $this->zahl("SELECT COUNT(*) FROM aenderungsprotokoll WHERE objekt_typ = 'boerse' AND objekt_id = $b AND aenderungen LIKE '%auszahlung%'"));
         $this->assertSame(0, $this->zahl("SELECT COUNT(*) FROM aenderungsprotokoll WHERE objekt_typ = 'boerse' AND aenderungen LIKE '%carla%'"), 'kein Name im Protokoll der Börse');
         $this->kasse->storniere($verkauf, 'Vertippt', null, $this->jetzt());
-        $this->assertSame(BoerseDienst::NICHTS_AUSZUZAHLEN, $this->fehler(fn() => $this->boersen->vermerkeAuszahlung($b, $this->carla->personId, '2026-11-08', null))->getMessage(), 'nach Storno nichts mehr auszuzahlen');
+        $this->assertSame(BoerseDienst::NICHTS_AUSZUZAHLEN, $this->fehler(fn() => $this->boersen->vermerkeAuszahlung($b, $this->carla->personId, '2026-11-08', null, $this->jetzt(self::SPAETER)))->getMessage(), 'nach Storno nichts mehr auszuzahlen');
     }
 
     /** M1: Auszahlung sperrt zuerst die Börse – eine laufende Kasse/ein Storno wird abgewartet, der Betrag erst danach berechnet. */
@@ -296,7 +298,7 @@ final class BoerseAbschlussTest extends DbTestCase
         $this->zweite->query("SELECT id FROM boerse WHERE id = $b FOR UPDATE")->fetchAll();
         $this->pdo->exec('SET SESSION innodb_lock_wait_timeout = 1');
 
-        $this->assertSame(Transaktion::SPERRKONFLIKT, $this->fehler(fn() => $this->boersen->vermerkeAuszahlung($b, $this->carla->personId, '2026-11-08', null))->getMessage());
+        $this->assertSame(Transaktion::SPERRKONFLIKT, $this->fehler(fn() => $this->boersen->vermerkeAuszahlung($b, $this->carla->personId, '2026-11-08', null, $this->jetzt(self::SPAETER)))->getMessage());
         $this->assertSame(Transaktion::SPERRKONFLIKT, $this->fehler(fn() => $this->boersen->entferneAuszahlung($b, $this->carla->personId, null))->getMessage());
         $this->assertSame(0, $this->zahl('SELECT COUNT(*) FROM boerse_auszahlung'));
     }
@@ -305,6 +307,43 @@ final class BoerseAbschlussTest extends DbTestCase
     {
         $this->assertSame(BoerseDienst::NICHT_GEFUNDEN, $this->fehler(fn() => $this->boersen->abschliessen(999999, null, $this->jetzt()))->getMessage());
         $this->assertSame(BoerseDienst::NICHT_GEFUNDEN, $this->fehler(fn() => $this->boersen->wiederOeffnen(999999, null))->getMessage());
-        $this->assertSame(BoerseDienst::NICHT_GEFUNDEN, $this->fehler(fn() => $this->boersen->vermerkeAuszahlung(999999, $this->carla->personId, '2026-11-08', null))->getMessage());
+        $this->assertSame(BoerseDienst::NICHT_GEFUNDEN, $this->fehler(fn() => $this->boersen->vermerkeAuszahlung(999999, $this->carla->personId, '2026-11-08', null, $this->jetzt(self::SPAETER)))->getMessage());
+    }
+
+    /** Provision je Stück gerundet, nicht auf die Summe: 3 × 0,15 € bei 10 % → 3 × 0,02 € = 0,06 € (nicht 0,05 €). */
+    public function test_provision_je_stueck_nicht_auf_die_summe(): void
+    {
+        $b = $this->boerse();
+        $p = [];
+        for ($i = 0; $i < 3; $i++) {
+            $p[] = ['angebot_id' => $this->angebot($b, ['wunschpreis' => '0.15']), 'preis' => '0.15'];
+        }
+        $this->kasse->abschliessen($b, $p, 'bar', null, $this->jetzt());
+
+        $r = Abrechnung::berechne($this->abrechnung->positionen($b), $this->abrechnung->summeVerkaeufe($b));
+        $this->assertSame(6, $r['mitglieder'][0]['provision']);
+        $this->assertSame(39, $r['mitglieder'][0]['auszahlung']);
+        $this->assertSame(6, $r['verein']['provisionen']);
+        $this->assertTrue($r['kontrolle']);
+        $this->assertSame(45, $this->abrechnung->summeVerkaeufe($b));
+    }
+
+    /** Auszahlungsdatum höchstens heute; der Abschluss schreibt im Protokoll keinen irreführenden Schlüssel „boerse“. */
+    public function test_auszahlung_nicht_in_der_zukunft_und_protokoll_abschluss(): void
+    {
+        $b = $this->boerse();
+        $a = $this->angebot($b);
+        $offen = $this->angebot($b, ['wunschpreis' => '3.00']);
+        $this->kasse->abschliessen($b, [['angebot_id' => $a, 'preis' => '12.50']], 'bar', null, $this->jetzt());
+        $this->assertSame(BoerseDienst::DATUM_ZUKUNFT, $this->fehler(fn() => $this->boersen->vermerkeAuszahlung($b, $this->carla->personId, '2026-11-09', null, $this->jetzt()))->getMessage());
+        $this->assertSame(0, $this->zahl('SELECT COUNT(*) FROM boerse_auszahlung'));
+        $this->boersen->vermerkeAuszahlung($b, $this->carla->personId, '2026-11-08', null, $this->jetzt());
+        $this->assertSame(1, $this->zahl('SELECT COUNT(*) FROM boerse_auszahlung'));
+
+        $this->boersen->abschliessen($b, null, $this->jetzt());
+        $eintrag = (string) $this->pdo->query("SELECT aenderungen FROM aenderungsprotokoll WHERE objekt_typ = 'boerse_angebot' AND objekt_id = $offen ORDER BY id DESC LIMIT 1")->fetchColumn();
+        $this->assertStringNotContainsString('"boerse"', $eintrag);
+        $this->assertStringContainsString('"grund"', $eintrag);
+        $this->assertStringContainsString('Börse abgeschlossen', $eintrag);
     }
 }

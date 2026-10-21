@@ -233,4 +233,34 @@ final class ObjektLoeschenTest extends DbTestCase
         $this->assertStringContainsString('Motor brummt', $meine);
         $this->assertStringNotContainsString('Verwaist', $meine);
     }
+
+    /**
+     * Sperrkonflikt beim Löschen (z. B. Verklemmung über ein geteiltes Dokument, 1213, oder Wartezeit überschritten,
+     * 1205): nichts gelöscht, Meldung „Bitte erneut versuchen“ statt 500.
+     */
+    #[DataProvider('objekttypen')]
+    public function test_sperrkonflikt_beim_loeschen_ergibt_meldung(string $typ, string $pfad): void
+    {
+        $id = $this->objekt($typ);
+        $sitzung = ['_csrf' => str_repeat('a', 64)];
+        $this->sitzungAnmelden($sitzung, $this->admin);
+        $zweite = self::verbindung();
+        $zweite->beginTransaction();
+        $zweite->query("SELECT id FROM $typ WHERE id = $id FOR UPDATE")->fetchAll();
+        $this->pdo->exec('SET SESSION innodb_lock_wait_timeout = 1');
+        try {
+            $app = App::erzeuge(['speicher_pfad' => $this->speicher] + self::testConfig(), new Session($sitzung));
+            $app->container()->set('pdo', fn() => $this->pdo);
+            $antwort = $app->handle(new Request('POST', "/$pfad/$id/loeschen", [], ['_csrf' => str_repeat('a', 64)]));
+        } finally {
+            $this->pdo->exec('SET SESSION innodb_lock_wait_timeout = 50');
+            $zweite->rollBack();
+        }
+        $this->assertSame(303, $antwort->status);
+        $this->assertSame(url("/$pfad/$id"), $antwort->headers['Location']);
+        $texte = array_column(array_filter($sitzung['_meldungen'] ?? [], fn(array $m): bool => $m['typ'] === 'fehler'), 'text');
+        $this->assertContains(($typ === 'fahrzeug' ? 'Das Fahrzeug' : 'Die Anlage') . ' konnte gerade nicht gelöscht werden. Bitte erneut versuchen.', $texte);
+        $this->assertSame(1, $this->zaehle("SELECT COUNT(*) FROM $typ WHERE id = ?", [$id]));
+        $this->assertFalse($this->pdo->inTransaction());
+    }
 }

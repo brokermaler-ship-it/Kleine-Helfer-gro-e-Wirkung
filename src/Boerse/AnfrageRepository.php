@@ -25,6 +25,18 @@ final class AnfrageRepository
 
     public const STATUS = ['offen', 'in_bearbeitung', 'erledigt'];
 
+    /**
+     * IDs aller Dokumente der Anfrage, auch der mit anderen Objekten geteilten (z. B. ins Magazin übernommen).
+     *
+     * @return list<int>
+     */
+    public function fotoIds(int $anfrageId): array
+    {
+        $st = $this->pdo->prepare("SELECT dokument_id FROM dokument_zuordnung WHERE objekt_typ = 'boerse_anfrage' AND objekt_id = ? ORDER BY dokument_id");
+        $st->execute([$anfrageId]);
+        return array_map('intval', $st->fetchAll(\PDO::FETCH_COLUMN));
+    }
+
     private const SELECT = 'SELECT q.*, a.jahr AS angebot_jahr, a.laufnummer AS angebot_laufnummer, a.bezeichnung AS angebot_bezeichnung '
         . 'FROM boerse_anfrage q LEFT JOIN boerse_angebot a ON a.id = q.angebot_id ';
 

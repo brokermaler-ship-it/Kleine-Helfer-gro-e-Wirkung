@@ -18,8 +18,21 @@ $z = $abrechnung['zahlarten'];
 $mitglieder = $abrechnung['mitglieder'];
 $summe = fn(string $f): int => array_sum(array_column($mitglieder, $f));
 ?>
+<?php
+// Verkauf nach dem Haken „ausgezahlt“: vermerkter Betrag ≠ aktuelle Auszahlung (Differenz in Cent je Person).
+$abweichend = [];
+foreach ($mitglieder as $m) {
+    $aus = $auszahlungen[$m['person_id'] ?? 0] ?? null;
+    if ($aus !== null && Geld::cent($aus['betrag']) !== $m['auszahlung']) {
+        $abweichend[$m['person_id'] ?? 0] = $m['auszahlung'] - Geld::cent($aus['betrag']);
+    }
+}
+?>
 <?php if (!$abrechnung['kontrolle']): ?>
     <div class="alert alert-danger" role="alert">Die Summen passen nicht zusammen – bitte melden.</div>
+<?php endif; ?>
+<?php if ($abweichend !== []): ?>
+    <div class="alert alert-warning" role="alert">Bei <?= count($abweichend) ?> <?= count($abweichend) === 1 ? 'Mitglied' : 'Mitgliedern' ?> weicht der Betrag vom vermerkten ab – bitte nachzahlen und neu vermerken.</div>
 <?php endif; ?>
 
 <div class="row g-3 mb-3">
@@ -81,6 +94,9 @@ $summe = fn(string $f): int => array_sum(array_column($mitglieder, $f));
                                 <span class="text-success">&#10003; ausgezahlt am <?= e(date('d.m.Y', (int) strtotime($aus['ausgezahlt_am']))) ?></span>
                                 <?php if (Geld::cent($aus['betrag']) !== $m['auszahlung']): ?>
                                     <div class="small text-danger">Vermerkt waren <?= e(ReparaturValidator::betrag($aus['betrag'])) ?>, jetzt sind es <?= e($cent($m['auszahlung'])) ?>.</div>
+                                    <?php if (!$mitFormularen && ($abweichend[$pid ?? 0] ?? 0) > 0): ?>
+                                        <div class="small"><span class="abrechnung-ankreuzen" aria-hidden="true">&#9744;</span> Nachzahlung <?= e($cent($abweichend[$pid ?? 0])) ?> am ____________</div>
+                                    <?php endif; ?>
                                 <?php endif; ?>
                                 <?php if ($mitFormularen && $pid !== null): ?>
                                     <form method="post" action="<?= e(url('/boersen/' . $id . '/auszahlungen/' . $pid . '/loeschen')) ?>" class="d-inline" onsubmit="return confirm('Haken „ausgezahlt“ entfernen?');">
@@ -93,7 +109,7 @@ $summe = fn(string $f): int => array_sum(array_column($mitglieder, $f));
                                     <?php include dirname(__DIR__) . '/partials/csrf.php'; ?>
                                     <input type="hidden" name="person_id" value="<?= (int) $pid ?>">
                                     <label class="visually-hidden" for="aus-<?= (int) $pid ?>">Ausgezahlt am</label>
-                                    <input type="date" class="form-control form-control-sm" id="aus-<?= (int) $pid ?>" name="ausgezahlt_am" value="<?= e($heute) ?>" required>
+                                    <input type="date" class="form-control form-control-sm" id="aus-<?= (int) $pid ?>" name="ausgezahlt_am" value="<?= e($heute) ?>" max="<?= e($heute) ?>" required>
                                     <button type="submit" class="btn btn-sm btn-outline-success">ausgezahlt</button>
                                 </form>
                             <?php elseif ($m['auszahlung'] > 0): ?>

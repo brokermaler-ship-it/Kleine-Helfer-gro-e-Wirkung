@@ -9,6 +9,7 @@ use Emc\Core\HttpFehler;
 use Emc\Core\Request;
 use Emc\Core\Response;
 use Emc\Core\Session;
+use Emc\Core\Transaktion;
 use Emc\Core\View;
 use Emc\Dateien\DokumentRepository;
 use Emc\Fahrzeuge\KonfliktFehler;
@@ -121,12 +122,22 @@ final class AnlageController
         $id = (int) $anlage['id'];
         // Unter der Sperre der Anlage: eine gleichzeitige Defektmeldung wird mitgelöscht oder bekommt 404.
         $dienst = $this->reparatur ?? throw new \LogicException('AnlageController braucht den ReparaturDienst zum Löschen.');
-        $geloescht = $dienst->loescheObjekt('anlage', $id, function () use ($id): array {
-            $pfade = $this->wartung?->entferneFuerObjektInTransaktion('anlage', $id) ?? [];
-            array_push($pfade, ...$this->dokumente->loeseVonObjekt('anlage', $id));
-            $this->anlagen->loeschen($id);
-            return $pfade;
-        });
+        try {
+            $geloescht = $dienst->loescheObjekt('anlage', $id, function () use ($id): array {
+                $pfade = $this->wartung?->entferneFuerObjektInTransaktion('anlage', $id) ?? [];
+                array_push($pfade, ...$this->dokumente->loeseVonObjekt('anlage', $id));
+                $this->anlagen->loeschen($id);
+                return $pfade;
+            });
+        } catch (\Throwable $t) {
+            if (!Transaktion::istSperrkonflikt($t)) {
+                throw $t;
+            }
+            // Verklemmung (z. B. zwei Löschungen mit geteiltem Dokument) oder Wartezeit überschritten: zurückgerollt,
+            // nichts gelöscht.
+            $this->session->meldung('fehler', 'Die Anlage konnte gerade nicht gelöscht werden. Bitte erneut versuchen.');
+            return Response::redirect(url('/anlagen/' . $id));
+        }
         if (!$geloescht) {
             throw new HttpFehler(404); // zwischenzeitlich gelöscht
         }

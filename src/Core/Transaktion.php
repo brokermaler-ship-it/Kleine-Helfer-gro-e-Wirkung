@@ -56,7 +56,7 @@ final class Transaktion
     }
 
     /** Sperrkonflikt (1205/1213), auch wenn eine andere Ausnahme die PDOException verpackt hat. */
-    private static function istSperrkonflikt(\Throwable $t): bool
+    public static function istSperrkonflikt(\Throwable $t): bool
     {
         for ($f = $t; $f !== null; $f = $f->getPrevious()) {
             if ($f instanceof \PDOException && in_array((int) ($f->errorInfo[1] ?? 0), self::SPERRFEHLER, true)) {

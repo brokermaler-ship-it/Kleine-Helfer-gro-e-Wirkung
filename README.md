@@ -204,8 +204,8 @@ Am Decoder unter **Funktionen → „PDF-Import“** lässt sich die Bedienungsa
 
   | `memory_limit` (wirksam) | Datei höchstens | entpackter Inhalt insgesamt | ein Datenstrom | Objekte im PDF |
   |---|---|---|---|---|
-  | 128 MB (Anheben nicht erlaubt) | 5 MB | 25,6 MB | 8 MB | 51 200 |
-  | 256 MB | 10 MB | 51,2 MB | 16 MB | 102 400 |
+  | 128 MB (Anheben nicht erlaubt) | 5 MB | 25,6 MB | 8 MB | 52 428 |
+  | 256 MB | 10 MB | 51,2 MB | 16 MB | 104 857 |
   | ab 512 MB bzw. Anheben erlaubt | 20 MB | 96 MB | 32 MB | 200 000 |
 
   Jeder PDF-Upload kann bis zu 512 MB Speicher belegen. Laden **mehrere Personen gleichzeitig** große PDFs hoch, kann das das Speicherkontingent des Webspace-Pakets überschreiten (der Hoster beendet dann Anfragen, auch andere); bei Problemen nacheinander hochladen.

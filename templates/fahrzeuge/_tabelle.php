@@ -30,7 +30,7 @@ $imMagazin = function (array $fz) use ($magazinInfo): string {
             <div class="card mb-2">
                 <div class="card-body d-flex gap-3">
                     <?= $titelbild($fz) ?>
-                    <div class="flex-grow-1">
+                    <div class="flex-grow-1 min-w-0">
                         <h2 class="h6 mb-1"><a class="stretched-link text-reset text-decoration-none" href="<?= e(url('/fahrzeuge/' . $fz['id'])) ?>"><?= e($fz['bezeichnung']) ?></a></h2>
                         <div class="small text-muted"><?= e($fz['inventarnummer']) ?> · <?= e($fz['spurweite_name']) ?></div>
                         <div class="small">Adresse: <?= $adressen($fz) ?></div>

@@ -28,6 +28,7 @@ final class AnfrageDienst
     public const NICHT_GEFUNDEN = 'Diese Anfrage gibt es nicht mehr.';
     public const SCHON_UEBERNOMMEN = 'Diese Anfrage wurde schon übernommen.';
     public const NUR_SAMMLUNG = 'Nur eine angebotene Sammlung lässt sich ins Magazin übernehmen.';
+    public const BLEIBT_ERLEDIGT = 'Diese Anfrage wurde ins Magazin übernommen und bleibt erledigt.';
 
     private int $abgelehnt = 0;
 
@@ -39,6 +40,8 @@ final class AnfrageDienst
         private DokumentRepository $dok,
         private Aenderungsprotokoll $protokoll,
         private ?MagazinDienst $magazin = null,
+        /** @var ?\Closure(): ?\Emc\OneDrive\Uebertragung erst bei Bedarf gebaut (null = OneDrive nicht eingerichtet) */
+        private ?\Closure $uebertragung = null,
     ) {
     }
 
@@ -156,6 +159,10 @@ final class AnfrageDienst
             if ($a['status'] === $status) {
                 return false;
             }
+            if ($a['magazin_artikel_id'] !== null) {
+                // Übernommen: der Artikel ist angelegt, eine Wiedervorlage wäre irreführend.
+                throw new DomainFehler(self::BLEIBT_ERLEDIGT);
+            }
             $this->schreibeStatus($anfrageId, (string) $a['status'], $status, $benutzerId);
             return true;
         });
@@ -217,25 +224,56 @@ final class AnfrageDienst
     /** @return bool false, wenn es die Anfrage nicht (mehr) gibt */
     private function entferne(int $id, ?int $benutzerId, bool $vonHand): bool
     {
-        $pfade = Transaktion::readCommitted($this->pdo, function () use ($id, $benutzerId, $vonHand): ?array {
+        $ergebnis = Transaktion::readCommitted($this->pdo, function () use ($id, $benutzerId, $vonHand): ?array {
             if ($this->rep->sperre($id) === null) {
                 return null;
             }
+            $fotos = $this->rep->fotoIds($id);
             $pfade = $this->dok->loeseVonObjekt(self::OBJEKT, $id);
             $this->rep->loesche($id);
             if ($vonHand) {
                 // Nur wer gelöscht hat, ohne Angaben aus der Anfrage.
                 $this->protokoll->schreibe($benutzerId, self::OBJEKT, $id, 'geloescht');
             }
-            return $pfade;
+            return [$pfade, $fotos];
         });
-        if ($pfade === null) {
+        if ($ergebnis === null) {
             return false;
         }
+        [$pfade, $fotos] = $ergebnis;
         foreach ($pfade as $pfad) {
             $this->dok->entferneDateien($pfad);
         }
+        $this->merkeUeberlebendeVor($fotos);
         return true;
+    }
+
+    /**
+     * Fotos, die nach dem Löschen der Anfrage weiter an einem Magazinartikel hängen (übernommene Sammlung), sind jetzt
+     * gewöhnliche Artikelfotos: bei eingerichtetem OneDrive zum Hochladen vormerken (der nächste Lauf erledigt es).
+     * Fehler nur im Log – die Anfrage ist schon gelöscht.
+     *
+     * @param list<int> $fotos Dokument-IDs, die der Anfrage zugeordnet waren
+     */
+    private function merkeUeberlebendeVor(array $fotos): void
+    {
+        if ($fotos === [] || $this->uebertragung === null) {
+            return;
+        }
+        try {
+            $u = ($this->uebertragung)();
+            if ($u === null) {
+                return;
+            }
+            foreach ($fotos as $dokumentId) {
+                $dok = $this->dok->finde($dokumentId);
+                if ($dok !== null && $dok['ablage'] === 'lokal') {
+                    $u->vormerken($dokumentId);
+                }
+            }
+        } catch (\Throwable $t) {
+            error_log('Börsenanfragen: OneDrive-Vormerkung fehlgeschlagen: ' . $t::class);
+        }
     }
 
     /**

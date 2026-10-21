@@ -13,6 +13,8 @@
  * @var ?string $formularAktion  anderes Ziel der Neuanlage (Übernahme einer Börsenanfrage)
  * @var ?string $formularAbbrechen
  * @var ?string $formularHinweis Hinweis zu den Fotos statt „Fotos fügst du nach dem Speichern …“
+ * @var ?string $formularBezeichnungHinweis Hinweis unter der Bezeichnung statt des Beispiels
+ * @var ?string $formularVorlage Beschreibung aus einer Börsenanfrage (nur als Text, nie vorbelegt)
  */
 use Emc\Magazin\BuchungValidator;
 
@@ -47,7 +49,13 @@ $text = function (string $n, string $label, int $max, bool $pflicht = false, str
         <form method="post" action="<?= e($aktion) ?>">
             <?php include dirname(__DIR__) . '/partials/csrf.php'; ?>
             <?php if (!$neu): ?><input type="hidden" name="stand" value="<?= e($stand) ?>"><?php endif; ?>
-            <?php $text('bezeichnung', 'Bezeichnung', 200, true, 'z. B. Märklin C-Gleis 24188 gerade'); ?>
+            <?php if (($formularVorlage ?? null) !== null): ?>
+                <div class="mb-3">
+                    <div class="form-label mb-1">Beschreibung aus der Anfrage</div>
+                    <div class="border rounded p-2 small text-break bg-body-tertiary"><bdi dir="auto"><?= nl2br(e($formularVorlage)) ?></bdi></div>
+                </div>
+            <?php endif; ?>
+            <?php $text('bezeichnung', 'Bezeichnung', 200, true, $formularBezeichnungHinweis ?? 'z. B. Märklin C-Gleis 24188 gerade'); ?>
             <div class="row">
                 <div class="col-md-6 mb-3">
                     <label for="kategorie_id" class="form-label">Kategorie</label>

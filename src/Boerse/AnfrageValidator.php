@@ -65,7 +65,7 @@ final class AnfrageValidator
         ], $f];
     }
 
-    /** Getrimmter Text ohne Steuerzeichen (Zeilenumbrüche nur in mehrzeiligen Feldern); Nicht-Text wird leer. */
+    /** Getrimmter Text ohne Steuer- und Formatzeichen (Zeilenumbrüche nur in mehrzeiligen Feldern); Nicht-Text wird leer. */
     private static function text(mixed $wert, bool $mehrzeilig = false): string
     {
         if (!is_string($wert)) {
@@ -73,6 +73,9 @@ final class AnfrageValidator
         }
         $wert = str_replace(["\r\n", "\r"], "\n", $wert);
         $wert = (string) preg_replace($mehrzeilig ? '/[\x00-\x09\x0B-\x1F\x7F]/u' : '/[\x00-\x1F\x7F]/u', $mehrzeilig ? '' : ' ', $wert);
+        // Unsichtbare Format- und Richtungszeichen (U+202E, U+2066 …, Null-Breite) verdrehen sonst die Anzeige beim
+        // Börsenwart; ZWNJ/ZWJ (U+200C/U+200D) bleiben für Emoji und Schriften, die sie brauchen.
+        $wert = (string) preg_replace('/(?![\x{200C}\x{200D}])\p{Cf}/u', '', $wert);
         return trim($wert);
     }
 }

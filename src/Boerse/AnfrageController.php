@@ -64,7 +64,10 @@ final class AnfrageController
     {
         $this->verlangeBoersenwart();
         $a = $this->lade($p);
-        if ($a['status'] === 'offen') {
+        // Nur bei einer Navigation von der eigenen Seite (bzw. eingetippt/Lesezeichen) ändert der Aufruf den Status –
+        // eine fremde Seite, die den Börsenwart hierher leitet, blendet so keine Anfragen aus dem Hinweis aus.
+        $herkunft = strtolower(trim((string) $r->server('HTTP_SEC_FETCH_SITE', '')));
+        if ($a['status'] === 'offen' && in_array($herkunft, ['', 'same-origin', 'none'], true)) {
             try {
                 $this->dienst->oeffne((int) $a['id'], $this->auth->benutzer()?->id);
                 $a = $this->lade($p);
@@ -151,18 +154,19 @@ final class AnfrageController
     }
 
     /**
-     * Vorbelegung: Bezeichnung = erste 80 Zeichen der Beschreibung, Kategorie „Sonstiges“, Herkunft spende bei Wunsch
-     * „spenden“, sonst kauf, Freitext „Anfrage über die Webseite (Nr. <id>)“ – ohne den Namen, denn die Buchung ist
-     * unveränderlich und überdauerte sonst die Löschung der Anfrage nach 12 Monaten –, Menge 1, heute.
+     * Vorbelegung: Bezeichnung leer (der Text des Besuchers kann Namen und Telefonnummern enthalten, die sonst in
+     * Artikel und Protokoll dauerhaft stünden – er steht nur als Text neben dem Formular), Kategorie „Sonstiges“,
+     * Herkunft spende bei Wunsch „spenden“, sonst kauf, Freitext „Anfrage über die Webseite (Nr. <id>)“ – ohne den
+     * Namen, denn die Buchung ist unveränderlich und überdauerte sonst die Löschung der Anfrage nach 12 Monaten –,
+     * Menge 1, heute.
      *
      * @param array<string,mixed> $a
      * @return array<string,string>
      */
     public static function vorbelegung(array $a, ?int $kategorieSonstiges): array
     {
-        $beschreibung = trim((string) preg_replace('/\s+/u', ' ', (string) $a['nachricht']));
         return [
-            'bezeichnung' => trim(mb_substr($beschreibung, 0, 80)),
+            'bezeichnung' => '',
             'kategorie_id' => $kategorieSonstiges === null ? '' : (string) $kategorieSonstiges,
             'zustand' => 'gebraucht',
             'menge' => '1',
@@ -209,6 +213,8 @@ final class AnfrageController
             'formularAktion' => url('/anfragen/' . $id . '/uebernehmen'),
             'formularAbbrechen' => url('/anfragen/' . $id),
             'formularHinweis' => self::fotoHinweis(count($a['fotos'])),
+            'formularBezeichnungHinweis' => 'Bitte eine eigene Bezeichnung eingeben – ohne Namen und Kontaktdaten aus der Anfrage.',
+            'formularVorlage' => (string) $a['nachricht'],
         ], $status);
     }
 

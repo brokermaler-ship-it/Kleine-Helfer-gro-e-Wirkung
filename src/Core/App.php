@@ -447,7 +447,8 @@ final class App
             $c->get(UploadService::class),
             $c->get(DokumentRepository::class),
             $c->get(Aenderungsprotokoll::class),
-            $c->get(MagazinDienst::class)
+            $c->get(MagazinDienst::class),
+            fn(): ?Uebertragung => $c->get(Uebertragung::class)
         ));
         $this->container->set(AnfrageController::class, fn(Container $c) => new AnfrageController(
             $this->view,

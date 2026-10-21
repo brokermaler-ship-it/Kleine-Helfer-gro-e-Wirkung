@@ -251,4 +251,37 @@ final class AbrechnungHttpTest extends DbTestCase
         $this->assertStringContainsString('Die Provision lässt sich nach dem ersten Verkauf nicht mehr ändern.', $r->body);
         $this->assertSame('10.00', $this->pdo->query("SELECT provision_prozent FROM boerse WHERE id = $b")->fetchColumn());
     }
+
+    /**
+     * Verkauf nach dem Haken „ausgezahlt“: Hinweis in der Zeile und oben auf Seite und Druckansicht, in der
+     * Druckansicht mit Feld für die Nachzahlung.
+     */
+    public function test_warnung_wenn_auszahlung_abweicht(): void
+    {
+        $b = $this->boerseMitVerkaeufen();
+        $this->anmelden($this->wart);
+        $this->post("/boersen/$b/auszahlungen", ['person_id' => (string) $this->carla->personId, 'ausgezahlt_am' => date('Y-m-d')]);
+        $seite = $this->get("/boersen/$b/abrechnung")->body;
+        $this->assertStringNotContainsString('weicht der Betrag vom vermerkten ab', $seite);
+
+        $this->kasse->abschliessen($b, [['angebot_id' => $this->angebot($b, $this->carla, '5.00'), 'preis' => '5.00']], 'bar', null, new \DateTimeImmutable());
+
+        $seite = $this->get("/boersen/$b/abrechnung")->body;
+        $this->assertStringContainsString('Vermerkt waren 11,29 €, jetzt sind es 15,79 €.', $seite);
+        $this->assertStringContainsString('Bei 1 Mitglied weicht der Betrag vom vermerkten ab – bitte nachzahlen und neu vermerken.', $seite);
+        $druck = $this->get("/boersen/$b/abrechnung", ['druck' => '1'])->body;
+        $this->assertStringContainsString('Bei 1 Mitglied weicht der Betrag vom vermerkten ab – bitte nachzahlen und neu vermerken.', $druck);
+        $this->assertStringContainsString('Nachzahlung 4,50 € am ____________', $druck);
+    }
+
+    public function test_auszahlungsdatum_nicht_in_der_zukunft(): void
+    {
+        $b = $this->boerseMitVerkaeufen();
+        $this->anmelden($this->wart);
+        $morgen = (new \DateTimeImmutable('tomorrow'))->format('Y-m-d');
+        $this->post("/boersen/$b/auszahlungen", ['person_id' => (string) $this->carla->personId, 'ausgezahlt_am' => $morgen]);
+        $this->assertContains('Das Auszahlungsdatum darf nicht in der Zukunft liegen.', $this->meldungen('fehler'));
+        $this->assertSame(0, (int) $this->pdo->query('SELECT COUNT(*) FROM boerse_auszahlung')->fetchColumn());
+        $this->assertStringContainsString('max="' . date('Y-m-d') . '"', $this->get("/boersen/$b/abrechnung")->body);
+    }
 }

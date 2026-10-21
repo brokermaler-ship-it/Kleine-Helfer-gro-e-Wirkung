@@ -217,7 +217,7 @@ final class BoerseController
         $daten = [
             'titel' => 'Abrechnung ' . $b['name'],
             'boerse' => $b,
-            'abrechnung' => Abrechnung::berechne($this->abrechnung->positionen($id)),
+            'abrechnung' => Abrechnung::berechne($this->abrechnung->positionen($id), $this->abrechnung->summeVerkaeufe($id)),
             'auszahlungen' => $this->abrechnung->auszahlungen($id),
             'darfWiederOeffnen' => Berechtigung::darf($this->auth->benutzer(), Berechtigung::BOERSE_WIEDER_OEFFNEN),
             'heute' => (new \DateTimeImmutable())->format('Y-m-d'),
@@ -265,7 +265,7 @@ final class BoerseController
         $datum = trim($r->text('ausgezahlt_am'));
         $datum = $datum === '' ? (new \DateTimeImmutable())->format('Y-m-d') : $datum;
         try {
-            $this->dienst->vermerkeAuszahlung((int) $b['id'], $person, $datum, $this->auth->benutzer()?->id);
+            $this->dienst->vermerkeAuszahlung((int) $b['id'], $person, $datum, $this->auth->benutzer()?->id, new \DateTimeImmutable());
             $this->session->meldung('erfolg', 'Auszahlung an ' . $this->name((int) $b['id'], $person) . ' vermerkt.');
         } catch (DomainFehler $e) {
             $this->session->meldung('fehler', $e->getMessage());
