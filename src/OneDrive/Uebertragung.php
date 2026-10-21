@@ -272,14 +272,15 @@ final class Uebertragung
         if ($dok === null || $dok['ablage'] === 'onedrive') {
             return;
         }
+        // Fotos aus öffentlichen Börsenanfragen gehen nie nach OneDrive (auch nicht, wenn sie inzwischen zusätzlich an
+        // einem Magazinartikel hängen); sie bleiben lokal und werden mit der Anfrage gelöscht. Vor der Dateiprüfung:
+        // eine fehlende Datei einer Anfrage ist kein Fehler des Auftrags.
+        if ($this->dokumente->objekte($dokumentId, 'boerse_anfrage') !== []) {
+            return;
+        }
         $basis = $this->dokumente->absoluterPfad((string) $dok['pfad']);
         if ($basis === null || !is_file($basis)) {
             throw new \RuntimeException('Die lokale Datei fehlt.');
-        }
-        // Fotos aus öffentlichen Börsenanfragen gehen nie nach OneDrive (auch nicht, wenn sie inzwischen zusätzlich an
-        // einem Magazinartikel hängen); sie bleiben lokal und werden mit der Anfrage gelöscht.
-        if ($this->dokumente->objekte($dokumentId, 'boerse_anfrage') !== []) {
-            return;
         }
         $fahrzeugIds = $this->dokumente->objekte($dokumentId, 'fahrzeug');
         $anlageIds = $this->dokumente->objekte($dokumentId, 'anlage');

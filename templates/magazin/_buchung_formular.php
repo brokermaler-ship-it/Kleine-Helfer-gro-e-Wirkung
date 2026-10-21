@@ -76,7 +76,7 @@ $reiter = ['eingang' => 'Eingang', 'ausgang' => 'Ausgang', 'umlagerung' => 'Umla
                     <div class="col-6 col-md-3">
                         <label class="form-label small mb-0" for="b-eingang-herkunft">Herkunft</label>
                         <select class="form-select<?= $bf('eingang', 'herkunft') ? ' is-invalid' : '' ?>" id="b-eingang-herkunft" name="herkunft" required>
-                            <option value="">– bitte wählen –</option>
+                            <option value="">wählen …</option>
                             <?php foreach ($magazinHerkunft as $wert => $text): ?>
                                 <option value="<?= e($wert) ?>"<?= $bw('eingang', 'herkunft') === $wert ? ' selected' : '' ?>><?= e($text) ?></option>
                             <?php endforeach; ?>
@@ -97,7 +97,7 @@ $reiter = ['eingang' => 'Eingang', 'ausgang' => 'Ausgang', 'umlagerung' => 'Umla
                     <div class="col-6 col-md-3">
                         <label class="form-label small mb-0" for="b-ausgang-art">Art</label>
                         <select class="form-select<?= $bf('ausgang', 'ausgang_art') ? ' is-invalid' : '' ?>" id="b-ausgang-art" name="ausgang_art" required>
-                            <option value="">– bitte wählen –</option>
+                            <option value="">wählen …</option>
                             <?php foreach (BuchungValidator::AUSGANG_ARTEN as $wert): ?>
                                 <option value="<?= e($wert) ?>"<?= $bw('ausgang', 'ausgang_art') === $wert ? ' selected' : '' ?>><?= e($magazinAusgang[$wert]) ?></option>
                             <?php endforeach; ?>

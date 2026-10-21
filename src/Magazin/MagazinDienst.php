@@ -24,6 +24,7 @@ final class MagazinDienst
     public const OBJEKT_SAMMLUNG = 'magazin_sammlung';
     public const NICHT_GEGENBUCHBAR = 'Diese Buchung lässt sich nicht gegenbuchen.';
     public const NICHT_GEFUNDEN = 'Diesen Artikel gibt es nicht mehr.';
+    public const SAMMLUNG_LEER = 'Die Sammlung enthält keine Artikel.';
     /** Alle Ausgangsarten der Datenbank (das Formular bietet verkauft_boerse nicht an). */
     private const AUSGANG_ARTEN = ['gegen_spende', 'verkauft_boerse', 'verschrottet', 'ausgeliehen', 'sonstiges'];
 
@@ -62,14 +63,21 @@ final class MagazinDienst
         $this->rep->sperreArtikel($id);
         $felder = array_intersect_key($artikel, array_flip([...MagazinRepository::FELDER, 'lagerort', 'fahrzeug_id']));
         $this->protokoll->schreibe($benutzerId, self::OBJEKT_ARTIKEL, $id, 'angelegt', Aenderungsprotokoll::diff([], $felder));
+        $datum = (string) ($eingang['datum'] ?? date('Y-m-d'));
         $this->schreibeBuchung($id, [
             'art' => 'eingang',
-            'datum' => $eingang['datum'] ?? date('Y-m-d'),
+            'datum' => $datum,
             'menge' => $menge,
             'herkunft' => $eingang['herkunft'] ?? 'sonstiges',
             'freitext' => $eingang['freitext'] ?? null,
             'betrag' => $eingang['betrag'] ?? null,
         ], $benutzerId);
+        // Der erste Lagerort steht als Umlagerung im Verlauf, damit jeder Ort dort nachvollziehbar ist (im Protokoll
+        // steht er schon mit „angelegt“).
+        $lagerort = trim((string) ($artikel['lagerort'] ?? ''));
+        if ($lagerort !== '') {
+            $this->rep->bucheZeile($id, ['art' => 'umlagerung', 'datum' => $datum, 'menge' => 0, 'lagerort_neu' => $lagerort], $benutzerId);
+        }
         return $id;
     }
 
@@ -183,8 +191,12 @@ final class MagazinDienst
         }
         return Transaktion::readCommitted($this->pdo, function () use ($sammlungId, $lagerort, $benutzerId): int {
             $this->rep->sperreSammlung($sammlungId) ?? throw new DomainFehler('Diese Sammlung gibt es nicht mehr.');
+            $artikelIds = $this->rep->artikelDerSammlung($sammlungId);
+            if ($artikelIds === []) {
+                throw new DomainFehler(self::SAMMLUNG_LEER); // nichts umzulagern, kein Protokolleintrag
+            }
             $n = 0;
-            foreach ($this->rep->artikelDerSammlung($sammlungId) as $artikelId) {
+            foreach ($artikelIds as $artikelId) {
                 $artikel = $this->rep->sperreArtikel($artikelId);
                 if ($artikel !== null) {
                     $this->lagereUm($artikel, $lagerort, date('Y-m-d'), $benutzerId);

@@ -239,7 +239,7 @@ final class MagazinHttpTest extends DbTestCase
         $r = $this->ausgang($id, '6');
         $this->assertSame(422, $r->status);
         $this->assertStringContainsString('Der Bestand reicht nicht: verfügbar sind nur 5.', $r->body);
-        $this->assertSame(1, $this->zahl("SELECT COUNT(*) FROM magazin_buchung WHERE artikel_id = $id"));
+        $this->assertSame(0, $this->zahl("SELECT COUNT(*) FROM magazin_buchung WHERE artikel_id = $id AND art = 'ausgang'"));
 
         $r = $this->post("/magazin/$id/buchungen", ['art' => 'ausgang', 'menge' => '1', 'ausgang_art' => 'verkauft_boerse']);
         $this->assertSame(422, $r->status);
@@ -470,6 +470,55 @@ final class MagazinHttpTest extends DbTestCase
         $this->assertSame(url("/magazin/$id") . '#fotos', $r->headers['Location']);
         $this->assertSame(0, $this->zahl('SELECT COUNT(*) FROM dokument'));
         $this->assertNull($this->pdo->query("SELECT titelbild_dokument_id FROM magazin_artikel WHERE id = $id")->fetchColumn() ?: null);
+    }
+
+    public function test_titelbild_rueckt_nach(): void
+    {
+        $this->anmelden('mitglied', true);
+        $id = $this->neuerArtikel();
+        $erstes = $this->bild();
+        $zweites = $this->bild();
+        $this->post("/magazin/$id/fotos", [], ['fotos' => [
+            'name' => ['erstes.jpg', 'zweites.jpg'],
+            'tmp_name' => [$erstes, $zweites],
+            'error' => [UPLOAD_ERR_OK, UPLOAD_ERR_OK],
+            'size' => [filesize($erstes), filesize($zweites)],
+        ]]);
+        $ids = array_map('intval', $this->pdo->query("SELECT dokument_id FROM dokument_zuordnung WHERE objekt_typ = 'magazin_artikel' AND objekt_id = $id ORDER BY dokument_id")->fetchAll(\PDO::FETCH_COLUMN));
+        $this->assertCount(2, $ids);
+        $this->assertSame($ids[0], $this->zahl("SELECT titelbild_dokument_id FROM magazin_artikel WHERE id = $id"));
+        $stand = (string) $this->pdo->query("SELECT geaendert_am FROM magazin_artikel WHERE id = $id")->fetchColumn();
+
+        // Wird das Titelbild gelöscht, rückt das älteste verbliebene Foto nach (ohne Bearbeitungskonflikt).
+        $this->assertSame(303, $this->post("/dateien/{$ids[0]}/loeschen")->status);
+        $this->assertSame($ids[1], $this->zahl("SELECT titelbild_dokument_id FROM magazin_artikel WHERE id = $id"));
+        $this->assertSame($stand, (string) $this->pdo->query("SELECT geaendert_am FROM magazin_artikel WHERE id = $id")->fetchColumn());
+
+        // Ein anderes Foto als das Titelbild zu löschen ändert das Titelbild nicht; nach dem letzten bleibt keins.
+        $this->assertSame(303, $this->post("/dateien/{$ids[1]}/loeschen")->status);
+        $this->assertNull($this->pdo->query("SELECT titelbild_dokument_id FROM magazin_artikel WHERE id = $id")->fetchColumn() ?: null);
+    }
+
+    public function test_formular_beschriftungen(): void
+    {
+        $this->anmelden('mitglied', true);
+        $id = $this->neuerArtikel();
+        $html = $this->get("/magazin/$id")->body;
+        $this->assertMatchesRegularExpression('#<label[^>]*for="b-ausgang-betrag"[^>]*>Betrag</label>#', $html);
+        $this->assertMatchesRegularExpression('#<label[^>]*for="b-eingang-betrag"[^>]*>Wert</label>#', $html);
+        $this->assertStringNotContainsString('– bitte wählen –', $html);
+        $this->assertStringContainsString('<option value="">wählen …</option>', $html);
+    }
+
+    public function test_leere_sammlung_umlagern(): void
+    {
+        $this->anmelden('mitglied', true);
+        $this->assertSame(303, $this->post('/magazin/sammlungen', ['name' => 'Leere Kiste', 'notiz' => ''])->status);
+        $s = $this->zahl('SELECT MAX(id) FROM magazin_sammlung');
+        $r = $this->post("/magazin/sammlungen/$s/umlagern", ['lagerort' => 'Dachboden']);
+        $this->assertSame(422, $r->status);
+        $this->assertStringContainsString('Die Sammlung enthält keine Artikel.', $r->body);
+        $this->assertSame(0, $this->zahl("SELECT COUNT(*) FROM aenderungsprotokoll WHERE objekt_typ = 'magazin_sammlung' AND objekt_id = $s AND aktion = 'geaendert'"));
     }
 
     private function bild(): string

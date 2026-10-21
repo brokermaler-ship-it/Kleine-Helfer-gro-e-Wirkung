@@ -26,6 +26,7 @@ $summe = array_sum(array_map(fn(array $a): int => (int) $a['bestand'], $s['artik
 <?php if ($s['notiz'] !== null && $s['notiz'] !== ''): ?><p class="text-break"><?= nl2br(e((string) $s['notiz'])) ?></p><?php endif; ?>
 
 <?php if ($s['artikel'] === []): ?>
+    <?php if ($umlagernFehler !== null): ?><div class="alert alert-danger" role="alert"><?= e($umlagernFehler) ?></div><?php endif; ?>
     <p class="text-muted">Die Sammlung enthält noch keine Artikel.</p>
 <?php else: ?>
     <div class="list-group mb-4">

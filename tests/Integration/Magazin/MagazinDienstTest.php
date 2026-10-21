@@ -40,7 +40,7 @@ final class MagazinDienstTest extends DbTestCase
         return (int) $this->pdo->query("SELECT id FROM magazin_kategorie WHERE schluessel = '$schluessel'")->fetchColumn();
     }
 
-    private function artikel(int $menge = 5, string $bezeichnung = 'Märklin C-Gleis 24188', ?string $lagerort = 'Regal 1'): int
+    private function artikel(int $menge = 5, string $bezeichnung = 'Märklin C-Gleis 24188', ?string $lagerort = null): int
     {
         return $this->dienst->legeAnMitEingang(
             ['bezeichnung' => $bezeichnung, 'kategorie_id' => $this->kategorie(), 'lagerort' => $lagerort],
@@ -78,7 +78,7 @@ final class MagazinDienstTest extends DbTestCase
 
     public function test_anlegen_mit_eingang(): void
     {
-        $id = $this->artikel(5);
+        $id = $this->artikel(5, 'Märklin C-Gleis 24188', 'Regal 1');
         $a = $this->rep->finde($id);
         $this->assertSame('M' . $id, $a['code']);
         $this->assertSame(5, $a['bestand']);
@@ -86,12 +86,21 @@ final class MagazinDienstTest extends DbTestCase
         $this->assertSame('sonstiges', $a['kategorie_schluessel']);
         $this->assertSame('gebraucht', $a['zustand']);
         $this->assertSame($this->benutzer, (int) $a['angelegt_von_benutzer_id']);
+        // Der erste Lagerort steht als Umlagerung im Verlauf (neueste zuerst: Umlagerung, dann Eingang).
         $b = $this->rep->buchungen($id);
-        $this->assertCount(1, $b);
-        $this->assertSame('eingang', $b[0]['art']);
-        $this->assertSame(5, (int) $b[0]['menge']);
-        $this->assertSame('spende', $b[0]['herkunft']);
-        $this->assertSame('Max Muster', $b[0]['benutzer_name']);
+        $this->assertCount(2, $b);
+        $this->assertSame('umlagerung', $b[0]['art']);
+        $this->assertSame('Regal 1', $b[0]['lagerort_neu']);
+        $this->assertSame(0, (int) $b[0]['menge']);
+        $this->assertSame('2026-10-01', $b[0]['datum']);
+        $this->assertSame('eingang', $b[1]['art']);
+        $this->assertSame(5, (int) $b[1]['menge']);
+        $this->assertSame('spende', $b[1]['herkunft']);
+        $this->assertSame('Max Muster', $b[1]['benutzer_name']);
+        $this->assertSame(5, $this->rep->bestand($id));
+        // Ohne Lagerort keine Umlagerung.
+        $ohne = $this->artikel(2);
+        $this->assertSame(1, $this->anzahlBuchungen($ohne));
         $protokoll = (new Aenderungsprotokoll($this->pdo))->fuerObjekt('magazin_artikel', $id);
         $this->assertNotEmpty($protokoll);
         $this->assertSame('angelegt', $protokoll[count($protokoll) - 1]['aktion']);
@@ -210,12 +219,12 @@ final class MagazinDienstTest extends DbTestCase
 
     public function test_umlagerung(): void
     {
-        $id = $this->artikel(5);
+        $id = $this->artikel(5, 'Märklin C-Gleis 24188', 'Regal 1');
         $this->dienst->buche($id, 'umlagerung', ['datum' => '2026-10-04', 'lagerort_neu' => 'Keller, Regal 7'], $this->benutzer);
         $a = $this->rep->finde($id);
         $this->assertSame('Keller, Regal 7', $a['lagerort']);
         $this->assertSame(5, $a['bestand']);
-        $z = $this->pdo->query("SELECT * FROM magazin_buchung WHERE artikel_id = $id AND art = 'umlagerung'")->fetch(\PDO::FETCH_ASSOC);
+        $z = $this->pdo->query("SELECT * FROM magazin_buchung WHERE artikel_id = $id AND art = 'umlagerung' ORDER BY id DESC LIMIT 1")->fetch(\PDO::FETCH_ASSOC);
         $this->assertSame(0, (int) $z['menge']);
         $this->assertSame('Keller, Regal 7', $z['lagerort_neu']);
         $protokoll = (new Aenderungsprotokoll($this->pdo))->fuerObjekt('magazin_artikel', $id);
@@ -245,6 +254,14 @@ final class MagazinDienstTest extends DbTestCase
         $this->assertSame('Nachlass Märklin-Gleise, 3 Kisten', $this->rep->finde($a)['sammlung_name']);
         $liste = $this->rep->sammlungen();
         $this->assertSame(2, (int) $liste[0]['artikel_anzahl']);
+    }
+
+    public function test_leere_sammlung_umlagern(): void
+    {
+        $s = $this->rep->sammlungAnlegen('Leere Kiste', null);
+        $this->assertSame('Die Sammlung enthält keine Artikel.', $this->fehlerVon(fn() => $this->dienst->umlagereSammlung($s, 'Dachboden', $this->benutzer)));
+        $this->assertSame([], (new Aenderungsprotokoll($this->pdo))->fuerObjekt('magazin_sammlung', $s));
+        $this->assertFalse($this->pdo->inTransaction());
     }
 
     public function test_sammlung_artikel_nur_einmal_und_stand(): void

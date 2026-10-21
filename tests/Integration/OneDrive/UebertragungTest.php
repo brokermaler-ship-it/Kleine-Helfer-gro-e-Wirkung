@@ -119,6 +119,18 @@ final class UebertragungTest extends OneDriveTestCase
         self::assertSame('lokal', $this->dok($id)['ablage']);
     }
 
+    public function test_boersenanfrage_ohne_lokale_datei_ist_kein_fehler(): void
+    {
+        $id = $this->dokument();
+        $this->pdo->exec("INSERT INTO dokument_zuordnung (dokument_id, objekt_typ, objekt_id) VALUES ($id, 'boerse_anfrage', 1)");
+        unlink($this->speicher . '/' . $this->dok($id)['pfad']);
+        $this->verbinde();
+        $this->auftrag($id);
+        self::assertSame(['erledigt' => 1, 'fehler' => 0], $this->uebertragung()->verarbeite(5, $this->jetzt));
+        self::assertSame([], $this->http->anfragen);
+        self::assertSame('lokal', $this->dok($id)['ablage']);
+    }
+
     public function testOriginalBehaltenKonfiguriert(): void
     {
         $id = $this->dokument();

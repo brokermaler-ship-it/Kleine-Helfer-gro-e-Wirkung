@@ -104,6 +104,18 @@ final class DokumentRepository
             ->execute([$dokumentId, $objektId]);
     }
 
+    /** Ältestes Foto (mit Anzeige-Variante) am Objekt, Kandidat für das Titelbild; null, wenn keins da ist. */
+    public function aeltestesFoto(string $objektTyp, int $objektId): ?int
+    {
+        $st = $this->pdo->prepare(
+            'SELECT d.id FROM dokument d JOIN dokument_zuordnung z ON z.dokument_id = d.id '
+            . 'WHERE z.objekt_typ = ? AND z.objekt_id = ? AND d.hat_anzeige = 1 ORDER BY d.hochgeladen_am, d.id LIMIT 1'
+        );
+        $st->execute([$objektTyp, $objektId]);
+        $id = $st->fetchColumn();
+        return $id === false ? null : (int) $id;
+    }
+
     /** Entfernt Datensatz, Zuordnungen, Datei und Varianten; löst Titelbild-Verweise (Fahrzeuge, Anlagen, Magazinartikel, Angebote). */
     public function loeschen(int $id): void
     {
@@ -141,8 +153,16 @@ final class DokumentRepository
         }
         $this->pdo->prepare('UPDATE fahrzeug SET titelbild_dokument_id = NULL, geaendert_am = geaendert_am WHERE titelbild_dokument_id = ?')->execute([$id]);
         // anlage ab Migration 011, magazin_artikel ab 016, boerse_angebot ab 017: vor dem Datenbank-Update fehlt die Tabelle.
-        foreach (['anlage', ...array_values(self::TITELBILD_TABELLEN)] as $tabelle) {
+        $ohneTitelbild = [];
+        foreach (['anlage' => 'anlage', ...self::TITELBILD_TABELLEN] as $typ => $tabelle) {
             try {
+                if (self::hatTitelbild($typ)) {
+                    $st = $this->pdo->prepare("SELECT id FROM $tabelle WHERE titelbild_dokument_id = ?");
+                    $st->execute([$id]);
+                    foreach ($st->fetchAll(\PDO::FETCH_COLUMN) as $objektId) {
+                        $ohneTitelbild[] = [$typ, (int) $objektId];
+                    }
+                }
                 $this->pdo->prepare("UPDATE $tabelle SET titelbild_dokument_id = NULL, geaendert_am = geaendert_am WHERE titelbild_dokument_id = ?")->execute([$id]);
             } catch (\PDOException $e) {
                 if ((string) $e->getCode() !== '42S02') {
@@ -152,6 +172,13 @@ final class DokumentRepository
         }
         $this->pdo->prepare('DELETE FROM dokument_zuordnung WHERE dokument_id = ?')->execute([$id]);
         $this->pdo->prepare('DELETE FROM dokument WHERE id = ?')->execute([$id]);
+        // Magazinartikel und Angebote: das älteste verbliebene Foto mit Anzeige-Variante rückt als Titelbild nach.
+        foreach ($ohneTitelbild as [$typ, $objektId]) {
+            $naechstes = $this->aeltestesFoto($typ, $objektId);
+            if ($naechstes !== null) {
+                $this->setzeTitelbildWennLeer($typ, $objektId, $naechstes);
+            }
+        }
         return (string) $dok['pfad'];
     }
 
