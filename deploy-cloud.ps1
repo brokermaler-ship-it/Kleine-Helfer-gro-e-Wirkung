@@ -49,8 +49,8 @@ $vars.GetEnumerator() | Where-Object { $_.Key -notlike 'LIVEKIT_*' } | ForEach-O
 Push-Location $stage
 try {
     if (Test-Path livekit.toml) {
-        lk agent update-secrets --secrets-file $secrets --overwrite
-        lk agent deploy
+        lk agent update-secrets --yes --secrets-file $secrets --overwrite
+        lk agent deploy --yes
     } else {
         lk agent create --yes --region $region --secrets-file $secrets
     }
