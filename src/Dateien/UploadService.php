@@ -50,7 +50,7 @@ final class UploadService
      * @param array<string,mixed> $phpDatei Eintrag aus $_FILES (name, tmp_name, error, size)
      * @throws UploadFehler
      */
-    public function speichere(array $phpDatei, string $titel, string $kategorie, ?int $benutzerId, ?int $fahrzeugId = null): int
+    public function speichere(array $phpDatei, string $titel, string $kategorie, ?int $benutzerId, ?int $fahrzeugId = null, ?int $anlageId = null): int
     {
         $tmp = $this->pruefeUpload($phpDatei);
         $groesse = (int) filesize($tmp);
@@ -104,7 +104,7 @@ final class UploadService
             throw $t;
         }
         $id = (int) $this->pdo->lastInsertId();
-        $this->uebertrageNachOneDrive($id, $fahrzeugId);
+        $this->uebertrageNachOneDrive($id, $fahrzeugId, $anlageId);
         return $id;
     }
 
@@ -112,7 +112,7 @@ final class UploadService
      * Legt den Übertragungsauftrag an und versucht ihn sofort. Die Datei ist lokal bereits vollständig
      * gespeichert; jeder Fehler hier bleibt unsichtbar (nur Log ohne Geheimnisse) und wird später wiederholt.
      */
-    private function uebertrageNachOneDrive(int $dokumentId, ?int $fahrzeugId): void
+    private function uebertrageNachOneDrive(int $dokumentId, ?int $fahrzeugId, ?int $anlageId): void
     {
         if ($this->uebertragung === null) {
             return;
@@ -121,10 +121,12 @@ final class UploadService
             if (!$this->uebertragung->bereit()) {
                 return;
             }
-            if ($fahrzeugId !== null) {
-                // Der Zielpfad richtet sich nach dem Fahrzeug, daher vor dem Auftrag zuordnen.
-                $this->pdo->prepare('INSERT IGNORE INTO dokument_zuordnung (dokument_id, objekt_typ, objekt_id) VALUES (?, ?, ?)')
-                    ->execute([$dokumentId, 'fahrzeug', $fahrzeugId]);
+            // Der Zielpfad richtet sich nach dem Fahrzeug bzw. der Anlage, daher vor dem Auftrag zuordnen.
+            foreach (['fahrzeug' => $fahrzeugId, 'anlage' => $anlageId] as $typ => $objektId) {
+                if ($objektId !== null) {
+                    $this->pdo->prepare('INSERT IGNORE INTO dokument_zuordnung (dokument_id, objekt_typ, objekt_id) VALUES (?, ?, ?)')
+                        ->execute([$dokumentId, $typ, $objektId]);
+                }
             }
             $this->uebertragung->einreihen($dokumentId);
         } catch (\Throwable $t) {

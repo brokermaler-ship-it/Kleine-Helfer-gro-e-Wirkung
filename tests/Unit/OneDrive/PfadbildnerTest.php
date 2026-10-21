@@ -15,6 +15,14 @@ final class PfadbildnerTest extends TestCase
         self::assertSame('Fahrzeuge/EMC-0001 V 200 060/Seitenansicht.jpg', $p);
     }
 
+    public function test_anlage(): void
+    {
+        self::assertSame('Anlagen/A3 Clubanlage/Foto.jpg', Pfadbildner::fuerDokument(['titel' => 'Foto', 'endung' => 'jpg'], null, ['nummer' => 3, 'name' => 'Clubanlage']));
+        self::assertSame('Anlagen/A7 Modul_ Bahnhof/Plan.pdf', Pfadbildner::fuerDokument(['titel' => 'Plan', 'endung' => 'pdf'], null, ['nummer' => '7', 'name' => 'Modul: Bahnhof']));
+        // Ein Fahrzeug hat Vorrang (Dokumente hängen in der Regel nur an einem Objekt).
+        self::assertSame('Fahrzeuge/EMC-0001 V 200/Foto.jpg', Pfadbildner::fuerDokument(['titel' => 'Foto', 'endung' => 'jpg'], ['inventarnummer' => 'EMC-0001', 'bezeichnung' => 'V 200'], ['nummer' => 3, 'name' => 'Clubanlage']));
+    }
+
     public function testOhneFahrzeugSonstiges(): void
     {
         self::assertSame('Sonstiges/Anleitung.pdf', Pfadbildner::fuerDokument(['titel' => 'Anleitung', 'endung' => 'pdf'], null));

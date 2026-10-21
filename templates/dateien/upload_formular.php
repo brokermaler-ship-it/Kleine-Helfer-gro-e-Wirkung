@@ -1,8 +1,8 @@
 <?php
-/** @var array<string,mixed> $fahrzeug */
+/** @var string $uploadUrl Ziel des Formulars (bereits mit url()) */
 $kategorien = ['anleitung' => 'Anleitung', 'schaltplan' => 'Schaltplan', 'gleisplan' => 'Gleisplan', 'rechnung' => 'Rechnung', 'sonstiges' => 'Sonstiges'];
 ?>
-<form method="post" action="<?= e(url('/fahrzeuge/' . $fahrzeug['id'] . '/dateien')) ?>" enctype="multipart/form-data" class="card card-body mb-4">
+<form method="post" action="<?= e($uploadUrl) ?>" enctype="multipart/form-data" class="card card-body mb-4">
     <?php include dirname(__DIR__) . '/partials/csrf.php'; ?>
     <h2 class="h6">Fotos und Dokumente hochladen</h2>
     <div class="row g-2">

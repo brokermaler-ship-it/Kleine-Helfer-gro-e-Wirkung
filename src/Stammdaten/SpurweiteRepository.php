@@ -55,11 +55,16 @@ final class SpurweiteRepository
         if ((int) $st->fetchColumn() > 0) {
             throw new DomainFehler('Diese Spurweite wird noch von Fahrzeugen verwendet.');
         }
+        $st = $this->pdo->prepare('SELECT COUNT(*) FROM anlage WHERE spurweite_id = ?');
+        $st->execute([$id]);
+        if ((int) $st->fetchColumn() > 0) {
+            throw new DomainFehler('Diese Spurweite wird noch von Anlagen verwendet.');
+        }
         try {
             $this->pdo->prepare('DELETE FROM spurweite WHERE id = ?')->execute([$id]);
         } catch (\PDOException $e) {
-            if ((string) $e->getCode() === '23000') { // gleichzeitig entstandener Fahrzeugbezug (FK RESTRICT)
-                throw new DomainFehler('Diese Spurweite wird noch von Fahrzeugen verwendet.', 0, $e);
+            if ((string) $e->getCode() === '23000') { // gleichzeitig entstandener Bezug (FK RESTRICT)
+                throw new DomainFehler('Diese Spurweite wird noch von Fahrzeugen oder Anlagen verwendet.', 0, $e);
             }
             throw $e;
         }

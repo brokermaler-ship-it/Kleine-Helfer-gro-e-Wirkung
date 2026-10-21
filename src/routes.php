@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Emc\Anlagen\AnlageController;
 use Emc\Auth\AuthController;
 use Emc\Auth\InstallController;
 use Emc\Auth\KennwortController;
@@ -61,6 +62,15 @@ return function (Router $router, App $app): void {
     $router->add('POST', '/fahrzeuge/{id}/zurueckholen', $app->erfordert('lesen', $fz('zurueckholen')));
     $router->add('GET', '/abstellgleis', $app->erfordert('lesen', $fz('abstellgleis')));
 
+    $anl = fn(string $m) => fn(Request $r, array $p = []) => $c->get(AnlageController::class)->$m($r, $p);
+    $router->add('GET', '/anlagen', $app->erfordert('lesen', $anl('liste')));
+    $router->add('GET', '/anlagen/neu', $app->erfordert('anlage_bearbeiten', $anl('neu')));
+    $router->add('POST', '/anlagen', $app->erfordert('anlage_bearbeiten', $anl('anlegen')));
+    $router->add('GET', '/anlagen/{id}', $app->erfordert('lesen', $anl('anzeigen')));
+    $router->add('GET', '/anlagen/{id}/bearbeiten', $app->erfordert('anlage_bearbeiten', $anl('bearbeiten')));
+    $router->add('POST', '/anlagen/{id}', $app->erfordert('anlage_bearbeiten', $anl('aendern')));
+    $router->add('POST', '/anlagen/{id}/loeschen', $app->erfordert('anlage_bearbeiten', $anl('loeschen')));
+
     $dec = fn(string $m) => fn(Request $r, array $p = []) => $c->get(DecoderController::class)->$m($r, $p);
     $router->add('POST', '/fahrzeuge/{id}/decoder', $app->erfordert('lesen', $dec('anlegen')));
     $router->add('GET', '/decoder/{id}/bearbeiten', $app->erfordert('lesen', $dec('bearbeiten')));
@@ -88,6 +98,8 @@ return function (Router $router, App $app): void {
     $datei = fn(string $m) => fn(Request $r, array $p = []) => $c->get(DateiController::class)->$m($r, $p);
     $router->add('POST', '/fahrzeuge/{id}/dateien', $app->erfordert('lesen', $datei('hochladen')));
     $router->add('POST', '/fahrzeuge/{id}/titelbild', $app->erfordert('lesen', $datei('titelbild')));
+    $router->add('POST', '/anlagen/{id}/dateien', $app->erfordert('anlage_bearbeiten', $datei('hochladenAnlage')));
+    $router->add('POST', '/anlagen/{id}/titelbild', $app->erfordert('anlage_bearbeiten', $datei('titelbildAnlage')));
     $router->add('POST', '/dateien/{id}/loeschen', $app->erfordert('lesen', $datei('loeschen')));
     $router->add('GET', '/dateien/{id}', $app->erfordert('lesen', $datei('ausliefern')));
     $router->add('GET', '/dateien/{id}/{variante}', $app->erfordert('lesen', $datei('ausliefern')));

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Emc\Dateien;
 
+use Emc\Anlagen\AnlageRepository;
 use Emc\Auth\Auth;
 use Emc\Auth\Berechtigung;
 use Emc\Core\HttpFehler;
@@ -26,6 +27,7 @@ final class DateiController
         private DokumentRepository $dokumente,
         private UploadService $upload,
         private FahrzeugRepository $fahrzeuge,
+        private AnlageRepository $anlagen,
         private Aenderungsprotokoll $protokoll,
         private Auth $auth,
         private Session $session,
@@ -38,11 +40,34 @@ final class DateiController
     {
         $fz = $this->ladeFahrzeug($p);
         Berechtigung::verlangeFahrzeugBearbeiten($this->auth->benutzer(), $fz);
-        $fzId = (int) $fz['id'];
+        return $this->ladeHoch($r, 'fahrzeug', (int) $fz['id']);
+    }
+
+    public function hochladenAnlage(Request $r, array $p): Response
+    {
+        $anlage = $this->ladeAnlage($p);
+        return $this->ladeHoch($r, 'anlage', (int) $anlage['id']);
+    }
+
+    public function titelbild(Request $r, array $p): Response
+    {
+        $fz = $this->ladeFahrzeug($p);
+        Berechtigung::verlangeFahrzeugBearbeiten($this->auth->benutzer(), $fz);
+        return $this->waehleTitelbild($r, 'fahrzeug', $fz, 'Bitte ein Foto dieses Fahrzeugs als Titelbild wählen.');
+    }
+
+    public function titelbildAnlage(Request $r, array $p): Response
+    {
+        return $this->waehleTitelbild($r, 'anlage', $this->ladeAnlage($p), 'Bitte ein Foto dieser Anlage als Titelbild wählen.');
+    }
+
+    /** Speichert die hochgeladenen Dateien am Objekt (Typ „fahrzeug“ oder „anlage“); das erste Foto wird Titelbild. */
+    private function ladeHoch(Request $r, string $typ, int $objektId): Response
+    {
         $dateien = self::normalisiere($r->file('datei'));
         if ($dateien === []) {
             $this->session->meldung('fehler', 'Es wurde keine Datei ausgewählt.');
-            return $this->zurueck($fzId);
+            return $this->zurueck($typ, $objektId);
         }
         $titel = count($dateien) === 1 ? mb_substr(trim($r->text('titel')), 0, 200) : '';
         $kategorie = $r->text('kategorie', 'sonstiges');
@@ -51,21 +76,28 @@ final class DateiController
         foreach (array_slice($dateien, 0, self::MAX_DATEIEN) as $datei) {
             $name = is_string($datei['name'] ?? null) ? basename(str_replace('\\', '/', $datei['name'])) : '';
             try {
-                $id = $this->upload->speichere($datei, $titel, $kategorie, $benutzerId, $fzId);
+                $id = $this->upload->speichere(
+                    $datei,
+                    $titel,
+                    $kategorie,
+                    $benutzerId,
+                    $typ === 'fahrzeug' ? $objektId : null,
+                    $typ === 'anlage' ? $objektId : null
+                );
             } catch (UploadFehler $f) {
                 $this->session->meldung('fehler', ($name !== '' ? $name . ': ' : '') . $f->getMessage());
                 continue;
             }
-            $this->dokumente->zuordnen($id, 'fahrzeug', $fzId);
+            $this->dokumente->zuordnen($id, $typ, $objektId);
             $dok = $this->dokumente->finde($id);
             $erfolge++;
             if ($dok !== null && $dok['kategorie'] === 'foto' && (int) $dok['hat_anzeige'] === 1) {
-                $aktuell = $this->fahrzeuge->finde($fzId);
+                $aktuell = $this->objekt($typ, $objektId);
                 if ($aktuell !== null && $aktuell['titelbild_dokument_id'] === null) {
-                    $this->dokumente->setzeTitelbild($fzId, $id);
+                    $this->setzeTitelbild($typ, $objektId, $id);
                 }
             }
-            $this->protokoll->schreibe($benutzerId, 'fahrzeug', $fzId, 'geaendert', ['datei' => ['alt' => null, 'neu' => $dok['titel'] ?? $name]]);
+            $this->protokoll->schreibe($benutzerId, $typ, $objektId, 'geaendert', ['datei' => ['alt' => null, 'neu' => $dok['titel'] ?? $name]]);
         }
         if (count($dateien) > self::MAX_DATEIEN) {
             $this->session->meldung('warnung', 'Es werden höchstens ' . self::MAX_DATEIEN . ' Dateien auf einmal verarbeitet.');
@@ -73,39 +105,63 @@ final class DateiController
         if ($erfolge > 0) {
             $this->session->meldung('erfolg', $erfolge === 1 ? 'Die Datei wurde hochgeladen.' : $erfolge . ' Dateien wurden hochgeladen.');
         }
-        return $this->zurueck($fzId);
+        return $this->zurueck($typ, $objektId);
     }
 
-    public function titelbild(Request $r, array $p): Response
+    /** @param array<string,mixed> $objekt */
+    private function waehleTitelbild(Request $r, string $typ, array $objekt, string $fehler): Response
     {
-        $fz = $this->ladeFahrzeug($p);
-        Berechtigung::verlangeFahrzeugBearbeiten($this->auth->benutzer(), $fz);
-        $fzId = (int) $fz['id'];
+        $objektId = (int) $objekt['id'];
         $dokId = $r->ganzzahl('dokument_id', 1, 2147483647);
         $dok = $dokId === null ? null : $this->dokumente->finde($dokId);
-        $typ = $dok === null ? null : DateiTyp::fuerEndung((string) $dok['endung']);
-        if ($dok === null || $typ === null || !$typ['bild'] || !$this->dokumente->istZugeordnet((int) $dok['id'], 'fahrzeug', $fzId)) {
-            $this->session->meldung('fehler', 'Bitte ein Foto dieses Fahrzeugs als Titelbild wählen.');
-            return $this->zurueck($fzId);
+        $dateiTyp = $dok === null ? null : DateiTyp::fuerEndung((string) $dok['endung']);
+        if ($dok === null || $dateiTyp === null || !$dateiTyp['bild'] || !$this->dokumente->istZugeordnet((int) $dok['id'], $typ, $objektId)) {
+            $this->session->meldung('fehler', $fehler);
+            return $this->zurueck($typ, $objektId);
         }
-        $this->dokumente->setzeTitelbild($fzId, (int) $dok['id']);
-        $this->protokoll->schreibe($this->auth->benutzer()?->id, 'fahrzeug', $fzId, 'geaendert', ['titelbild' => ['alt' => $fz['titelbild_dokument_id'], 'neu' => (int) $dok['id']]]);
+        $this->setzeTitelbild($typ, $objektId, (int) $dok['id']);
+        $this->protokoll->schreibe($this->auth->benutzer()?->id, $typ, $objektId, 'geaendert', ['titelbild' => ['alt' => $objekt['titelbild_dokument_id'], 'neu' => (int) $dok['id']]]);
         $this->session->meldung('erfolg', 'Das Titelbild wurde geändert.');
-        return $this->zurueck($fzId);
+        return $this->zurueck($typ, $objektId);
+    }
+
+    /** @return ?array<string,mixed> */
+    private function objekt(string $typ, int $id): ?array
+    {
+        return $typ === 'anlage' ? $this->anlagen->finde($id) : $this->fahrzeuge->finde($id);
+    }
+
+    private function setzeTitelbild(string $typ, int $id, int $dokumentId): void
+    {
+        if ($typ === 'anlage') {
+            $this->anlagen->setzeTitelbild($id, $dokumentId);
+            return;
+        }
+        $this->dokumente->setzeTitelbild($id, $dokumentId);
     }
 
     public function loeschen(Request $r, array $p): Response
     {
         $dok = $this->ladeDokument($p);
         $this->verlangeLoeschrecht($dok);
-        $fahrzeugIds = $this->dokumente->objekte((int) $dok['id'], 'fahrzeug');
+        $objekte = [
+            'fahrzeug' => $this->dokumente->objekte((int) $dok['id'], 'fahrzeug'),
+            'anlage' => $this->dokumente->objekte((int) $dok['id'], 'anlage'),
+        ];
         $this->dokumente->loeschen((int) $dok['id']);
         $this->raeumeOneDriveAuf();
-        foreach ($fahrzeugIds as $fzId) {
-            $this->protokoll->schreibe($this->auth->benutzer()?->id, 'fahrzeug', $fzId, 'geaendert', ['datei' => ['alt' => $dok['titel'], 'neu' => null]]);
+        foreach ($objekte as $typ => $ids) {
+            foreach ($ids as $objektId) {
+                $this->protokoll->schreibe($this->auth->benutzer()?->id, $typ, $objektId, 'geaendert', ['datei' => ['alt' => $dok['titel'], 'neu' => null]]);
+            }
         }
         $this->session->meldung('erfolg', 'Die Datei wurde gelöscht.');
-        return isset($fahrzeugIds[0]) ? $this->zurueck($fahrzeugIds[0]) : Response::redirect(url('/fahrzeuge'));
+        foreach ($objekte as $typ => $ids) {
+            if (isset($ids[0])) {
+                return $this->zurueck($typ, $ids[0]);
+            }
+        }
+        return Response::redirect(url('/fahrzeuge'));
     }
 
     /**
@@ -243,9 +299,9 @@ final class DateiController
         return $liste;
     }
 
-    private function zurueck(int $fahrzeugId): Response
+    private function zurueck(string $typ, int $objektId): Response
     {
-        return Response::redirect(url('/fahrzeuge/' . $fahrzeugId) . '#dateien');
+        return Response::redirect(url(($typ === 'anlage' ? '/anlagen/' : '/fahrzeuge/') . $objektId) . '#dateien');
     }
 
     private static function id(array $p): int
@@ -263,6 +319,24 @@ final class DateiController
             throw new HttpFehler(404);
         }
         return $fz;
+    }
+
+    /**
+     * Anlage zur Route; die Route verlangt bereits ANLAGE_BEARBEITEN, hier wird es zur Sicherheit erneut geprüft.
+     *
+     * @return array<string,mixed>
+     */
+    private function ladeAnlage(array $p): array
+    {
+        if (!Berechtigung::darf($this->auth->benutzer(), Berechtigung::ANLAGE_BEARBEITEN)) {
+            throw new HttpFehler(403);
+        }
+        $id = self::id($p);
+        $anlage = $id > 0 ? $this->anlagen->finde($id) : null;
+        if ($anlage === null) {
+            throw new HttpFehler(404);
+        }
+        return $anlage;
     }
 
     /** @return array<string,mixed> */

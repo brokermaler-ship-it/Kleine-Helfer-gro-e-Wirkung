@@ -27,6 +27,7 @@ use Emc\Auth\Berechtigung;
                         <li><a class="dropdown-item d-flex justify-content-between align-items-center gap-3" href="<?= e(url('/abstellgleis')) ?>">Abstellgleis<?php if ($abstellgleisAnzahl !== null): ?> <span class="badge rounded-pill text-bg-secondary"><?= (int) $abstellgleisAnzahl() ?></span><?php endif; ?></a></li>
                     </ul>
                 </li>
+                <li class="nav-item"><a class="nav-link" href="<?= e(url('/anlagen')) ?>">Anlagen</a></li>
                 <li class="nav-item"><a class="nav-link" href="<?= e(url('/adressen')) ?>">Adressen</a></li>
                 <?php if ($darf(Berechtigung::PERSON_BEARBEITEN)): ?>
                     <li class="nav-item"><a class="nav-link" href="<?= e(url('/personen')) ?>">Personen</a></li>

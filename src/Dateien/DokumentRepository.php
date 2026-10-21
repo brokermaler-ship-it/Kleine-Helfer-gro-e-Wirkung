@@ -85,7 +85,7 @@ final class DokumentRepository
             ->execute([$dokumentId, $fahrzeugId]);
     }
 
-    /** Entfernt Datensatz, Zuordnungen, Datei und Varianten; löst Titelbild-Verweise. */
+    /** Entfernt Datensatz, Zuordnungen, Datei und Varianten; löst Titelbild-Verweise (Fahrzeuge und Anlagen). */
     public function loeschen(int $id): void
     {
         if ($this->finde($id) === null) {
@@ -121,6 +121,14 @@ final class DokumentRepository
             $this->auftraege->neu('loeschen', null, $dok['onedrive_item_id'], null, $drive);
         }
         $this->pdo->prepare('UPDATE fahrzeug SET titelbild_dokument_id = NULL, geaendert_am = geaendert_am WHERE titelbild_dokument_id = ?')->execute([$id]);
+        try {
+            $this->pdo->prepare('UPDATE anlage SET titelbild_dokument_id = NULL, geaendert_am = geaendert_am WHERE titelbild_dokument_id = ?')->execute([$id]);
+        } catch (\PDOException $e) {
+            if ((string) $e->getCode() !== '42S02') {
+                throw $e;
+            }
+            // Datenbank-Update (Migration 011) noch nicht ausgeführt: es gibt noch keine Anlagen.
+        }
         $this->pdo->prepare('DELETE FROM dokument_zuordnung WHERE dokument_id = ?')->execute([$id]);
         $this->pdo->prepare('DELETE FROM dokument WHERE id = ?')->execute([$id]);
         return (string) $dok['pfad'];

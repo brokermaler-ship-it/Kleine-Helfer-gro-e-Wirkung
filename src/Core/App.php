@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Emc\Core;
 
+use Emc\Anlagen\AnlageController;
+use Emc\Anlagen\AnlageRepository;
 use Emc\Auth\Auth;
 use Emc\Auth\AuthController;
 use Emc\Auth\Berechtigung;
@@ -214,6 +216,18 @@ final class App
             Uebertragung::konfiguriert($this->config),
             $c->get(Uebertragung::class)
         ));
+        $this->container->set(AnlageRepository::class, fn(Container $c) => new AnlageRepository($c->get('pdo')));
+        $this->container->set(AnlageController::class, fn(Container $c) => new AnlageController(
+            $this->view,
+            $c->get(AnlageRepository::class),
+            $c->get(SpurweiteRepository::class),
+            $c->get(DokumentRepository::class),
+            $c->get(Aenderungsprotokoll::class),
+            $c->get(Auth::class),
+            $c->get('session'),
+            Uebertragung::konfiguriert($this->config),
+            $c->get(Uebertragung::class)
+        ));
         $this->container->set(DecoderRepository::class, fn(Container $c) => new DecoderRepository($c->get('pdo')));
         $this->container->set(Adresspruefung::class, fn(Container $c) => new Adresspruefung($c->get('pdo')));
         $this->container->set(DecoderController::class, fn(Container $c) => new DecoderController(
@@ -271,6 +285,7 @@ final class App
             $c->get(DokumentRepository::class),
             $c->get(UploadService::class),
             $c->get(FahrzeugRepository::class),
+            $c->get(AnlageRepository::class),
             $c->get(Aenderungsprotokoll::class),
             $c->get(Auth::class),
             $c->get('session'),
@@ -463,6 +478,13 @@ final class App
                 && $this->container->get(Migrator::class)->ausstehend() !== []
             ) {
                 $this->container->get('session')->meldung('warnung', 'Bitte zuerst das Datenbank-Update ausführen; bis dahin ruht die OneDrive-Übertragung.');
+                return Response::redirect(url('/admin/update'));
+            }
+            // 3c. Die Anlagen brauchen die Tabelle aus Migration 011 (Nicht-Administratoren sehen schon die Wartungsseite).
+            if (($pfad === '/anlagen' || str_starts_with($pfad, '/anlagen/'))
+                && $this->container->get(Migrator::class)->ausstehend() !== []
+            ) {
+                $this->container->get('session')->meldung('warnung', 'Bitte zuerst das Datenbank-Update ausführen.');
                 return Response::redirect(url('/admin/update'));
             }
             // 4. Erzwungene Passwortänderung.

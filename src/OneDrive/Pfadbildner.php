@@ -12,8 +12,9 @@ final class Pfadbildner
     /**
      * @param array<string,mixed> $dokument titel, endung
      * @param ?array<string,mixed> $fahrzeug inventarnummer, bezeichnung
+     * @param ?array<string,mixed> $anlage nummer, name (nur, wenn kein Fahrzeug angegeben ist)
      */
-    public static function fuerDokument(array $dokument, ?array $fahrzeug): string
+    public static function fuerDokument(array $dokument, ?array $fahrzeug, ?array $anlage = null): string
     {
         $endung = self::bereinige((string) ($dokument['endung'] ?? ''));
         $endung = $endung === '_' ? '' : $endung;
@@ -26,6 +27,10 @@ final class Pfadbildner
         }
         $name = self::bereinige($titel, self::MAX_SEGMENT - mb_strlen($schluss)) . $schluss;
 
+        if ($fahrzeug === null && $anlage !== null) {
+            $ordner = self::bereinige(trim('A' . (int) ($anlage['nummer'] ?? 0) . ' ' . (string) ($anlage['name'] ?? '')));
+            return 'Anlagen/' . $ordner . '/' . $name;
+        }
         if ($fahrzeug === null) {
             return 'Sonstiges/' . $name;
         }

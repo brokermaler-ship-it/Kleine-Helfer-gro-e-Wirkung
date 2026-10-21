@@ -17,6 +17,7 @@ final class Berechtigung
     public const STAMMDATEN_VERWALTEN = 'stammdaten_verwalten';
     public const BETRIEB = 'betrieb';
     public const PERSON_DSGVO_LOESCHEN = 'person_dsgvo_loeschen';
+    public const ANLAGE_BEARBEITEN = 'anlage_bearbeiten';
 
     /** Mindestrang je Aktion: 1 Mitglied, 2 Fahrzeugwart, 3 Bearbeiter, 4 Admin. */
     private const MINDESTRANG = [
@@ -29,6 +30,7 @@ final class Berechtigung
         self::STAMMDATEN_VERWALTEN => 4,
         self::BETRIEB => 4,
         self::PERSON_DSGVO_LOESCHEN => 4,
+        self::ANLAGE_BEARBEITEN => 3,
     ];
 
     public static function darf(?Benutzer $b, string $aktion): bool

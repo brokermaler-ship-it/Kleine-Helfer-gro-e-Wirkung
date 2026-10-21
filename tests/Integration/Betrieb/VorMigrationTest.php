@@ -90,4 +90,35 @@ final class VorMigrationTest extends DbTestCase
         self::assertSame(200, $r->status);
         self::assertStringContainsString('Datenbank-Update', $r->body);
     }
+
+    private function stand010(): void
+    {
+        $this->pdo->exec('DROP TABLE anlage');
+        $this->pdo->exec("DELETE FROM schema_migration WHERE version >= '011'");
+    }
+
+    /** Vor Migration 011 (ohne Tabelle anlage) lässt sich ein Fahrzeugdokument weiterhin löschen. */
+    public function test_dokument_loeschen_vor_migration_011(): void
+    {
+        [$fz, $dok] = $this->dokumentMitFahrzeug();
+        $this->pdo->exec("UPDATE fahrzeug SET titelbild_dokument_id = $dok WHERE id = $fz");
+        $this->stand010();
+        (new DokumentRepository($this->pdo, sys_get_temp_dir()))->loeschen($dok);
+        self::assertSame(0, (int) $this->pdo->query('SELECT COUNT(*) FROM dokument')->fetchColumn());
+        self::assertNull($this->pdo->query("SELECT titelbild_dokument_id FROM fahrzeug WHERE id = $fz")->fetchColumn() ?: null);
+    }
+
+    /** Vor Migration 011 führt die Anlagenliste Administratoren zum Update statt zu einem Fehler 500. */
+    public function test_anlagen_vor_migration_011(): void
+    {
+        $id = $this->legeBenutzerAn('admin@verein.de', 'geheim-passwort-1', 'admin');
+        $this->stand010();
+        $sitzung = ['_csrf' => str_repeat('a', 64)];
+        $this->sitzungAnmelden($sitzung, $id);
+        $app = \Emc\Core\App::erzeuge(self::testConfig(), new \Emc\Core\Session($sitzung));
+        $r = $app->handle(new \Emc\Core\Request('GET', '/anlagen'));
+        self::assertSame(303, $r->status);
+        self::assertSame('/admin/update', $r->headers['Location']);
+        self::assertSame(200, $app->handle(new \Emc\Core\Request('GET', '/fahrzeuge'))->status);
+    }
 }

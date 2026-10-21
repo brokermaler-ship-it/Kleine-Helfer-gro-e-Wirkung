@@ -93,6 +93,24 @@ final class DateiOneDriveHttpTest extends OneDriveTestCase
         self::assertSame(200, $this->get('/dateien/' . $d['id'] . '/vorschau')->status);
     }
 
+    public function testUploadAnEineAnlageLandetImAnlagenordner(): void
+    {
+        $this->pdo->exec("INSERT INTO anlage (nummer, name, spurweite_id) SELECT 3, 'Clubanlage', id FROM spurweite LIMIT 1");
+        $anlage = (int) $this->pdo->lastInsertId();
+        $this->verbinde();
+        $this->http->antwort(201, ['id' => 'ITEM1', 'name' => 'foto_gedreht.jpg']);
+        $tmp = tempnam(sys_get_temp_dir(), 'up');
+        $this->temp[] = $tmp;
+        copy(dirname(__DIR__, 2) . '/fixtures/dateien/foto_gedreht.jpg', $tmp);
+        $datei = ['name' => 'foto_gedreht.jpg', 'tmp_name' => $tmp, 'error' => UPLOAD_ERR_OK, 'size' => filesize($tmp)];
+        $r = $this->app()->handle(new Request('POST', "/anlagen/$anlage/dateien", [], ['_csrf' => str_repeat('a', 64)], ['datei' => $datei]));
+        self::assertSame(303, $r->status);
+        $d = $this->letztes();
+        self::assertSame('onedrive', $d['ablage']);
+        self::assertSame('Anlagen/A3 Clubanlage/foto_gedreht.jpg', $d['onedrive_pfad']);
+        self::assertStringContainsString('/drives/D1/items/ROOT:/Anlagen/A3%20Clubanlage/foto_gedreht.jpg:/content', $this->http->anfragen[0]['url']);
+    }
+
     public function testUploadBeiServerfehlerBleibtLokalNutzbar(): void
     {
         $this->verbinde();

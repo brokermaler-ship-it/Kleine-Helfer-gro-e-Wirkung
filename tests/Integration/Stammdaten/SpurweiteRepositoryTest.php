@@ -26,6 +26,7 @@ final class SpurweiteRepositoryTest extends DbTestCase
     {
         $this->pdo->exec('SET FOREIGN_KEY_CHECKS=0');
         $this->pdo->exec('TRUNCATE TABLE fahrzeug');
+        $this->pdo->exec('TRUNCATE TABLE anlage');
         $this->pdo->exec('SET FOREIGN_KEY_CHECKS=1');
         $this->pdo->exec("DELETE FROM spurweite WHERE name NOT IN ('H0','H0e','H0m','TT','N','Z','0','1','G/IIm')");
         parent::tearDown();
@@ -84,6 +85,20 @@ final class SpurweiteRepositoryTest extends DbTestCase
             $this->fail('DomainFehler erwartet');
         } catch (DomainFehler $e) {
             $this->assertSame('Diese Spurweite wird noch von Fahrzeugen verwendet.', $e->getMessage());
+        }
+        $this->assertNotNull($r->finde($id));
+    }
+
+    public function test_von_anlage_verwendete_spurweite_nicht_loeschbar(): void
+    {
+        $r = $this->repo();
+        $id = $r->speichern('Sonder', null, 99);
+        $this->pdo->prepare("INSERT INTO anlage (nummer, name, spurweite_id) VALUES (1, 'Clubanlage', ?)")->execute([$id]);
+        try {
+            $r->loeschen($id);
+            $this->fail('DomainFehler erwartet');
+        } catch (DomainFehler $e) {
+            $this->assertSame('Diese Spurweite wird noch von Anlagen verwendet.', $e->getMessage());
         }
         $this->assertNotNull($r->finde($id));
     }

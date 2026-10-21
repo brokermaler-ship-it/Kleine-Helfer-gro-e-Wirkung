@@ -261,7 +261,16 @@ final class Uebertragung
             $fahrzeug = $st->fetch(\PDO::FETCH_ASSOC) ?: null;
             break;
         }
-        $e = $this->graph->hochladen($ziel['drive_id'], $ziel['item_id'], Pfadbildner::fuerDokument($dok, $fahrzeug), $basis);
+        $anlage = null;
+        if ($fahrzeug === null) {
+            foreach ($this->dokumente->objekte($dokumentId, 'anlage') as $anlageId) {
+                $st = $this->pdo->prepare('SELECT nummer, name FROM anlage WHERE id = ?');
+                $st->execute([$anlageId]);
+                $anlage = $st->fetch(\PDO::FETCH_ASSOC) ?: null;
+                break;
+            }
+        }
+        $e = $this->graph->hochladen($ziel['drive_id'], $ziel['item_id'], Pfadbildner::fuerDokument($dok, $fahrzeug, $anlage), $basis);
 
         // Erst vermerken, dann das Original entfernen: bricht etwas dazwischen ab, bleibt die Datei erreichbar.
         $st = $this->pdo->prepare("UPDATE dokument SET ablage = 'onedrive', onedrive_item_id = ?, onedrive_drive_id = ?, onedrive_pfad = ?, original_lokal = 1 WHERE id = ? AND ablage = 'lokal'");

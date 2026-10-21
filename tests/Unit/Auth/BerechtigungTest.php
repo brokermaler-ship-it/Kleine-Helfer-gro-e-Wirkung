@@ -85,6 +85,7 @@ final class BerechtigungTest extends TestCase
             Berechtigung::LESEN, Berechtigung::FAHRZEUG_ANLEGEN, Berechtigung::FAHRZEUG_BEARBEITEN,
             Berechtigung::PERSON_BEARBEITEN, Berechtigung::DATEI_BEARBEITEN, Berechtigung::BENUTZER_VERWALTEN,
             Berechtigung::STAMMDATEN_VERWALTEN, Berechtigung::BETRIEB, Berechtigung::PERSON_DSGVO_LOESCHEN,
+            Berechtigung::ANLAGE_BEARBEITEN,
         ];
         $w = $this->benutzer(Rolle::Fahrzeugwart);
         $b = $this->benutzer(Rolle::Bearbeiter);
@@ -100,6 +101,16 @@ final class BerechtigungTest extends TestCase
         }
         $this->assertTrue(Berechtigung::darf($this->benutzer(Rolle::Admin), Berechtigung::PERSON_DSGVO_LOESCHEN));
         $this->assertSame([Rolle::Mitglied, Rolle::Fahrzeugwart, Rolle::Bearbeiter, Rolle::Admin], Rolle::cases());
+    }
+
+    public function test_anlage_bearbeiten_ab_bearbeiter(): void
+    {
+        $this->assertFalse(Berechtigung::darf(null, Berechtigung::ANLAGE_BEARBEITEN));
+        $this->assertFalse(Berechtigung::darf($this->benutzer(Rolle::Mitglied), Berechtigung::ANLAGE_BEARBEITEN));
+        $this->assertFalse(Berechtigung::darf($this->benutzer(Rolle::Fahrzeugwart), Berechtigung::ANLAGE_BEARBEITEN));
+        $this->assertTrue(Berechtigung::darf($this->benutzer(Rolle::Bearbeiter), Berechtigung::ANLAGE_BEARBEITEN));
+        $this->assertTrue(Berechtigung::darf($this->benutzer(Rolle::Admin), Berechtigung::ANLAGE_BEARBEITEN));
+        $this->assertSame('anlage_bearbeiten', Berechtigung::ANLAGE_BEARBEITEN);
     }
 
     public function test_unbekannte_aktion_ist_verboten(): void
