@@ -295,6 +295,7 @@ final class FunktionController
             'funktionen' => $werte,
             'fehler' => $fehler,
             'vorlagen' => $this->vorlagen->alle(),
+            'pdfMaxMb' => max(1, intdiv(($this->pdfText ?? new PdfText())->wirksameMaxBytes(), 1048576)),
         ], $status);
     }
 

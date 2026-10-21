@@ -5,6 +5,7 @@
  * @var array<int,array<string,mixed>> $funktionen
  * @var array<int,string> $fehler
  * @var list<array<string,mixed>> $vorlagen
+ * @var int|null $pdfMaxMb wirksame Höchstgröße für PDFs
  */
 $bearbeiten = $darfFz($fahrzeug);
 $zurueck = url('/fahrzeuge/' . $fahrzeug['id']) . '#digital';
@@ -74,7 +75,7 @@ $basis = url('/decoder/' . $decoder['id']);
 
 <section aria-labelledby="pdf-titel" class="mb-4">
     <h2 class="h5" id="pdf-titel">PDF-Import</h2>
-    <p class="small text-muted">Bedienungsanleitung des Decoders oder der Lok als PDF (höchstens 20 MB). Erkannt werden Zeilen wie „F0 Licht“ oder „F 3: Glocke“; gescannte PDFs ohne Text gehen nicht. Die Datei wird nicht gespeichert.</p>
+    <p class="small text-muted">Bedienungsanleitung des Decoders oder der Lok als PDF (höchstens <?= (int) ($pdfMaxMb ?? 20) ?> MB). Erkannt werden Zeilen wie „F0 Licht“ oder „F 3: Glocke“; gescannte PDFs ohne Text gehen nicht. Die Datei wird nicht gespeichert.</p>
     <form method="post" action="<?= e($basis . '/funktionen/pdf') ?>" enctype="multipart/form-data" class="row g-2 align-items-end">
         <?php include dirname(__DIR__) . '/partials/csrf.php'; ?>
         <div class="col-12 col-md-6">

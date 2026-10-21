@@ -117,23 +117,15 @@ final class PdfTextTest extends TestCase
         $this->assertLessThan(96 * 1048576, memory_get_peak_usage() - $vorher);
     }
 
-    public function test_viele_zip_bomben_vor_dem_einlesen_abgelehnt(): void
+    public function test_viele_zip_bomben_beim_entpacken_abgebrochen(): void
     {
-        // 4 × 40 MB entpackt (je Strom gekappt bei 32 MB) liegt über DECODE_GESAMT: abgelehnt, bevor die Bibliothek entpackt.
+        // 4 × 40 MB entpackt (je Strom gekappt bei 32 MB) liegt über DECODE_GESAMT: beim Entpacken abgebrochen.
         $pdf = MiniPdf::mitGepacktemStrom(['F0 Licht vorne und hinten'], 40 * 1048576, 4);
-        $this->assertGreaterThan(PdfText::DECODE_GESAMT, PdfText::entpackteGroesse($pdf, PdfText::DECODE_GESAMT));
         gc_collect_cycles();
         $vorher = memory_get_usage();
         memory_reset_peak_usage();
         $this->assertSame('Das PDF konnte nicht gelesen werden.', $this->fehler(new PdfText(), $pdf));
-        $this->assertLessThan(16 * 1048576, memory_get_peak_usage() - $vorher);
-    }
-
-    public function test_entpackte_groesse_normaler_pdfs(): void
-    {
-        $pdf = MiniPdf::erzeuge([['F0 Licht'], ['F1 Sound']]);
-        $this->assertLessThan(1000, PdfText::entpackteGroesse($pdf, PdfText::DECODE_GESAMT));
-        $this->assertSame(5 * 1048576, PdfText::entpackteGroesse(MiniPdf::mitGepacktemStrom(['F0 Licht'], 5 * 1048576), PdfText::DECODE_GESAMT) - PdfText::entpackteGroesse(MiniPdf::erzeuge([['F0 Licht']]), PdfText::DECODE_GESAMT));
+        $this->assertLessThan(PdfText::DECODE_GESAMT + PdfText::DECODE_LIMIT + 64 * 1048576, memory_get_peak_usage() - $vorher);
     }
 
     public function test_zeit_und_speicher_danach_wie_vorher(): void

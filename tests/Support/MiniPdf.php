@@ -85,21 +85,61 @@ final class MiniPdf
                 . implode(' ', $verweise) . '] >>';
         }
         $objekte[2] = '<< /Type /Pages /Kids [' . implode(' ', $kinder) . '] /Count ' . count($kinder) . ' >>';
-        ksort($objekte);
+        return self::ausObjekten($objekte);
+    }
 
+    /**
+     * Fertiges PDF aus Objektkörpern (Schlüssel = Objektnummer, Objekt 1 ist der Katalog); fehlende Nummern werden
+     * in der Querverweistabelle als frei eingetragen. Für Tests mit selbst gebauten (auch bösartigen) Objekten.
+     *
+     * @param array<int,string> $objekte
+     */
+    public static function ausObjekten(array $objekte, string $trailerZusatz = ''): string
+    {
+        ksort($objekte);
         $pdf = "%PDF-1.4\n%\xE2\xE3\xCF\xD3\n";
         $offsets = [];
         foreach ($objekte as $id => $koerper) {
             $offsets[$id] = strlen($pdf);
             $pdf .= $id . " 0 obj\n" . $koerper . "\nendobj\n";
         }
-        $anzahl = count($objekte) + 1;
+        $anzahl = ($objekte === [] ? 0 : max(array_keys($objekte))) + 1;
         $xref = strlen($pdf);
-        $pdf .= "xref\n0 " . $anzahl . "\n0000000000 65535 f \n";
+        $teile = ["xref\n0 " . $anzahl . "\n0000000000 65535 f \n"];
         for ($i = 1; $i < $anzahl; $i++) {
-            $pdf .= sprintf("%010d 00000 n \n", $offsets[$i]);
+            $teile[] = isset($offsets[$i]) ? sprintf("%010d 00000 n \n", $offsets[$i]) : "0000000000 65535 f \n";
         }
-        $pdf .= "trailer\n<< /Size " . $anzahl . " /Root 1 0 R >>\nstartxref\n" . $xref . "\n%%EOF\n";
+        $pdf .= implode('', $teile);
+        $pdf .= "trailer\n<< /Size " . $anzahl . " /Root 1 0 R" . $trailerZusatz . " >>\nstartxref\n" . $xref . "\n%%EOF\n";
         return $pdf;
+    }
+
+    /** Katalog, Seitenbaum und Schrift (Objekte 1–3) für eine Seite 4 mit Inhalt 5 und eigenen Ressourcen. */
+    public static function seitenObjekte(string $inhalt, string $ressourcenZusatz = ''): array
+    {
+        return [
+            1 => '<< /Type /Catalog /Pages 2 0 R >>',
+            2 => '<< /Type /Pages /Kids [4 0 R] /Count 1 >>',
+            3 => '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
+            4 => '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >>' . $ressourcenZusatz
+                . ' >> /Contents 5 0 R >>',
+            5 => self::strom($inhalt),
+        ];
+    }
+
+    /** Ungepackter Strom als Objektkörper. */
+    public static function strom(string $daten, string $woerterbuch = ''): string
+    {
+        return '<< /Length ' . strlen($daten) . $woerterbuch . " >>\nstream\n" . $daten . "\nendstream";
+    }
+
+    /** Text-Inhaltsstrom aus Zeilen (wie erzeuge()). @param list<string> $zeilen */
+    public static function text(array $zeilen): string
+    {
+        $strom = "BT\n/F1 11 Tf\n14 TL\n50 800 Td\n";
+        foreach ($zeilen as $zeile) {
+            $strom .= '(' . self::maskiere($zeile) . ") Tj T*\n";
+        }
+        return $strom . "ET\n";
     }
 }

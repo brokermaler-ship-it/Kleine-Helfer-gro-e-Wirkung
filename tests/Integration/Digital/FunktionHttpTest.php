@@ -8,7 +8,9 @@ use Emc\Core\App;
 use Emc\Core\Request;
 use Emc\Core\Response;
 use Emc\Core\Session;
+use Emc\Dateien\Uploadgrenzen;
 use Emc\Digital\FunktionCsvImport;
+use Emc\Digital\PdfText;
 use Emc\Digital\FunktionRepository;
 use Emc\Tests\Integration\DbTestCase;
 use Emc\Tests\Support\MiniPdf;
@@ -258,6 +260,10 @@ final class FunktionHttpTest extends DbTestCase
         $r = $app->handle(new Request('POST', "/decoder/{$this->dec}/funktionen/pdf", [], ['_csrf' => str_repeat('a', 64)], $d));
         $this->assertSame(303, $r->status);
         $this->assertContains('Die Datei ist zu groß (höchstens 1 MB).', $this->meldungen());
+        $seite = App::erzeuge($config, new Session($this->sitzung))->handle(new Request('GET', "/decoder/{$this->dec}/funktionen"))->body;
+        $this->assertStringContainsString('als PDF (höchstens 1 MB).', $seite);
+        $mb = max(1, intdiv(min(PdfText::MAX_BYTES, Uploadgrenzen::ausConfig(self::testConfig())->dateiBytes), 1048576));
+        $this->assertStringContainsString('als PDF (höchstens ' . $mb . ' MB).', $this->get("/decoder/{$this->dec}/funktionen")->body);
     }
 
     public function test_pdf_wird_nicht_gespeichert(): void
