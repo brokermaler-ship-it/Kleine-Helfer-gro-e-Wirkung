@@ -8,9 +8,11 @@ use Emc\Anlagen\AnlageRepository;
 use Emc\Auth\Benutzer;
 use Emc\Auth\Rolle;
 use Emc\Boerse\AnfrageDienst;
+use Emc\Boerse\AnfrageRepository;
 use Emc\Boerse\AngebotDienst;
 use Emc\Boerse\BoerseDienst;
 use Emc\Boerse\KasseDienst;
+use Emc\Boerse\Spamschutz;
 use Emc\Core\App;
 use Emc\Core\DomainFehler;
 use Emc\Dateien\Bildbearbeitung;
@@ -120,11 +122,14 @@ final class DemoDaten
 
     /**
      * Magazin und Börse, alles über die Dienste (Bestand nur über Buchungen, Status nur über Kasse und Börse), Daten
-     * relativ zu heute: Greta (Fahrzeugwart mit Börsenwart-Häkchen) bucht drei Artikel und eine Sammlung, übergibt die
-     * ausgemusterte Vereins-Köf II vom Abstellgleis ans Magazin, legt die „Herbstbörse“ an und startet sie. Vereinsangebote
-     * aus dem Magazin, drei Angebote von Carla (nicht öffentlich, vorgeschlagen, freigegeben mit „Erlös als Spende“),
-     * ein dauerhaftes Angebot, zwei Verkäufe an der Kasse und eine Kaufanfrage aus dem öffentlichen Bereich (Test-IP,
-     * Adresse @test.emc78.de). Die ausgemusterte BR 103 von Dieter bleibt privat und unberührt.
+     * relativ zu heute: Greta (Fahrzeugwart mit Börsenwart-Häkchen) bucht Artikel und eine Sammlung und übergibt die
+     * ausgemusterte Vereins-Köf II vom Abstellgleis ans Magazin. Die „Frühjahrsbörse“ vor 5 Monaten ist abgeschlossen
+     * (ein Vereinsstück, ein Stück von Carla, ein Spendenstück von Eva verkauft, Auszahlung an Carla vermerkt, ein Stück
+     * zurück). Die „Herbstbörse“ läuft heute: Vereinsangebote aus dem Magazin, Angebote von Carla (nicht öffentlich,
+     * vorgeschlagen, freigegeben mit Foto, freigegeben mit „Erlös als Spende“), ein dauerhaftes Angebot, zwei Verkäufe;
+     * öffentlich sichtbar sind zwei Angebote mit Foto, eins reserviert. Dazu eine Kaufanfrage und eine angebotene
+     * Sammlung mit Foto aus dem öffentlichen Bereich (Test-IPs, Adressen @test.emc78.de). Die ausgemusterte BR 103 von
+     * Dieter bleibt privat und unberührt.
      *
      * @param array<string,int> $ids
      * @param array<string,int> $personen
@@ -181,6 +186,52 @@ final class DemoDaten
         $sammlung = $magazin->legeSammlungAn('Nachlass Märklin-Gleise, 3 Kisten', 'M-Gleis, gemischt, ungeprüft.', $nachlass, $gretaId);
         $magazin->uebernimmFahrzeug($ids['koef_verein'], 'Keller, Regal 2', $gretaId, $heute->modify('-10 days'));
 
+        $dokumente = $c->get(DokumentRepository::class);
+        $upload = $this->upload();
+        $fotoAn = function (int $angebotId, string $datei, string $titel) use ($upload, $dokumente, $gretaId): void {
+            $foto = $this->beispielfoto($datei);
+            if ($foto === null) {
+                return;
+            }
+            try {
+                $dok = $upload->speichere($foto, $titel, 'foto', $gretaId, null, null, null, null, 'boerse_angebot', $angebotId);
+            } catch (UploadFehler) {
+                return;
+            }
+            $dokumente->zuordnen($dok, 'boerse_angebot', $angebotId);
+            $dokumente->setzeTitelbildWennLeer('boerse_angebot', $angebotId, $dok);
+        };
+        $anlegen = function (array $d, Benutzer $von, int $boerseId, \DateTimeImmutable $am) use ($angebote, $kategorie): int {
+            return $angebote->anlegen($d + [
+                'beschreibung' => null, 'kategorie_id' => $kategorie('sonstiges'), 'spurweite_id' => null, 'zustand' => 'gebraucht', 'menge' => 1,
+                'herkunft' => 'verein', 'person_id' => null, 'erloes_spende' => 0, 'boerse_id' => $boerseId, 'notiz' => null,
+            ], $von, $am);
+        };
+
+        // Abgeschlossene Frühjahrsbörse vor 5 Monaten (Abrechnung, Auszahlung, Abschluss ansehen).
+        $fruehTag = $heute->modify('-5 months');
+        $weiche = $magazin->legeAnMitEingang(
+            ['bezeichnung' => 'Märklin C-Weiche 24611 links', 'kategorie_id' => $kategorie('Gleise und Weichen'), 'hersteller' => 'Märklin',
+                'artikelnummer' => '24611', 'spurweite_id' => $spur['H0'], 'zustand' => 'neuwertig', 'lagerort' => 'Keller, Regal 1'],
+            ['datum' => $fruehTag->modify('-1 month')->format('Y-m-d'), 'menge' => 1, 'herkunft' => 'spende', 'freitext' => null, 'betrag' => null],
+            $gretaId
+        );
+        $frueh = $boersen->anlegen(['name' => 'Frühjahrsbörse', 'datum' => $fruehTag->format('Y-m-d'), 'ort' => 'Vereinsheim', 'provision_prozent' => '10.00'], $gretaId);
+        $boersen->starten($frueh, $gretaId);
+        $morgens = $fruehTag->setTime(9, 0);
+        $fWeiche = $anlegen(['bezeichnung' => 'Märklin C-Weiche 24611 links', 'magazin_artikel_id' => $weiche, 'wunschpreis' => '18.00',
+            'kategorie_id' => $kategorie('Gleise und Weichen'), 'spurweite_id' => $spur['H0']], $greta, $frueh, $morgens);
+        $fCarla = $anlegen(['bezeichnung' => 'Fleischmann Drehscheibe 6152', 'wunschpreis' => '40.00', 'herkunft' => 'mitglied', 'person_id' => $carla->personId,
+            'spurweite_id' => $spur['H0']], $carla, $frueh, $morgens);
+        $anlegen(['bezeichnung' => 'Roco Kesselwagen „Esso“', 'wunschpreis' => '8.00', 'herkunft' => 'mitglied', 'person_id' => $carla->personId,
+            'spurweite_id' => $spur['H0']], $carla, $frueh, $morgens);
+        $fEva = $anlegen(['bezeichnung' => 'Kibri Stellwerk, gebaut', 'wunschpreis' => '12.00', 'herkunft' => 'mitglied', 'person_id' => $personen['eva'],
+            'erloes_spende' => 1, 'kategorie_id' => $kategorie('Gebäude und Bausätze')], $greta, $frueh, $morgens);
+        $kasse->abschliessen($frueh, [['angebot_id' => $fWeiche, 'preis' => '15.00']], 'bar', $gretaId, $fruehTag->setTime(10, 5));
+        $kasse->abschliessen($frueh, [['angebot_id' => $fCarla, 'preis' => '40.00'], ['angebot_id' => $fEva, 'preis' => '12.00']], 'karte_ueberweisung', $gretaId, $fruehTag->setTime(11, 20));
+        $boersen->vermerkeAuszahlung($frueh, $carla->personId, $fruehTag->format('Y-m-d'), $gretaId, $fruehTag->setTime(17, 0));
+        $boersen->abschliessen($frueh, $gretaId, $fruehTag->setTime(17, 30));
+
         // Börse am heutigen Tag, gestartet (Kasse offen).
         $boerse = $boersen->anlegen(['name' => 'Herbstbörse', 'datum' => $heute->format('Y-m-d'), 'ort' => 'Vereinsheim', 'provision_prozent' => '10.00'], $gretaId);
         $boersen->starten($boerse, $gretaId);
@@ -203,12 +254,19 @@ final class DemoDaten
 
         // Angebote von Carla: nicht öffentlich, vorgeschlagen, freigegeben (Erlös als Spende).
         $mitglied = fn(array $d): int => $angebot($d + ['herkunft' => 'mitglied', 'person_id' => $carla->personId], $carla);
-        $mitglied(['bezeichnung' => 'Roco Güterwagen-Set, 3 Wagen', 'wunschpreis' => '18.00', 'spurweite_id' => $spur['H0']]);
+        $mitglied(['bezeichnung' => 'Roco Rungenwagen', 'wunschpreis' => '7.00', 'spurweite_id' => $spur['H0']]);
+        $gueterwagen = $mitglied(['bezeichnung' => 'Roco Güterwagen-Set, 3 Wagen', 'beschreibung' => 'Drei gedeckte Güterwagen, Epoche III, mit Kurzkupplung.',
+            'wunschpreis' => '18.00', 'spurweite_id' => $spur['H0'], 'oeffentlich' => 'vorgeschlagen']);
+        $fotoAn($gueterwagen, 'wagen.jpg', 'Güterwagen-Set');
+        $angebote->setzeOeffentlich($gueterwagen, 'freigegeben', $greta);
         $mitglied(['bezeichnung' => 'Faller Bahnhof Bausatz, ungeöffnet', 'wunschpreis' => '25.00', 'zustand' => 'neu', 'oeffentlich' => 'vorgeschlagen',
             'kategorie_id' => $kategorie('Gebäude und Bausätze')]);
         $spende = $mitglied(['bezeichnung' => 'Minitrix Personenwagen 15123', 'wunschpreis' => '9.50', 'spurweite_id' => $spur['N'], 'erloes_spende' => 1,
             'oeffentlich' => 'vorgeschlagen']);
         $angebote->setzeOeffentlich($spende, 'freigegeben', $greta);
+        // Das Gleis-Angebot bekommt ein Foto und ist reserviert (öffentlich als „reserviert“ gekennzeichnet).
+        $fotoAn($gleisAngebot, 'diesel.jpg', 'C-Gleis gerade');
+        $angebote->setzeStatus($gleisAngebot, 'reservieren', $greta);
 
         // Zwei Verkäufe an der Kasse: ein Vereinsstück (bar) und Carlas Spendenstück (Karte/Überweisung).
         $kasse->abschliessen($boerse, [['angebot_id' => $buchAngebot, 'preis' => '12.50']], 'bar', $gretaId, $heute->setTime(10, 15));
@@ -219,6 +277,14 @@ final class DemoDaten
             'name' => 'Rudi Beispielkunde', 'email' => 'rudi@test.emc78.de', 'telefon' => null,
             'nachricht' => 'Sind die Gleise noch zu haben? Ich würde sie am Samstag abholen.', 'wunsch' => null,
         ], [], '192.0.2.78', $heute->setTime(8, 30));
+        // Eine angebotene Sammlung mit Foto (Fotos wie im öffentlichen Bereich neu kodiert, ohne Metadaten).
+        $foto = $this->beispielfoto('wagen.jpg');
+        $anfragen = new AnfrageDienst($this->pdo, $c->get(AnfrageRepository::class), $c->get(Spamschutz::class), $upload, $dokumente,
+            $c->get(Aenderungsprotokoll::class), $magazin);
+        $anfragen->nimmEntgegen('sammlung', null, [
+            'name' => 'Helga Beispielsammlerin', 'email' => 'helga@test.emc78.de', 'telefon' => null,
+            'nachricht' => 'Kiste mit Spur-N-Wagen aus dem Keller, etwa 20 Stück, teils in Originalkartons.', 'wunsch' => 'spenden',
+        ], $foto === null ? [] : [$foto], '192.0.2.79', $heute->setTime(8, 45));
         $this->pdo->exec('DELETE FROM boerse_anfrage_sperre'); // Begrenzung nicht durch die Beispieldaten verbrauchen
     }
 
@@ -523,14 +589,10 @@ final class DemoDaten
     }
 
     /** @param array<string,int> $ids */
-    private function fotos(array $ids): void
+    /** UploadService für Beispielfotos aus tests/fixtures/demo (kopiert statt verschoben, keine echten Uploads). */
+    private function upload(): UploadService
     {
-        if (!is_dir($this->fotoVerzeichnis)) {
-            return; // z. B. in einem Paket ohne Beispielfotos: Daten ohne Bilder anlegen
-        }
-        $c = $this->app->container();
-        $dokumente = $c->get(DokumentRepository::class);
-        $upload = new UploadService(
+        return new UploadService(
             $this->pdo,
             $this->speicherPfad,
             max(1, (int) ($this->app->config()['upload_max_mb'] ?? 64)) * 1048576,
@@ -538,6 +600,23 @@ final class DemoDaten
             static fn(string $tmp): bool => is_file($tmp),
             static fn(string $von, string $nach): bool => copy($von, $nach),
         );
+    }
+
+    /** Beispielfoto als $_FILES-Eintrag, oder null, wenn es im Paket fehlt. @return ?array<string,mixed> */
+    private function beispielfoto(string $datei): ?array
+    {
+        $pfad = $this->fotoVerzeichnis . '/' . $datei;
+        return is_file($pfad) ? ['name' => $datei, 'tmp_name' => $pfad, 'error' => UPLOAD_ERR_OK, 'size' => (int) filesize($pfad)] : null;
+    }
+
+    private function fotos(array $ids): void
+    {
+        if (!is_dir($this->fotoVerzeichnis)) {
+            return; // z. B. in einem Paket ohne Beispielfotos: Daten ohne Bilder anlegen
+        }
+        $c = $this->app->container();
+        $dokumente = $c->get(DokumentRepository::class);
+        $upload = $this->upload();
         foreach ([
             ['v200', 'diesel.jpg', 'V 200 060 im Bahnhof'],
             ['br218', 'diesel.jpg', 'BR 218 vor dem Schnellzug'],

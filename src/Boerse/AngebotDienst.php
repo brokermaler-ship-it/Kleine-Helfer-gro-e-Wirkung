@@ -26,6 +26,7 @@ final class AngebotDienst
     public const OBJEKT = 'boerse_angebot';
     public const BOERSE_ABGESCHLOSSEN = 'Die Börse ist abgeschlossen und kann nicht mehr geändert werden.';
     public const VERKAUFT = 'Verkaufte Angebote lassen sich nicht mehr ändern.';
+    public const GELOESCHTES_MITGLIED = 'Dieses Angebot gehört einem gelöschten Mitglied und lässt sich nicht mehr anbieten oder verkaufen.';
     public const NICHT_GEFUNDEN = 'Dieses Angebot gibt es nicht mehr.';
     public const BOERSE_FEHLT = 'Diese Börse gibt es nicht mehr.';
     public const SAMMLUNG_SCHON = 'Die Sammlung ist schon im Angebot.';
@@ -42,6 +43,17 @@ final class AngebotDienst
         private ?BoerseRepository $boersen = null,
     ) {
         $this->boersen ??= new BoerseRepository($pdo);
+    }
+
+    /**
+     * Angebot eines nach DSGVO gelöschten Mitglieds (Herkunft Mitglied, Person leer): nicht wieder anbietbar und nicht
+     * verkaufbar – der Erlös hätte keinen Empfänger, und die Auszahlung ließe sich nie vermerken.
+     *
+     * @param array<string,mixed> $a Angebotszeile
+     */
+    public static function vonGeloeschtemMitglied(array $a): bool
+    {
+        return ($a['herkunft'] ?? null) === 'mitglied' && ($a['person_id'] ?? null) === null;
     }
 
     public static function freiImMagazin(int $frei): string
@@ -332,6 +344,9 @@ final class AngebotDienst
                     $neu = 'angeboten';
                     break;
                 default: // wieder_anbieten
+                    if (self::vonGeloeschtemMitglied($a)) {
+                        throw new DomainFehler(self::GELOESCHTES_MITGLIED);
+                    }
                     if ($alt !== 'zurueck') {
                         throw new DomainFehler('Nur zurückgegebene Angebote lassen sich wieder anbieten.');
                     }

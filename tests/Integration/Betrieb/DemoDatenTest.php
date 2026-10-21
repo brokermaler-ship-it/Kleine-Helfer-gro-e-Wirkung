@@ -186,8 +186,8 @@ final class DemoDatenTest extends DbTestCase
         (new DemoDaten($app))->erzeuge(true);
         (new DemoDaten($app))->erzeuge(true);
         $this->assertSame(13, $this->zaehle('fahrzeug'));
-        $this->assertSame(1, $this->zaehle('boerse'));
-        $this->assertSame(1, $this->zaehle('boerse_anfrage'));
+        $this->assertSame(2, $this->zaehle('boerse'));
+        $this->assertSame(2, $this->zaehle('boerse_anfrage'));
         $this->assertSame(7, $this->zaehle('person'));
         $this->assertSame('EMC-0001', (string) $this->pdo->query('SELECT MIN(inventarnummer) FROM fahrzeug')->fetchColumn());
         $this->assertCount($this->zaehle('dokument'), $this->originalDateien(), 'keine verwaisten Dateien nach dem Zurücksetzen');
@@ -373,22 +373,44 @@ final class DemoDatenTest extends DbTestCase
         $this->assertSame(1, (int) $this->pdo->query("SELECT COUNT(*) FROM fahrzeug WHERE bezeichnung = 'BR 103 113-7' AND status = 'ausgemustert' AND eigentuemer_person_id IS NOT NULL")->fetchColumn());
 
         // Laufende Börse mit Angeboten, zwei Verkäufen und stimmiger Abrechnung.
-        $boerse = $this->pdo->query('SELECT * FROM boerse')->fetch(\PDO::FETCH_ASSOC);
+        $boerse = $this->pdo->query("SELECT * FROM boerse WHERE name = 'Herbstbörse'")->fetch(\PDO::FETCH_ASSOC);
         $this->assertSame(['Herbstbörse', 'laeuft', 'Vereinsheim'], [$boerse['name'], $boerse['status'], $boerse['ort']]);
-        $this->assertSame(2, (int) $this->pdo->query('SELECT COUNT(*) FROM boerse_verkauf WHERE storniert_am IS NULL')->fetchColumn());
+        $this->assertSame(2, (int) $this->pdo->query("SELECT COUNT(*) FROM boerse_verkauf WHERE storniert_am IS NULL AND boerse_id = {$boerse['id']}")->fetchColumn());
         $abr = new \Emc\Boerse\AbrechnungRepository($this->pdo);
         $r = \Emc\Boerse\Abrechnung::berechne($abr->positionen((int) $boerse['id']), $abr->summeVerkaeufe((int) $boerse['id']));
         $this->assertTrue($r['kontrolle']);
         $this->assertSame(['vereinsstuecke' => 1250, 'provisionen' => 0, 'spenden' => 900, 'gesamt' => 2150], $r['verein']);
-        $this->assertSame(['nein' => 3, 'vorgeschlagen' => 1, 'freigegeben' => 3], array_map('intval', $this->pdo->query('SELECT oeffentlich, COUNT(*) FROM boerse_angebot GROUP BY oeffentlich ORDER BY oeffentlich')->fetchAll(\PDO::FETCH_KEY_PAIR)));
-        $this->assertSame(3, (int) $this->pdo->query("SELECT COUNT(*) FROM boerse_angebot WHERE herkunft = 'mitglied'")->fetchColumn());
+        $this->assertSame(['nein' => 7, 'vorgeschlagen' => 1, 'freigegeben' => 4], array_map('intval', $this->pdo->query('SELECT oeffentlich, COUNT(*) FROM boerse_angebot GROUP BY oeffentlich ORDER BY oeffentlich')->fetchAll(\PDO::FETCH_KEY_PAIR)));
+        $this->assertSame(7, (int) $this->pdo->query("SELECT COUNT(*) FROM boerse_angebot WHERE herkunft = 'mitglied'")->fetchColumn());
+        // Öffentlich sichtbar: zwei Angebote mit Foto, eins davon reserviert
+        $oeffentlich = (new \Emc\Boerse\AngebotRepository($this->pdo))->oeffentliche(null, null, null);
+        $this->assertCount(2, $oeffentlich);
+        $status = array_column($oeffentlich, 'status');
+        sort($status);
+        $this->assertSame(['angeboten', 'reserviert'], $status);
+        foreach ($oeffentlich as $a) {
+            $this->assertNotNull($a['titelbild_dokument_id'], 'mit Foto');
+        }
+
+        // Abgeschlossene Frühjahrsbörse vor 5 Monaten: drei Verkäufe, Auszahlung an Carla, Rest zurück
+        $fruehjahr = $this->pdo->query("SELECT * FROM boerse WHERE name = 'Frühjahrsbörse'")->fetch(\PDO::FETCH_ASSOC);
+        $this->assertSame('abgeschlossen', $fruehjahr['status']);
+        $this->assertSame((new \DateTimeImmutable('today'))->modify('-5 months')->format('Y-m-d'), $fruehjahr['datum']);
+        $r = \Emc\Boerse\Abrechnung::berechne($abr->positionen((int) $fruehjahr['id']), $abr->summeVerkaeufe((int) $fruehjahr['id']));
+        $this->assertTrue($r['kontrolle']);
+        $this->assertSame(3, (int) $this->pdo->query("SELECT COUNT(*) FROM boerse_verkauf_position p JOIN boerse_verkauf v ON v.id = p.verkauf_id WHERE v.boerse_id = {$fruehjahr['id']}")->fetchColumn());
+        $this->assertSame(1, (int) $this->pdo->query("SELECT COUNT(*) FROM boerse_auszahlung WHERE boerse_id = {$fruehjahr['id']}")->fetchColumn());
+        $this->assertSame(1, (int) $this->pdo->query("SELECT COUNT(*) FROM boerse_angebot WHERE boerse_id = {$fruehjahr['id']} AND status = 'zurueck'")->fetchColumn());
         $this->assertSame(1, (int) $this->pdo->query('SELECT COUNT(*) FROM boerse_angebot WHERE boerse_id IS NULL')->fetchColumn(), 'ein dauerhaftes Angebot');
 
-        // Eine offene Kaufanfrage mit Testadresse; keine Sperrzeile übrig.
-        $anfrage = $this->pdo->query('SELECT * FROM boerse_anfrage')->fetchAll(\PDO::FETCH_ASSOC);
-        $this->assertCount(1, $anfrage);
-        $this->assertSame(['kaufanfrage', 'offen'], [$anfrage[0]['art'], $anfrage[0]['status']]);
-        $this->assertStringEndsWith('@test.emc78.de', (string) $anfrage[0]['email']);
+        // Eine offene Kaufanfrage und eine angebotene Sammlung mit Foto, Testadressen; keine Sperrzeile übrig.
+        $anfrage = $this->pdo->query('SELECT * FROM boerse_anfrage ORDER BY id')->fetchAll(\PDO::FETCH_ASSOC);
+        $this->assertCount(2, $anfrage);
+        $this->assertSame([['kaufanfrage', 'offen'], ['sammlung', 'offen']], array_map(fn(array $a): array => [$a['art'], $a['status']], $anfrage));
+        foreach ($anfrage as $a) {
+            $this->assertStringEndsWith('@test.emc78.de', (string) $a['email']);
+        }
+        $this->assertSame(1, (int) $this->pdo->query("SELECT COUNT(*) FROM dokument_zuordnung WHERE objekt_typ = 'boerse_anfrage' AND objekt_id = {$anfrage[1]['id']}")->fetchColumn());
         $this->assertSame(0, $this->zaehle('boerse_anfrage_sperre'));
     }
 }

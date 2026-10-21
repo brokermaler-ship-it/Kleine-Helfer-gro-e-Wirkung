@@ -237,7 +237,7 @@ final class KasseDienst
     }
 
     /**
-     * Storniert einen Verkauf am selben Tag: Stücke wieder „angeboten“, Magazin-Gegenbuchungen, Verkauf mit
+     * Storniert einen Verkauf am selben Tag: Stücke wieder „angeboten“ (Stücke gelöschter Mitglieder „zurück“), Magazin-Gegenbuchungen, Verkauf mit
      * storniert_am und Grund. Sperrreihenfolge: Börse → Verkauf → Angebote → Sammlungen → Artikel (über die
      * Gegenbuchungen, nach Artikel-id).
      *
@@ -284,9 +284,11 @@ final class KasseDienst
             $buchungen = $this->verkaeufe->buchungen($verkaufId); // nach Artikel-id aufsteigend
             $this->verlangeUnveraendertesAngebot($gesperrt, $positionen, $buchungen);
             foreach ($gesperrt as $id => $a) {
-                $this->angebote->setzeStatus($id, 'angeboten');
+                // Stück eines inzwischen gelöschten Mitglieds: zurück statt wieder angeboten (kein Empfänger für den Erlös).
+                $neu = AngebotDienst::vonGeloeschtemMitglied($a) ? 'zurueck' : 'angeboten';
+                $this->angebote->setzeStatus($id, $neu);
                 $this->protokoll->schreibe($benutzerId, AngebotDienst::OBJEKT, $id, 'geaendert', [
-                    'status' => ['alt' => $a['status'], 'neu' => 'angeboten'],
+                    'status' => ['alt' => $a['status'], 'neu' => $neu],
                     'storno' => ['alt' => null, 'neu' => 'Verkauf Nr. ' . $verkaufId . ': ' . $grund],
                 ]);
             }
@@ -389,6 +391,7 @@ final class KasseDienst
         return match (true) {
             $a['status'] === 'verkauft' => $nummer . ' ist bereits verkauft.',
             $a['status'] === 'zurueck' => $nummer . ' ist zurückgegeben.',
+            AngebotDienst::vonGeloeschtemMitglied($a) => $nummer . ' ist das Angebot eines gelöschten Mitglieds und lässt sich nicht verkaufen.',
             $a['boerse_id'] !== null && (int) $a['boerse_id'] !== $boerseId => $nummer . ' gehört nicht zu dieser Börse.',
             default => null,
         };

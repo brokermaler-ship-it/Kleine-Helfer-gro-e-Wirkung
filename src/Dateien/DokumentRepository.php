@@ -192,6 +192,23 @@ final class DokumentRepository
             }
         }
         $this->pdo->prepare('DELETE FROM dokument_zuordnung WHERE dokument_id = ?')->execute([$id]);
+        // Das DELETE kann auf eine gleichzeitige Zuordnung gewartet haben (z. B. Übernahme einer Börsenanfrage), die das
+        // Dokument eben zum Titelbild gemacht hat (READ COMMITTED: jetzt sichtbar). Deshalb die Titelbild-Verweise nach
+        // dem Löschen der Zuordnungen noch einmal lösen (indiziert, nur passende Zeilen); auch dort rückt ein Foto nach.
+        foreach (self::TITELBILD_TABELLEN as $typ => $tabelle) {
+            try {
+                $st = $this->pdo->prepare("SELECT id FROM $tabelle WHERE titelbild_dokument_id = ?");
+                $st->execute([$id]);
+                foreach ($st->fetchAll(\PDO::FETCH_COLUMN) as $objektId) {
+                    $ohneTitelbild[] = [$typ, (int) $objektId];
+                }
+                $this->pdo->prepare("UPDATE $tabelle SET titelbild_dokument_id = NULL, geaendert_am = geaendert_am WHERE titelbild_dokument_id = ?")->execute([$id]);
+            } catch (\PDOException $e) {
+                if ((string) $e->getCode() !== '42S02') {
+                    throw $e;
+                }
+            }
+        }
         $this->pdo->prepare('DELETE FROM dokument WHERE id = ?')->execute([$id]);
         // Magazinartikel und Angebote: das älteste verbliebene Foto mit Anzeige-Variante rückt als Titelbild nach.
         foreach ($ohneTitelbild as [$typ, $objektId]) {

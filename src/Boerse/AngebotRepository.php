@@ -108,7 +108,9 @@ final class AngebotRepository
         $st = $this->pdo->prepare('SELECT id, status FROM boerse_angebot WHERE person_id = ? ORDER BY id' . ($sperren ? ' FOR UPDATE' : ''));
         $st->execute([$personId]);
         $zeilen = $st->fetchAll(\PDO::FETCH_ASSOC);
-        $pos = $this->pdo->prepare('SELECT COUNT(*) FROM boerse_verkauf_position WHERE angebot_id = ?');
+        // Gesperrt: aktuelle Positionen lesen (nicht den Schnappschuss) – sonst könnte ein inzwischen festgeschriebener
+        // Verkauf übersehen werden und das DELETE an der RESTRICT-Regel (1451) scheitern.
+        $pos = $this->pdo->prepare('SELECT COUNT(*) FROM boerse_verkauf_position WHERE angebot_id = ?' . ($sperren ? ' LOCK IN SHARE MODE' : ''));
         $liste = [];
         foreach ($zeilen as $z) {
             $pos->execute([(int) $z['id']]);

@@ -238,12 +238,6 @@ final class MagazinRepository
     // ---- Fahrzeuge vom Abstellgleis ----------------------------------------------------------------------------------
 
     /**
-     * Sperrt das Fahrzeug (SELECT … FOR UPDATE) vor der Übergabe ans Magazin; nur in einer laufenden Transaktion.
-     * Sperrreihenfolge: fahrzeug → magazin_artikel.
-     *
-     * @return ?array<string,mixed>
-     */
-    /**
      * Die Übergabe ans Magazin ist eine Zustandsänderung des Fahrzeugs: neuer Stand, damit ein vorher geöffnetes
      * Formular mit 409 endet (Stand-Schutz).
      */
@@ -252,6 +246,12 @@ final class MagazinRepository
         $this->pdo->prepare('UPDATE fahrzeug SET geaendert_am = NOW(6) WHERE id = ?')->execute([$id]);
     }
 
+    /**
+     * Sperrt das Fahrzeug (SELECT … FOR UPDATE) vor der Übergabe ans Magazin; nur in einer laufenden Transaktion.
+     * Sperrreihenfolge: fahrzeug → magazin_artikel.
+     *
+     * @return ?array<string,mixed>
+     */
     public function sperreFahrzeug(int $id): ?array
     {
         $st = $this->pdo->prepare('SELECT * FROM fahrzeug WHERE id = ? FOR UPDATE');

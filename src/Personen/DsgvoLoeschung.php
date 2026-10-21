@@ -35,18 +35,24 @@ final class DsgvoLoeschung
     public const NACHWEIS = 'nach DSGVO gelöscht';
 
     /**
-     * Freitexte, in denen Name, E-Mail oder Telefon der Person stehen können (z. B. „Spende von …“), mit Spaltenlänge
-     * (null = TEXT). Buchungen sind sonst unveränderlich – die DSGVO-Löschung ist die einzige Ausnahme.
+     * Freitexte, in denen Name, E-Mail oder Telefon der Person stehen können (z. B. „Spende von …“, Lagerort „bei …“),
+     * mit Spaltenlänge (null = TEXT) und dem Objekt, an dem der Nachweis der Bereinigung ins Protokoll geht (Typ und
+     * Spalte mit dessen ID). Buchungen sind sonst unveränderlich – die DSGVO-Löschung ist die einzige Ausnahme.
      */
     private const FREITEXTE = [
-        ['magazin_buchung', 'freitext', 200],
-        ['magazin_artikel', 'notiz', null],
-        ['magazin_sammlung', 'name', 150],
-        ['magazin_sammlung', 'notiz', null],
-        ['boerse_angebot', 'beschreibung', null],
-        ['boerse_angebot', 'notiz', null],
-        ['boerse_verkauf', 'storno_grund', 300],
+        ['magazin_buchung', 'freitext', 200, 'magazin_artikel', 'artikel_id'],
+        ['magazin_buchung', 'lagerort_neu', 100, 'magazin_artikel', 'artikel_id'],
+        ['magazin_artikel', 'lagerort', 100, 'magazin_artikel', 'id'],
+        ['magazin_artikel', 'notiz', null, 'magazin_artikel', 'id'],
+        ['magazin_sammlung', 'name', 150, 'magazin_sammlung', 'id'],
+        ['magazin_sammlung', 'notiz', null, 'magazin_sammlung', 'id'],
+        ['boerse_angebot', 'beschreibung', null, 'boerse_angebot', 'id'],
+        ['boerse_angebot', 'notiz', null, 'boerse_angebot', 'id'],
+        ['boerse_verkauf', 'storno_grund', 300, 'boerse', 'boerse_id'],
+        ['boerse', 'ort', 150, 'boerse', 'id'],
     ];
+    /** Protokolleintrag an jedem Objekt mit bereinigtem Freitext (ohne alte Werte). */
+    public const FREITEXT_NACHWEIS = 'Freitexte nach DSGVO bereinigt';
 
     public function __construct(
         private \PDO $pdo,
@@ -79,9 +85,10 @@ final class DsgvoLoeschung
      *
      * `angebote_geloescht`: nicht verkaufte Börsenangebote ohne Verkaufsposition (werden gelöscht); `angebote_verkauft`:
      * verkaufte (bleiben ohne Namen); `angebote_storniert`: nicht verkaufte mit storniertem Verkauf (bleiben ohne Person,
-     * Fotos, Beschreibung und Notiz); `freitexte`: Freitexte in Magazin und Börse mit Name, E-Mail oder Telefon.
+     * Fotos, Beschreibung und Notiz); `freitexte`: Freitexte in Magazin und Börse mit Name, E-Mail oder Telefon;
+     * `anfragen`: öffentliche Börsenanfragen mit E-Mail oder Telefon der Person (werden gelöscht).
      *
-     * @return array{person: array<string,mixed>, benutzer: ?array<string,mixed>, fahrzeuge: list<array{id:int, inventarnummer:string, bezeichnung:string, dokumente:int, rechnungen:int, wartungen:int, reparaturen:int}>, wartungen_in_vereinsdaten:int, reparaturen_in_vereinsdaten:int, protokolleintraege:int, verweigert:?string, onedrive_konto_der_person:bool, angebote_geloescht:int, angebote_verkauft:int, angebote_storniert:int, freitexte:int}
+     * @return array{person: array<string,mixed>, benutzer: ?array<string,mixed>, fahrzeuge: list<array{id:int, inventarnummer:string, bezeichnung:string, dokumente:int, rechnungen:int, wartungen:int, reparaturen:int}>, wartungen_in_vereinsdaten:int, reparaturen_in_vereinsdaten:int, protokolleintraege:int, verweigert:?string, onedrive_konto_der_person:bool, angebote_geloescht:int, angebote_verkauft:int, angebote_storniert:int, freitexte:int, anfragen:int}
      */
     public function vorschau(int $personId, int $ausfuehrenderBenutzerId): array
     {
@@ -125,8 +132,51 @@ final class DsgvoLoeschung
             'angebote_geloescht' => count(array_filter($angebote, fn(array $a): bool => self::angebotWirdGeloescht($a))),
             'angebote_verkauft' => count(array_filter($angebote, fn(array $a): bool => $a['status'] === 'verkauft')),
             'angebote_storniert' => count(array_filter($angebote, fn(array $a): bool => $a['status'] !== 'verkauft' && $a['positionen'] > 0)),
-            'freitexte' => $this->freitexte($k['begriffe'], false),
+            'freitexte' => $this->freitexte($k['begriffe'], null),
+            'anfragen' => count($this->anfragenDerPerson($k['mails'], $k['telefone'], false)),
         ];
+    }
+
+    /**
+     * Öffentliche Börsenanfragen, deren E-Mail oder Telefonnummer (nur Ziffern verglichen) zur Person gehört – z. B. wenn
+     * ein Mitglied selbst eine Sammlung über die Webseite angeboten hat. Mit $sperren je Treffer gesperrt (aktueller
+     * Stand). Vor Migration 019 keine.
+     *
+     * @param list<string> $mails
+     * @param list<string> $telefone
+     * @return list<int>
+     */
+    private function anfragenDerPerson(array $mails, array $telefone, bool $sperren): array
+    {
+        $mails = array_map('mb_strtolower', array_map('trim', $mails));
+        $ziffern = array_values(array_filter(array_map(fn(string $t): string => (string) preg_replace('/\D/', '', $t), $telefone), fn(string $t): bool => strlen($t) >= 6));
+        if ($mails === [] && $ziffern === []) {
+            return [];
+        }
+        try {
+            $zeilen = $this->pdo->query('SELECT id, email, telefon FROM boerse_anfrage WHERE email IS NOT NULL OR telefon IS NOT NULL ORDER BY id')->fetchAll(\PDO::FETCH_ASSOC);
+        } catch (\PDOException $e) {
+            if (in_array((string) $e->getCode(), ['42S02', '42S22'], true)) {
+                return [];
+            }
+            throw $e;
+        }
+        $sperre = $this->pdo->prepare('SELECT id FROM boerse_anfrage WHERE id = ? FOR UPDATE');
+        $ids = [];
+        foreach ($zeilen as $z) {
+            $mail = mb_strtolower(trim((string) $z['email']));
+            $tel = (string) preg_replace('/\D/', '', (string) $z['telefon']);
+            if (($mail !== '' && in_array($mail, $mails, true)) || ($tel !== '' && in_array($tel, $ziffern, true))) {
+                if ($sperren) {
+                    $sperre->execute([(int) $z['id']]);
+                    if ($sperre->fetchColumn() === false) {
+                        continue; // inzwischen gelöscht (z. B. 12-Monats-Löschung)
+                    }
+                }
+                $ids[] = (int) $z['id'];
+            }
+        }
+        return $ids;
     }
 
     /** @param array{id:int, status:string, positionen:int} $a */
@@ -153,25 +203,30 @@ final class DsgvoLoeschung
     }
 
     /**
-     * Zählt bzw. ersetzt ($ersetzen) Name, E-Mail und Telefon der Person in den Freitexten von Magazin und Börse
-     * (Vorauswahl per LIKE, Ersetzung ganzer Fundstellen wie im Protokoll, gekürzt auf die Spaltenlänge). Tabellen,
+     * Zählt bzw. ersetzt Name, E-Mail und Telefon der Person in den Freitexten von Magazin und Börse (Vorauswahl per
+     * LIKE, Ersetzung ganzer Fundstellen wie im Protokoll, gekürzt auf die Spaltenlänge). Beim Ersetzen wird jede
+     * gefundene Zeile vorher gesperrt neu gelesen (FOR UPDATE: aktueller Stand, keine gleichzeitige Änderung wird mit
+     * einem alten Schnappschuss überschrieben), und je Objekt entsteht ein Protokolleintrag ohne alte Werte. Tabellen,
      * die es vor 016/017 noch nicht gibt, werden übersprungen.
      *
      * @param list<string> $begriffe
+     * @param ?int $ausfuehrender null = nur zählen (Vorschau), sonst ersetzen und protokollieren
      * @return int Anzahl betroffener Felder
      */
-    private function freitexte(array $begriffe, bool $ersetzen): int
+    private function freitexte(array $begriffe, ?int $ausfuehrender): int
     {
+        $ersetzen = $ausfuehrender !== null;
+        $nachweise = [];
         $liste = Aenderungsprotokoll::suchbegriffe($begriffe);
         if ($liste === []) {
             return 0;
         }
         $werte = array_map(fn(string $b): string => '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $b) . '%', $liste);
         $anzahl = 0;
-        foreach (self::FREITEXTE as [$tabelle, $spalte, $laenge]) {
+        foreach (self::FREITEXTE as [$tabelle, $spalte, $laenge, $objektTyp, $objektSpalte]) {
             try {
                 $st = $this->pdo->prepare(
-                    "SELECT id, $spalte AS text FROM $tabelle WHERE $spalte IS NOT NULL AND ("
+                    "SELECT id, $objektSpalte AS objekt_id, $spalte AS text FROM $tabelle WHERE $spalte IS NOT NULL AND ("
                     . implode(' OR ', array_fill(0, count($werte), "$spalte LIKE ? ESCAPE '!'")) . ') ORDER BY id'
                 );
                 $st->execute($werte);
@@ -183,16 +238,30 @@ final class DsgvoLoeschung
                 throw $e;
             }
             $aendern = $this->pdo->prepare("UPDATE $tabelle SET $spalte = ? WHERE id = ?");
+            $lies = $this->pdo->prepare("SELECT $spalte FROM $tabelle WHERE id = ? FOR UPDATE");
             foreach ($zeilen as $z) {
-                $neu = Aenderungsprotokoll::ersetzeBegriffe((string) $z['text'], $begriffe);
-                if ($neu === (string) $z['text']) {
+                $text = (string) $z['text'];
+                if ($ersetzen) {
+                    $lies->execute([(int) $z['id']]);
+                    $aktuell = $lies->fetchColumn();
+                    if ($aktuell === false || $aktuell === null) {
+                        continue;
+                    }
+                    $text = (string) $aktuell;
+                }
+                $neu = Aenderungsprotokoll::ersetzeBegriffe($text, $begriffe);
+                if ($neu === $text) {
                     continue;
                 }
                 $anzahl++;
                 if ($ersetzen) {
                     $aendern->execute([$laenge === null ? $neu : mb_substr($neu, 0, $laenge), (int) $z['id']]);
+                    $nachweise[$objektTyp . ':' . (int) $z['objekt_id']] = [$objektTyp, (int) $z['objekt_id']];
                 }
             }
+        }
+        foreach ($nachweise as [$typ, $id]) {
+            $this->protokoll->schreibe($ausfuehrender, $typ, $id, 'geaendert', ['dsgvo' => ['alt' => null, 'neu' => self::FREITEXT_NACHWEIS]]);
         }
         return $anzahl;
     }
@@ -381,11 +450,11 @@ final class DsgvoLoeschung
             // 3b. Börsenangebote: ohne Verkaufsposition samt nur ihnen zugeordneter Fotos löschen (eine Kaufanfrage dazu
             //     verliert per ON DELETE SET NULL nur den Verweis); mit storniertem Verkauf (RESTRICT der Position)
             //     ohne Personenbezug behalten; verkaufte bleiben – person_id an Angebot, Position und Auszahlung leert
-            //     sich in Schritt 6 per ON DELETE SET NULL („ehemaliges Mitglied“, Beträge unverändert).
+            //     sich in Schritt 6 per ON DELETE SET NULL („ehemaliges Mitglied“, Beträge unverändert); auch sie werden
+            //     nicht öffentlich und verlieren Beschreibung, Notiz und Fotos (die Abrechnung braucht nur Nummer,
+            //     Bezeichnung und Preis). Angebote ohne Person lassen sich danach weder anbieten noch verkaufen
+            //     (AngebotDienst::vonGeloeschtemMitglied).
             foreach ($angebote as $a) {
-                if ($a['status'] === 'verkauft') {
-                    continue;
-                }
                 foreach ($this->dokumenteNurHier($a['id'], 'boerse_angebot') as $dokId) {
                     $pfad = $this->loescheDokument($dokId);
                     if ($pfad !== null) {
@@ -400,8 +469,20 @@ final class DsgvoLoeschung
                     $this->angebote->anonymisiere($a['id']);
                 }
             }
-            // 3c. Freitexte in Magazin und Börse („Spende von …“, Notizen, Storno-Grund).
-            $this->freitexte($k['begriffe'], true);
+            // 3c. Öffentliche Börsenanfragen mit E-Mail oder Telefon der Person samt nur ihnen zugeordneter Fotos.
+            foreach ($this->anfragenDerPerson($k['mails'], $k['telefone'], true) as $anfrageId) {
+                foreach ($this->dokumenteNurHier($anfrageId, 'boerse_anfrage') as $dokId) {
+                    $pfad = $this->loescheDokument($dokId);
+                    if ($pfad !== null) {
+                        $pfade[$dokId] = $pfad;
+                    }
+                }
+                $this->pdo->prepare("DELETE FROM dokument_zuordnung WHERE objekt_typ = 'boerse_anfrage' AND objekt_id = ?")->execute([$anfrageId]);
+                $this->pdo->prepare('DELETE FROM boerse_anfrage WHERE id = ?')->execute([$anfrageId]);
+                $eigeneObjekte[] = ['boerse_anfrage', $anfrageId];
+            }
+            // 3d. Freitexte in Magazin und Börse („Spende von …“, Lagerorte, Notizen, Ort, Storno-Grund).
+            $this->freitexte($k['begriffe'], $ausfuehrenderBenutzerId);
 
             // 4. Anmelde- und Kennwort-Versuche aller bekannten E-Mails (Person, Konto, frühere) und das Benutzerkonto.
             //    Fremdschlüssel: dokument.hochgeladen_von und fahrzeug.angelegt_von_benutzer_id werden NULL.
@@ -542,7 +623,7 @@ final class DsgvoLoeschung
      *
      * @param array<string,mixed> $person
      * @param ?array<string,mixed> $benutzer
-     * @return array{begriffe:list<string>, mails:list<string>, konten:list<int>, objekte:list<array{0:string,1:int}>}
+     * @return array{begriffe:list<string>, mails:list<string>, konten:list<int>, objekte:list<array{0:string,1:int}>, telefone:list<string>}
      */
     private function kennungen(int $personId, array $person, ?array $benutzer): array
     {
@@ -593,7 +674,7 @@ final class DsgvoLoeschung
         foreach ($konten as $konto) {
             $objekte[] = ['benutzer', $konto];
         }
-        return ['begriffe' => $begriffe, 'mails' => $mails, 'konten' => $konten, 'objekte' => $objekte];
+        return ['begriffe' => $begriffe, 'mails' => $mails, 'konten' => $konten, 'objekte' => $objekte, 'telefone' => array_values($werte['telefon'])];
     }
 
     /**

@@ -184,4 +184,23 @@ final class DokumentRepositoryTest extends DbTestCase
         $this->assertNull($this->repo->finde($id));
         $this->assertNull($this->pdo->query("SELECT titelbild_dokument_id FROM magazin_artikel WHERE id = $mitFoto")->fetchColumn());
     }
+
+    /**
+     * Wird das Dokument zwischen den Titelbild-UPDATEs und dem Löschen der Zuordnungen anderswo Titelbild (gleichzeitige
+     * Übernahme einer Börsenanfrage, hier per Trigger nachgestellt), bleibt kein Verweis auf das gelöschte Dokument.
+     */
+    public function test_kein_verwaistes_titelbild_nach_gleichzeitiger_zuordnung(): void
+    {
+        $this->pdo->exec("INSERT INTO magazin_artikel (bezeichnung, kategorie_id) SELECT 'Kiste', id FROM magazin_kategorie WHERE schluessel = 'sonstiges'");
+        $artikel = (int) $this->pdo->lastInsertId();
+        $dok = $this->dokument('race.jpg');
+        $this->repo->zuordnen($dok, 'boerse_anfrage', 1);
+        $this->pdo->exec("CREATE TRIGGER test_titelbild_race AFTER DELETE ON dokument_zuordnung FOR EACH ROW UPDATE magazin_artikel SET titelbild_dokument_id = OLD.dokument_id WHERE id = $artikel");
+        try {
+            $this->repo->loeschen($dok);
+        } finally {
+            $this->pdo->exec('DROP TRIGGER IF EXISTS test_titelbild_race');
+        }
+        $this->assertNull($this->pdo->query("SELECT titelbild_dokument_id FROM magazin_artikel WHERE id = $artikel")->fetchColumn() ?: null);
+    }
 }
