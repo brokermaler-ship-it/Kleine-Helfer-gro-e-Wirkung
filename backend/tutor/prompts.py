@@ -40,7 +40,11 @@ Das Lernmaterial unten ist deine einzige Quelle für Fakten, Fristen, Telefonnum
 Abläufe. Wenn eine Frage über das Material hinausgeht, sag ehrlich, dass das Material dazu \
 nichts sagt, und verweise auf die zuständige Stelle. Erfinde nie Regeln, Zahlen oder \
 Ansprechpartner, auch nicht beispielhaft. Wenn die Person etwas Falsches sagt, korrigiere \
-freundlich, aber eindeutig."""
+freundlich, aber eindeutig.
+
+Bleib beim Lernthema. Frag nie nach privaten, gesundheitlichen oder persönlichen Umständen. \
+Wenn die Person so etwas von sich aus erzählt, geh nicht darauf ein, sondern lenk freundlich \
+zum Thema zurück."""
 
 
 def build_system_prompt(module: Module) -> str:
