@@ -11,6 +11,7 @@ use Emc\Core\Session;
 use Emc\Digital\FunktionCsvImport;
 use Emc\Digital\FunktionRepository;
 use Emc\Tests\Integration\DbTestCase;
+use Emc\Tests\Support\MiniPdf;
 
 final class FunktionHttpTest extends DbTestCase
 {
@@ -50,6 +51,19 @@ final class FunktionHttpTest extends DbTestCase
         $tmp = tempnam(sys_get_temp_dir(), 'csv');
         file_put_contents($tmp, $inhalt);
         return ['datei' => ['name' => 'f.csv', 'tmp_name' => $tmp, 'error' => UPLOAD_ERR_OK, 'size' => strlen($inhalt)]];
+    }
+
+    private function uploadPdf(string $inhalt, string $name = 'anleitung.pdf'): array
+    {
+        $tmp = tempnam(sys_get_temp_dir(), 'pdf');
+        file_put_contents($tmp, $inhalt);
+        return ['datei' => ['name' => $name, 'tmp_name' => $tmp, 'error' => UPLOAD_ERR_OK, 'size' => strlen($inhalt)]];
+    }
+
+    /** @return list<string> */
+    private function meldungen(): array
+    {
+        return array_column($this->sitzung['_meldungen'] ?? [], 'text');
     }
 
     private function belegung(): array
@@ -156,6 +170,172 @@ final class FunktionHttpTest extends DbTestCase
         $this->anmelden('bearbeiter');
         $this->post("/decoder/{$this->dec}/funktionen/csv", [], $this->upload(str_repeat('a', 1048577)));
         $this->assertContains('Die Datei ist zu groß (höchstens 1 MB).', array_column($this->sitzung['_meldungen'], 'text'));
+    }
+
+    public function test_pdf_upload_vorschau_und_uebernehmen(): void
+    {
+        $this->anmelden('bearbeiter');
+        $pdf = MiniPdf::erzeuge([['Funktionsbelegung', 'F0 Licht', 'F2 Pfiff (M)', 'F5–F8 Ansagen']]);
+        $r = $this->post("/decoder/{$this->dec}/funktionen/pdf", [], $this->uploadPdf($pdf));
+        $this->assertSame(200, $r->status);
+        $this->assertStringContainsString('PDF-Vorschau', $r->body);
+        $this->assertStringContainsString('2 Tasten erkannt.', $r->body);
+        $this->assertStringContainsString('Hinweise', $r->body);
+        $this->assertStringContainsString('Bereich F5–F8 („Ansagen“) nicht übernommen', $r->body);
+        $this->assertStringContainsString('/pdf/uebernehmen', $r->body);
+        $this->assertStringNotContainsString('/csv/uebernehmen', $r->body);
+        $this->assertSame([], $this->belegung(), 'Vorschau speichert noch nichts');
+        $this->assertArrayHasKey('pdf_vorschau_' . $this->dec, $this->sitzung);
+        $this->assertSame(['zeilen', 'fehler'], array_keys($this->sitzung['pdf_vorschau_' . $this->dec]));
+
+        $this->assertSame(303, $this->post("/decoder/{$this->dec}/funktionen/pdf/uebernehmen")->status);
+        $b = $this->belegung();
+        $this->assertSame([0, 2], array_keys($b));
+        $this->assertSame('Licht', $b[0]['beschreibung']);
+        $this->assertSame('dauer', $b[0]['schaltart']);
+        $this->assertSame('Pfiff', $b[2]['beschreibung']);
+        $this->assertSame('moment', $b[2]['schaltart']);
+        $this->assertContains('Die Funktionen wurden aus der PDF-Datei übernommen.', $this->meldungen());
+        $this->assertArrayNotHasKey('pdf_vorschau_' . $this->dec, $this->sitzung);
+        $this->assertSame(1, (int) $this->pdo->query("SELECT COUNT(*) FROM aenderungsprotokoll WHERE objekt_typ = 'decoder'")->fetchColumn());
+
+        $this->assertSame(303, $this->post("/decoder/{$this->dec}/funktionen/pdf/uebernehmen")->status);
+        $this->assertContains('Es liegt keine PDF-Vorschau vor. Bitte die Datei erneut hochladen.', $this->meldungen());
+        $this->assertSame($b, $this->belegung());
+    }
+
+    public function test_pdf_seitengrenze_als_hinweis(): void
+    {
+        $this->anmelden('bearbeiter');
+        $seiten = array_fill(0, 151, ['Weitere Angaben zur Lok']);
+        $seiten[0] = ['F0 Licht vorne'];
+        $seiten[150] = ['F1 Nicht gelesen'];
+        $r = $this->post("/decoder/{$this->dec}/funktionen/pdf", [], $this->uploadPdf(MiniPdf::erzeuge($seiten)));
+        $this->assertSame(200, $r->status);
+        $this->assertStringContainsString('Das PDF hat 151 Seiten; gelesen wurden die ersten 150.', $r->body);
+        $this->assertStringContainsString('1 Taste erkannt.', $r->body);
+        $this->assertStringNotContainsString('Nicht gelesen', $r->body);
+    }
+
+    public function test_pdf_ohne_text_und_ohne_tasten(): void
+    {
+        $this->anmelden('bearbeiter');
+        (new FunktionRepository($this->pdo))->ersetzen($this->dec, [['taste' => 1, 'beschreibung' => 'Alt', 'schaltart' => 'dauer']]);
+        $vorher = $this->belegung();
+        $r = $this->post("/decoder/{$this->dec}/funktionen/pdf", [], $this->uploadPdf(MiniPdf::ohneText()));
+        $this->assertSame(303, $r->status);
+        $this->assertContains('Das PDF enthält keinen lesbaren Text (vermutlich ein Scan). Texterkennung gibt es nicht – bitte die Tasten von Hand eintragen.', $this->meldungen());
+        $this->assertArrayNotHasKey('pdf_vorschau_' . $this->dec, $this->sitzung);
+
+        $r = $this->post("/decoder/{$this->dec}/funktionen/pdf", [], $this->uploadPdf(MiniPdf::erzeuge([['Allgemeine Hinweise zur Wartung der Lok']])));
+        $this->assertSame(303, $r->status);
+        $this->assertContains('Im PDF wurden keine Funktionstasten gefunden (erwartet z. B. „F0 Licht“). Bitte die Tasten von Hand eintragen.', $this->meldungen());
+        $this->assertArrayNotHasKey('pdf_vorschau_' . $this->dec, $this->sitzung);
+        $this->assertSame($vorher, $this->belegung());
+    }
+
+    public function test_pdf_falsche_datei(): void
+    {
+        $this->anmelden('bearbeiter');
+        $this->assertSame(303, $this->post("/decoder/{$this->dec}/funktionen/pdf")->status);
+        $this->assertSame(303, $this->post("/decoder/{$this->dec}/funktionen/pdf", [], $this->uploadPdf(''))->status);
+        $docx = "PK\x03\x04" . str_repeat("\0", 30) . '[Content_Types].xml word/document.xml';
+        $this->assertSame(303, $this->post("/decoder/{$this->dec}/funktionen/pdf", [], $this->uploadPdf($docx, 'anleitung.pdf'))->status);
+        $m = $this->meldungen();
+        $this->assertContains('Bitte eine PDF-Datei auswählen.', $m);
+        $this->assertContains('Die Datei ist leer.', $m);
+        $this->assertContains('Die Datei ist kein PDF.', $m);
+        $this->assertArrayNotHasKey('pdf_vorschau_' . $this->dec, $this->sitzung);
+        $this->assertSame([], $this->belegung());
+    }
+
+    public function test_pdf_zu_gross_nach_uploadgrenze(): void
+    {
+        $this->anmelden('bearbeiter');
+        $config = self::testConfig() + ['upload_max_mb' => 1];
+        $app = App::erzeuge($config, new Session($this->sitzung));
+        $d = $this->uploadPdf('%PDF-1.4' . str_repeat('x', 1048577));
+        $r = $app->handle(new Request('POST', "/decoder/{$this->dec}/funktionen/pdf", [], ['_csrf' => str_repeat('a', 64)], $d));
+        $this->assertSame(303, $r->status);
+        $this->assertContains('Die Datei ist zu groß (höchstens 1 MB).', $this->meldungen());
+    }
+
+    public function test_pdf_wird_nicht_gespeichert(): void
+    {
+        $this->anmelden('bearbeiter');
+        $speicher = dirname(__DIR__, 3) . '/storage';
+        $zaehle = static function () use ($speicher): int {
+            if (!is_dir($speicher)) {
+                return 0;
+            }
+            $n = 0;
+            foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($speicher, \FilesystemIterator::SKIP_DOTS)) as $f) {
+                $n++;
+            }
+            return $n;
+        };
+        $dokumente = (int) $this->pdo->query('SELECT COUNT(*) FROM dokument')->fetchColumn();
+        $dateien = $zaehle();
+        $this->assertSame(200, $this->post("/decoder/{$this->dec}/funktionen/pdf", [], $this->uploadPdf(MiniPdf::erzeuge([['F0 Licht vorne und hinten']])))->status);
+        $this->assertSame(303, $this->post("/decoder/{$this->dec}/funktionen/pdf/uebernehmen")->status);
+        $this->assertSame([0], array_keys($this->belegung()));
+        $this->assertSame($dokumente, (int) $this->pdo->query('SELECT COUNT(*) FROM dokument')->fetchColumn());
+        $this->assertSame($dateien, $zaehle());
+    }
+
+    public function test_vorschau_nur_fuer_eigenen_decoder_und_quelle(): void
+    {
+        $this->anmelden('bearbeiter');
+        $b = FunktionRepositoryTest::neuerDecoder($this->pdo, 'Zweiter');
+        $this->assertSame(200, $this->post("/decoder/{$this->dec}/funktionen/pdf", [], $this->uploadPdf(MiniPdf::erzeuge([['F0 Licht vorne und hinten']])))->status);
+        $this->assertSame(303, $this->post("/decoder/$b/funktionen/pdf/uebernehmen")->status);
+        $this->assertContains('Es liegt keine PDF-Vorschau vor. Bitte die Datei erneut hochladen.', $this->meldungen());
+        $this->assertSame([], (new FunktionRepository($this->pdo))->fuerDecoder($b));
+        $this->assertArrayHasKey('pdf_vorschau_' . $this->dec, $this->sitzung);
+
+        // CSV-Vorschau lässt sich nicht über die PDF-Route übernehmen und umgekehrt.
+        unset($this->sitzung['pdf_vorschau_' . $this->dec]);
+        $this->sitzung['_meldungen'] = [];
+        $this->assertSame(200, $this->post("/decoder/{$this->dec}/funktionen/csv", [], $this->upload("F1;Sound;Dauer\n"))->status);
+        $this->assertSame(303, $this->post("/decoder/{$this->dec}/funktionen/pdf/uebernehmen")->status);
+        $this->assertContains('Es liegt keine PDF-Vorschau vor. Bitte die Datei erneut hochladen.', $this->meldungen());
+        $this->assertSame([], $this->belegung());
+        $this->assertArrayHasKey('csv_vorschau_' . $this->dec, $this->sitzung);
+
+        unset($this->sitzung['csv_vorschau_' . $this->dec]);
+        $this->assertSame(200, $this->post("/decoder/{$this->dec}/funktionen/pdf", [], $this->uploadPdf(MiniPdf::erzeuge([['F0 Licht vorne und hinten']])))->status);
+        $this->assertSame(303, $this->post("/decoder/{$this->dec}/funktionen/csv/uebernehmen")->status);
+        $this->assertContains('Es liegt keine CSV-Vorschau vor. Bitte die Datei erneut hochladen.', $this->meldungen());
+        $this->assertSame([], $this->belegung());
+    }
+
+    public function test_pdf_rechte(): void
+    {
+        $this->anmelden('mitglied');
+        $r = $this->post("/decoder/{$this->dec}/funktionen/pdf", [], $this->uploadPdf(MiniPdf::erzeuge([['F0 Licht vorne und hinten']])));
+        $this->assertSame(403, $r->status);
+        $this->assertArrayNotHasKey('pdf_vorschau_' . $this->dec, $this->sitzung);
+        $this->sitzung['pdf_vorschau_' . $this->dec] = ['zeilen' => [['taste' => 0, 'beschreibung' => 'X', 'schaltart' => 'dauer']], 'fehler' => []];
+        $this->assertSame(403, $this->post("/decoder/{$this->dec}/funktionen/pdf/uebernehmen")->status);
+        $this->assertSame([], $this->belegung());
+        $seite = $this->get("/decoder/{$this->dec}/funktionen")->body;
+        $this->assertStringNotContainsString('PDF-Import', $seite);
+        $this->assertStringNotContainsString('accept=".pdf,application/pdf"', $seite);
+
+        $this->sitzung = [];
+        $this->anmelden('bearbeiter');
+        $seite = $this->get("/decoder/{$this->dec}/funktionen")->body;
+        $this->assertStringContainsString('PDF-Import', $seite);
+        $this->assertStringContainsString('accept=".pdf,application/pdf"', $seite);
+        $this->assertStringContainsString('action="' . url("/decoder/{$this->dec}/funktionen/pdf") . '"', $seite);
+    }
+
+    public function test_pdf_ohne_csrf_abgelehnt(): void
+    {
+        $this->anmelden('bearbeiter');
+        $r = $this->app()->handle(new Request('POST', "/decoder/{$this->dec}/funktionen/pdf", [], ['_csrf' => str_repeat('b', 64)], $this->uploadPdf(MiniPdf::erzeuge([['F0 Licht vorne und hinten']]))));
+        $this->assertNotSame(200, $r->status);
+        $this->assertArrayNotHasKey('pdf_vorschau_' . $this->dec, $this->sitzung);
     }
 
     public function test_vorlage_speichern_und_anwenden(): void

@@ -35,6 +35,7 @@ use Emc\Digital\DecoderRepository;
 use Emc\Digital\FunktionController;
 use Emc\Digital\FunktionRepository;
 use Emc\Digital\FunktionsvorlageRepository;
+use Emc\Digital\PdfText;
 use Emc\Etiketten\EtikettAuswahl;
 use Emc\Etiketten\EtikettController;
 use Emc\Fahrzeuge\FahrzeugController;
@@ -385,7 +386,8 @@ final class App
             $c->get(FunktionsvorlageRepository::class),
             $c->get(Aenderungsprotokoll::class),
             $c->get(Auth::class),
-            $c->get('session')
+            $c->get('session'),
+            new PdfText(min(PdfText::MAX_BYTES, Uploadgrenzen::ausConfig($this->config)->dateiBytes))
         ));
         $this->container->set(CvController::class, fn(Container $c) => new CvController(
             $this->view,

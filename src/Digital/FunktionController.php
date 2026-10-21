@@ -28,6 +28,7 @@ final class FunktionController
         private Aenderungsprotokoll $protokoll,
         private Auth $auth,
         private Session $session,
+        private ?PdfText $pdfText = null,
     ) {
     }
 
@@ -70,7 +71,7 @@ final class FunktionController
     public function csvHochladen(Request $r, array $p): Response
     {
         $dec = $this->ladeBearbeitbarenDecoder($p);
-        $meldung = $this->dateiFehler($r->file('datei'));
+        $meldung = $this->dateiFehler($r->file('datei'), 'CSV', self::MAX_CSV_BYTES);
         if ($meldung !== null) {
             $this->session->meldung('fehler', $meldung);
             return Response::redirect($this->ziel($dec));
@@ -98,15 +99,77 @@ final class FunktionController
 
     public function csvUebernehmen(Request $r, array $p): Response
     {
+        return $this->vorschauUebernehmen($this->ladeBearbeitbarenDecoder($p), 'csv');
+    }
+
+    public function pdfHochladen(Request $r, array $p): Response
+    {
         $dec = $this->ladeBearbeitbarenDecoder($p);
-        $schluessel = 'csv_vorschau_' . $dec['id'];
+        $pdf = $this->pdfText ?? new PdfText();
+        $meldung = $this->dateiFehler($r->file('datei'), 'PDF', $pdf->maxBytes);
+        if ($meldung !== null) {
+            $this->session->meldung('fehler', $meldung);
+            return Response::redirect($this->ziel($dec));
+        }
+        $datei = $r->file('datei');
+        // Nur im Speicher lesen: die Upload-Datei löscht PHP am Ende der Anfrage, abgelegt wird nichts.
+        $inhalt = file_get_contents((string) $datei['tmp_name']);
+        if ($inhalt === false) {
+            $this->session->meldung('fehler', 'Die Datei konnte nicht gelesen werden.');
+            return Response::redirect($this->ziel($dec));
+        }
+        try {
+            $gelesen = $pdf->lies($inhalt);
+        } catch (DomainFehler $f) {
+            $this->session->meldung('fehler', $f->getMessage());
+            return Response::redirect($this->ziel($dec));
+        } finally {
+            unset($inhalt);
+        }
+        $ergebnis = FunktionPdfErkennung::erkenne($gelesen['text']);
+        if ($ergebnis->zeilen === []) {
+            $this->session->meldung('fehler', 'Im PDF wurden keine Funktionstasten gefunden (erwartet z. B. „F0 Licht“). Bitte die Tasten von Hand eintragen.');
+            return Response::redirect($this->ziel($dec));
+        }
+        if ($gelesen['gelesen'] < $gelesen['seiten']) {
+            $ergebnis = new CsvErgebnis($ergebnis->zeilen, $ergebnis->fehler, [
+                sprintf('Das PDF hat %d Seiten; gelesen wurden die ersten %d.', $gelesen['seiten'], $gelesen['gelesen']),
+                ...$ergebnis->hinweise,
+            ]);
+        }
+        $this->session->setze('pdf_vorschau_' . $dec['id'], ['zeilen' => $ergebnis->zeilen, 'fehler' => []]);
+        return $this->html('digital/csv_vorschau', [
+            'titel' => 'PDF-Vorschau',
+            'quelle' => 'pdf',
+            'decoder' => $dec,
+            'fahrzeug' => $this->ladeFahrzeug($dec),
+            'ergebnis' => $ergebnis,
+            'vorhanden' => count($this->funktionen->fuerDecoder((int) $dec['id'])),
+        ]);
+    }
+
+    public function pdfUebernehmen(Request $r, array $p): Response
+    {
+        return $this->vorschauUebernehmen($this->ladeBearbeitbarenDecoder($p), 'pdf');
+    }
+
+    /**
+     * Übernimmt die Vorschau aus der Sitzung; der Schlüssel enthält Quelle und Decoder, so passt eine Vorschau nur
+     * zu ihrer eigenen Route und ihrem eigenen Decoder.
+     *
+     * @param array<string,mixed> $dec
+     */
+    private function vorschauUebernehmen(array $dec, string $quelle): Response
+    {
+        $name = $quelle === 'pdf' ? 'PDF' : 'CSV';
+        $schluessel = $quelle . '_vorschau_' . $dec['id'];
         $vorschau = $this->session->hole($schluessel);
-        if (!is_array($vorschau) || !isset($vorschau['zeilen'], $vorschau['fehler'])) {
-            $this->session->meldung('fehler', 'Es liegt keine CSV-Vorschau vor. Bitte die Datei erneut hochladen.');
+        if (!is_array($vorschau) || !isset($vorschau['zeilen'], $vorschau['fehler']) || !is_array($vorschau['zeilen'])) {
+            $this->session->meldung('fehler', 'Es liegt keine ' . $name . '-Vorschau vor. Bitte die Datei erneut hochladen.');
             return Response::redirect($this->ziel($dec));
         }
         if ($vorschau['fehler'] !== []) {
-            $this->session->meldung('fehler', 'Die CSV-Datei enthält Fehler und kann nicht übernommen werden.');
+            $this->session->meldung('fehler', 'Die ' . $name . '-Datei enthält Fehler und kann nicht übernommen werden.');
             return Response::redirect($this->ziel($dec));
         }
         $this->session->entferne($schluessel);
@@ -115,7 +178,7 @@ final class FunktionController
             $neu[(int) $z['taste']] = $z;
         }
         $this->uebernimm($dec, $neu);
-        $this->session->meldung('erfolg', 'Die Funktionen wurden aus der CSV-Datei übernommen.');
+        $this->session->meldung('erfolg', 'Die Funktionen wurden aus der ' . $name . '-Datei übernommen.');
         return Response::redirect($this->ziel($dec));
     }
 
@@ -189,18 +252,19 @@ final class FunktionController
         );
     }
 
-    /** @param mixed $datei */
-    private function dateiFehler(mixed $datei): ?string
+    /** @param mixed $datei @param string $art „CSV“ oder „PDF“ */
+    private function dateiFehler(mixed $datei, string $art, int $maxBytes): ?string
     {
+        $zuGross = sprintf('Die Datei ist zu groß (höchstens %d MB).', max(1, intdiv($maxBytes, 1048576)));
         if (!is_array($datei) || !isset($datei['error'])) {
-            return 'Bitte eine CSV-Datei auswählen.';
+            return 'Bitte eine ' . $art . '-Datei auswählen.';
         }
         $fehler = $datei['error'];
         if ($fehler === UPLOAD_ERR_NO_FILE) {
-            return 'Bitte eine CSV-Datei auswählen.';
+            return 'Bitte eine ' . $art . '-Datei auswählen.';
         }
         if ($fehler === UPLOAD_ERR_INI_SIZE || $fehler === UPLOAD_ERR_FORM_SIZE) {
-            return 'Die Datei ist zu groß (höchstens 1 MB).';
+            return $zuGross;
         }
         $tmp = $datei['tmp_name'] ?? null;
         // Im CLI gibt es keine echten Uploads (Tests); dort entfällt die Herkunftsprüfung.
@@ -211,8 +275,8 @@ final class FunktionController
         if ($groesse === false || $groesse === 0) {
             return 'Die Datei ist leer.';
         }
-        if ($groesse > self::MAX_CSV_BYTES) {
-            return 'Die Datei ist zu groß (höchstens 1 MB).';
+        if ($groesse > $maxBytes) {
+            return $zuGross;
         }
         return null;
     }

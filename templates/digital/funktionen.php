@@ -72,6 +72,19 @@ $basis = url('/decoder/' . $decoder['id']);
     </form>
 </section>
 
+<section aria-labelledby="pdf-titel" class="mb-4">
+    <h2 class="h5" id="pdf-titel">PDF-Import</h2>
+    <p class="small text-muted">Bedienungsanleitung des Decoders oder der Lok als PDF (höchstens 20 MB). Erkannt werden Zeilen wie „F0 Licht“ oder „F 3: Glocke“; gescannte PDFs ohne Text gehen nicht. Die Datei wird nicht gespeichert.</p>
+    <form method="post" action="<?= e($basis . '/funktionen/pdf') ?>" enctype="multipart/form-data" class="row g-2 align-items-end">
+        <?php include dirname(__DIR__) . '/partials/csrf.php'; ?>
+        <div class="col-12 col-md-6">
+            <label for="pdf-datei" class="form-label">PDF-Datei</label>
+            <input type="file" class="form-control" id="pdf-datei" name="datei" accept=".pdf,application/pdf" required>
+        </div>
+        <div class="col-auto"><button type="submit" class="btn btn-outline-primary">Vorschau anzeigen</button></div>
+    </form>
+</section>
+
 <section aria-labelledby="vorlagen-titel">
     <h2 class="h5" id="vorlagen-titel">Vorlagen</h2>
     <form method="post" action="<?= e($basis . '/vorlage') ?>" class="row g-2 align-items-end mb-3">

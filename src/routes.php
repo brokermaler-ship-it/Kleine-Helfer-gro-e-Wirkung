@@ -126,6 +126,8 @@ return function (Router $router, App $app): void {
     $router->add('POST', '/decoder/{id}/funktionen', $app->erfordert('lesen', $fkt('speichern')));
     $router->add('POST', '/decoder/{id}/funktionen/csv', $app->erfordert('lesen', $fkt('csvHochladen')));
     $router->add('POST', '/decoder/{id}/funktionen/csv/uebernehmen', $app->erfordert('lesen', $fkt('csvUebernehmen')));
+    $router->add('POST', '/decoder/{id}/funktionen/pdf', $app->erfordert('lesen', $fkt('pdfHochladen')));
+    $router->add('POST', '/decoder/{id}/funktionen/pdf/uebernehmen', $app->erfordert('lesen', $fkt('pdfUebernehmen')));
     $router->add('GET', '/funktionen/vorlage.csv', $app->erfordert('lesen', $fkt('csvVorlage')));
     $router->add('POST', '/decoder/{id}/vorlage', $app->erfordert('lesen', $fkt('alsVorlage')));
     $router->add('POST', '/decoder/{id}/vorlage-anwenden', $app->erfordert('lesen', $fkt('vorlageAnwenden')));
