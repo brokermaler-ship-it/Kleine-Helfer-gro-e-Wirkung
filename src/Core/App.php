@@ -53,6 +53,8 @@ use Emc\Personen\PersonController;
 use Emc\Personen\PersonRepository;
 use Emc\Stammdaten\SpurweiteController;
 use Emc\Stammdaten\SpurweiteRepository;
+use Emc\Wartung\WartungsartController;
+use Emc\Wartung\WartungsartRepository;
 use Emc\Protokoll\Aenderungsprotokoll;
 
 final class App
@@ -199,6 +201,14 @@ final class App
         $this->container->set(SpurweiteController::class, fn(Container $c) => new SpurweiteController(
             $this->view,
             $c->get(SpurweiteRepository::class),
+            $c->get('session')
+        ));
+        $this->container->set(WartungsartRepository::class, fn(Container $c) => new WartungsartRepository($c->get('pdo')));
+        $this->container->set(WartungsartController::class, fn(Container $c) => new WartungsartController(
+            $this->view,
+            $c->get(WartungsartRepository::class),
+            $c->get(Aenderungsprotokoll::class),
+            $c->get(Auth::class),
             $c->get('session')
         ));
         $this->container->set(FahrzeugRepository::class, fn(Container $c) => new FahrzeugRepository($c->get('pdo')));
@@ -480,8 +490,9 @@ final class App
                 $this->container->get('session')->meldung('warnung', 'Bitte zuerst das Datenbank-Update ausführen; bis dahin ruht die OneDrive-Übertragung.');
                 return Response::redirect(url('/admin/update'));
             }
-            // 3c. Die Anlagen brauchen die Tabelle aus Migration 011 (Nicht-Administratoren sehen schon die Wartungsseite).
-            if (($pfad === '/anlagen' || str_starts_with($pfad, '/anlagen/'))
+            // 3c. Anlagen und Wartungsarten brauchen die Tabellen aus Migration 011/012 (Nicht-Administratoren sehen schon die Wartungsseite).
+            if (($pfad === '/anlagen' || str_starts_with($pfad, '/anlagen/')
+                    || $pfad === '/admin/wartungsarten' || str_starts_with($pfad, '/admin/wartungsarten/'))
                 && $this->container->get(Migrator::class)->ausstehend() !== []
             ) {
                 $this->container->get('session')->meldung('warnung', 'Bitte zuerst das Datenbank-Update ausführen.');

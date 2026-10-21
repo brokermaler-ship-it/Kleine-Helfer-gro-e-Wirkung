@@ -40,6 +40,9 @@ use Emc\Auth\Berechtigung;
                 if ($darf(Berechtigung::STAMMDATEN_VERWALTEN)) {
                     $verwaltung['/admin/spurweiten'] = 'Spurweiten';
                 }
+                if ($darf(Berechtigung::WARTUNGSART_VERWALTEN)) {
+                    $verwaltung['/admin/wartungsarten'] = 'Wartungsarten';
+                }
                 if ($darf(Berechtigung::BETRIEB)) {
                     $verwaltung['/admin/sicherung'] = 'Sicherung';
                     $verwaltung['/admin/onedrive'] = 'OneDrive';

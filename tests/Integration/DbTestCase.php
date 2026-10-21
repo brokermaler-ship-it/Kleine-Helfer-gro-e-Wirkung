@@ -55,6 +55,24 @@ abstract class DbTestCase extends TestCase
             }
         }
         $this->pdo->exec('SET FOREIGN_KEY_CHECKS=1');
+        self::startbestandWartungsarten($this->pdo);
+    }
+
+    /**
+     * Stellt den Startbestand der Wartungsarten aus Migration 012 wieder her (die Tabelle wird wie alle anderen geleert,
+     * damit Änderungen eines Tests nicht in den nächsten durchschlagen). Ohne Tabelle (Tests vor Migration 012) nichts.
+     */
+    protected static function startbestandWartungsarten(\PDO $pdo): void
+    {
+        static $einfuegen = null;
+        if ($einfuegen === null) {
+            $sql = (string) file_get_contents(dirname(__DIR__, 2) . '/migrations/012_wartungsart.sql');
+            preg_match('/^INSERT INTO wartungsart .*?;/ms', $sql, $treffer);
+            $einfuegen = $treffer[0] ?? '';
+        }
+        if ($einfuegen !== '' && in_array('wartungsart', self::tabellen($pdo), true)) {
+            $pdo->exec($einfuegen);
+        }
     }
 
     /** @return array<string,mixed> */

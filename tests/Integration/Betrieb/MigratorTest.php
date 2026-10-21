@@ -19,14 +19,14 @@ final class MigratorTest extends DbTestCase
         self::alleTabellenLoeschen($this->pdo);
         $migrator = new Migrator($this->pdo, $this->migrationen());
         $this->assertFalse($migrator->istInstalliert());
-        $this->assertSame(['001_grundgeruest', '002_spurweiten_start', '003_fahrzeug_angelegt_von', '004_onedrive', '005_onedrive_auftrag_sperre', '006_onedrive_sperr_token_index', '007_onedrive_laufwerk', '008_rolle_fahrzeugwart', '009_abstellgleis', '010_kennwort_vergessen', '011_anlage'], $migrator->ausstehend());
+        $this->assertSame(['001_grundgeruest', '002_spurweiten_start', '003_fahrzeug_angelegt_von', '004_onedrive', '005_onedrive_auftrag_sperre', '006_onedrive_sperr_token_index', '007_onedrive_laufwerk', '008_rolle_fahrzeugwart', '009_abstellgleis', '010_kennwort_vergessen', '011_anlage', '012_wartungsart'], $migrator->ausstehend());
     }
 
     public function test_ausfuehren_legt_tabellen_an_und_ist_idempotent(): void
     {
         self::alleTabellenLoeschen($this->pdo);
         $migrator = new Migrator($this->pdo, $this->migrationen());
-        $this->assertSame(['001_grundgeruest', '002_spurweiten_start', '003_fahrzeug_angelegt_von', '004_onedrive', '005_onedrive_auftrag_sperre', '006_onedrive_sperr_token_index', '007_onedrive_laufwerk', '008_rolle_fahrzeugwart', '009_abstellgleis', '010_kennwort_vergessen', '011_anlage'], $migrator->ausfuehren());
+        $this->assertSame(['001_grundgeruest', '002_spurweiten_start', '003_fahrzeug_angelegt_von', '004_onedrive', '005_onedrive_auftrag_sperre', '006_onedrive_sperr_token_index', '007_onedrive_laufwerk', '008_rolle_fahrzeugwart', '009_abstellgleis', '010_kennwort_vergessen', '011_anlage', '012_wartungsart'], $migrator->ausfuehren());
         $this->assertTrue($migrator->istInstalliert());
         $this->assertSame([], $migrator->ausstehend());
         $this->assertSame([], $migrator->ausfuehren());
@@ -96,6 +96,26 @@ final class MigratorTest extends DbTestCase
             self::alleTabellenLoeschen($this->pdo);
             (new Migrator($this->pdo, $this->migrationen()))->ausfuehren();
         }
+    }
+
+    /** Migration 012 legt genau den Startbestand der Wartungsarten an (Spezifikation 5.2). */
+    public function test_migration_012_startbestand(): void
+    {
+        self::alleTabellenLoeschen($this->pdo);
+        (new Migrator($this->pdo, $this->migrationen()))->ausfuehren();
+        $zeilen = $this->pdo->query('SELECT name, gilt_fuer, intervall_monate, intervall_stunden, aktiv, sortierung FROM wartungsart ORDER BY sortierung')
+            ->fetchAll(\PDO::FETCH_NUM);
+        $zeilen = array_map(fn(array $z) => [$z[0], $z[1], $z[2] === null ? null : (int) $z[2], $z[3] === null ? null : (int) $z[3], (int) $z[4], (int) $z[5]], $zeilen);
+        $this->assertSame([
+            ['Räder und Radschleifer reinigen', 'fahrzeug_alle', 6, 20, 1, 10],
+            ['Getriebe und Lager schmieren', 'fahrzeug_antrieb', 12, 50, 1, 20],
+            ['Haftreifen prüfen/tauschen', 'fahrzeug_antrieb', 12, 50, 1, 30],
+            ['Motor/Kohlen prüfen', 'fahrzeug_antrieb', 24, 100, 1, 40],
+            ['Kupplungen prüfen', 'fahrzeug_alle', 12, null, 1, 50],
+            ['Gleise reinigen', 'anlage', 3, null, 1, 60],
+            ['Weichen und Antriebe prüfen', 'anlage', 12, null, 1, 70],
+            ['Verkabelung und Stecker prüfen', 'anlage', 12, null, 1, 80],
+        ], $zeilen);
     }
 
     private function upgradeMitBestand(string $ziel, ?string $erwartet): void

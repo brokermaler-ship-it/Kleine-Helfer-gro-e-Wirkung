@@ -26,7 +26,7 @@ use Emc\Personen\PersonRepository;
 final class DemoDaten
 {
     public const PASSWORT = 'Test-EMC78!';
-    private const BEHALTEN = ['schema_migration', 'spurweite'];
+    private const BEHALTEN = ['schema_migration', 'spurweite', 'wartungsart'];
 
     private \PDO $pdo;
     private string $speicherPfad;
@@ -102,7 +102,7 @@ final class DemoDaten
         $this->fotos($ids);
     }
 
-    /** Leert alle Tabellen außer schema_migration und spurweite sowie storage/dateien. */
+    /** Leert alle Tabellen außer schema_migration und den Stammlisten spurweite und wartungsart sowie storage/dateien. */
     private function leere(): void
     {
         $tabellen = array_map('strval', $this->pdo->query("SHOW FULL TABLES WHERE Table_type = 'BASE TABLE'")->fetchAll(\PDO::FETCH_COLUMN));

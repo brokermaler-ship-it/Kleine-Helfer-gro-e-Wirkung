@@ -24,6 +24,7 @@ use Emc\Personen\BenutzerController;
 use Emc\Personen\KontoController;
 use Emc\Personen\PersonController;
 use Emc\Stammdaten\SpurweiteController;
+use Emc\Wartung\WartungsartController;
 
 /**
  * Routendefinitionen.
@@ -128,6 +129,10 @@ return function (Router $router, App $app): void {
     $router->add('GET', '/admin/spurweiten', $app->erfordert('stammdaten_verwalten', $spur('liste')));
     $router->add('POST', '/admin/spurweiten', $app->erfordert('stammdaten_verwalten', $spur('speichern')));
     $router->add('POST', '/admin/spurweiten/{id}/loeschen', $app->erfordert('stammdaten_verwalten', $spur('loeschen')));
+    $wart = fn(string $m) => fn(Request $r, array $p = []) => $c->get(WartungsartController::class)->$m($r, $p);
+    $router->add('GET', '/admin/wartungsarten', $app->erfordert('wartungsart_verwalten', $wart('liste')));
+    $router->add('POST', '/admin/wartungsarten', $app->erfordert('wartungsart_verwalten', $wart('speichern')));
+    $router->add('POST', '/admin/wartungsarten/{id}/loeschen', $app->erfordert('wartungsart_verwalten', $wart('loeschen')));
 
     $sich = fn(string $m) => fn(Request $r, array $p = []) => $c->get(SicherungController::class)->$m($r);
     $router->add('GET', '/admin/sicherung', $app->erfordert('betrieb', $sich('zeigen')));
