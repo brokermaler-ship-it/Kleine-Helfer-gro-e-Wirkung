@@ -47,7 +47,7 @@ final class FunktionController
         $neu = [];
         $anzeige = [];
         $fehler = [];
-        for ($t = 0; $t <= 31; $t++) {
+        for ($t = 0; $t <= FunktionRepository::MAX_TASTE; $t++) {
             $text = $beschreibung[$t] ?? '';
             $text = is_string($text) ? trim($text) : '';
             $art = ($moment[$t] ?? '') === '1' ? 'moment' : 'dauer';

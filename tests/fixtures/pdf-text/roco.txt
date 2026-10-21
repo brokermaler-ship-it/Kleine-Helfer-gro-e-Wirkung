@@ -1,0 +1,7 @@
+Funktionstaste | Funktion
+F0 | Licht ein/aus
+F1 | Sound ein/aus
+F2 | Horn (M)
+F3 | Pfeife
+F69 | Testfunktion
+Funktionen im Überblick ............ 7

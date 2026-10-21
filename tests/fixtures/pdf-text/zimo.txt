@@ -1,0 +1,8 @@
+ZIMO MX645 Sound-Projekt BR 218
+F0 = Stirnlampen
+F1 – Fahrgeräusch an/aus
+F 2: Pfiff kurz (Moment)
+F3: Glocke
+F5–F8 Ansagen Bahnsteig
+F12 Rangierbeleuch-
+tung

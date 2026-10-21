@@ -47,8 +47,8 @@ final class FunktionCsvImport
                     continue; // Kopfzeile
                 }
             }
-            if (preg_match(self::TASTE, $zellen[0], $m) !== 1 || (int) $m[1] > 31) {
-                $fehler[] = sprintf('Zeile %d: Taste „%s“ ist ungültig (erlaubt F0–F31).', $nr, $zellen[0]);
+            if (preg_match(self::TASTE, $zellen[0], $m) !== 1 || (int) $m[1] > FunktionRepository::MAX_TASTE) {
+                $fehler[] = sprintf('Zeile %d: Taste „%s“ ist ungültig (erlaubt F0–F%d).', $nr, $zellen[0], FunktionRepository::MAX_TASTE);
                 continue;
             }
             $taste = (int) $m[1];

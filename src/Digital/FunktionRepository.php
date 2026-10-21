@@ -6,6 +6,9 @@ namespace Emc\Digital;
 
 final class FunktionRepository
 {
+    /** Höchste Funktionstaste (F0–F68), gilt für Formular, CSV- und PDF-Import. */
+    public const MAX_TASTE = 68;
+
     public function __construct(private \PDO $pdo)
     {
     }

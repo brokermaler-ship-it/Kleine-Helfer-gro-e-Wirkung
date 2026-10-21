@@ -91,6 +91,28 @@ final class FunktionHttpTest extends DbTestCase
         $this->assertSame(['funktionen' => ['alt' => 0, 'neu' => 2]], json_decode($eintrag['aenderungen'], true));
     }
 
+    public function test_formular_bis_f68(): void
+    {
+        $this->anmelden('bearbeiter');
+        (new FunktionRepository($this->pdo))->ersetzen($this->dec, [['taste' => 40, 'beschreibung' => 'Ansage Bahnsteig', 'schaltart' => 'moment']]);
+        $r = $this->get("/decoder/{$this->dec}/funktionen");
+        $this->assertSame(200, $r->status);
+        $this->assertStringContainsString('name="beschreibung[68]"', $r->body);
+        $this->assertStringNotContainsString('beschreibung[69]', $r->body);
+        $this->assertMatchesRegularExpression('/name="beschreibung\\[40\\]"\\s+value="Ansage Bahnsteig"/', $r->body);
+
+        // Das Formular schickt alle angezeigten Felder zurück, auch F40.
+        $r = $this->post("/decoder/{$this->dec}/funktionen", [
+            'beschreibung' => [0 => 'Licht', 40 => 'Ansage Bahnsteig', 50 => 'Ansage', 69 => 'Zu hoch'],
+            'moment' => [40 => '1'],
+        ]);
+        $this->assertSame(303, $r->status);
+        $b = $this->belegung();
+        $this->assertSame([0, 40, 50], array_keys($b));
+        $this->assertSame('Ansage', $b[50]['beschreibung']);
+        $this->assertSame('moment', $b[40]['schaltart']);
+    }
+
     public function test_csv_upload_vorschau_und_uebernehmen(): void
     {
         $this->anmelden('bearbeiter');
@@ -109,8 +131,8 @@ final class FunktionHttpTest extends DbTestCase
     public function test_csv_mit_fehlern_nicht_uebernehmbar(): void
     {
         $this->anmelden('bearbeiter');
-        $r = $this->post("/decoder/{$this->dec}/funktionen/csv", [], $this->upload("F40;X;Dauer\nF1;Ok;Dauer\n"));
-        $this->assertStringContainsString('Zeile 1: Taste „F40“ ist ungültig', $r->body);
+        $r = $this->post("/decoder/{$this->dec}/funktionen/csv", [], $this->upload("F69;X;Dauer\nF1;Ok;Dauer\n"));
+        $this->assertStringContainsString('Zeile 1: Taste „F69“ ist ungültig', $r->body);
         $this->assertStringNotContainsString('/csv/uebernehmen', $r->body);
         $this->post("/decoder/{$this->dec}/funktionen/csv/uebernehmen");
         $this->assertSame([], $this->belegung());

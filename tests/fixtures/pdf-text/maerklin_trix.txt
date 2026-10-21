@@ -1,0 +1,7 @@
+Schaltbare Funktionen
+Funktion f0   Spitzensignal
+Funktion f1   Rauchsatz
+Funktion F2   Geräusch: Lokpfeife
+Funktion F3   Geräusch: Betriebsgeräusch
+Rangiergang     F5
+Funktion F13 … F15 Geräusch: Bahnhofsansagen

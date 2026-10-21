@@ -1,0 +1,8 @@
+LokSound 5 – Funktionsbelegung
+Taste   Funktion                 Taste   Funktion
+F0      Licht vorne/hinten       F8      Rangiergang
+F1      Fahrgeräusch             F9      Kurvenquietschen
+F2      Signalhorn hoch          F10     Bremsenquietschen aus
+F3      Signalhorn tief          F11     Kupplungsgeräusch
+F4 – F7 nicht belegt
+Seite 12

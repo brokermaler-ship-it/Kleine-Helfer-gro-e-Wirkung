@@ -1,0 +1,5 @@
+PIKO SmartDecoder 4.1 Sound
+F0 Licht        F1 Sound an/aus
+F2 Pfiff	F3 Glocke
+F4 Kurvenquietschen
+F2 Pfiff lang

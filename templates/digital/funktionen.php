@@ -24,7 +24,7 @@ $basis = url('/decoder/' . $decoder['id']);
         <table class="table table-sm align-middle funktionen-tabelle">
             <thead><tr><th scope="col">Taste</th><th scope="col">Beschreibung</th><th scope="col" class="text-center">Moment</th></tr></thead>
             <tbody>
-            <?php for ($t = 0; $t <= 31; $t++):
+            <?php for ($t = 0; $t <= \Emc\Digital\FunktionRepository::MAX_TASTE; $t++):
                 $f = $funktionen[$t] ?? null;
                 $text = $f['beschreibung'] ?? '';
                 $moment = ($f['schaltart'] ?? 'dauer') === 'moment';

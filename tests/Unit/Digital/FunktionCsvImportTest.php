@@ -43,13 +43,20 @@ final class FunktionCsvImportTest extends TestCase
 
     public function test_fehlerzeilen(): void
     {
-        $e = FunktionCsvImport::parse("Taste;Beschreibung;Schaltart\nF40;X;Dauer\nF2;A;Dauer\nF2;B;Dauer\nF3;C;kurz\nF5;;Dauer");
+        $e = FunktionCsvImport::parse("Taste;Beschreibung;Schaltart\nF69;X;Dauer\nF2;A;Dauer\nF2;B;Dauer\nF3;C;kurz\nF5;;Dauer");
         $this->assertSame([
-            'Zeile 2: Taste „F40“ ist ungültig (erlaubt F0–F31).',
+            'Zeile 2: Taste „F69“ ist ungültig (erlaubt F0–F68).',
             'Zeile 4: Taste F2 kommt doppelt vor.',
             'Zeile 5: Schaltart „kurz“ ist unbekannt (erlaubt Dauer oder Moment).',
             'Zeile 6: Beschreibung fehlt.',
         ], $e->fehler);
+    }
+
+    public function test_taste_f40_ist_gueltig(): void
+    {
+        $e = FunktionCsvImport::parse("F40;Ansage;Dauer");
+        $this->assertSame([], $e->fehler);
+        $this->assertSame([['taste' => 40, 'beschreibung' => 'Ansage', 'schaltart' => 'dauer']], $e->zeilen);
     }
 
     public function test_fixture_fehlerhaft_liefert_fehler(): void
