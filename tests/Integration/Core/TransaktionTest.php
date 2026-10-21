@@ -144,4 +144,60 @@ final class TransaktionTest extends DbTestCase
         $this->assertFalse($this->pdo->inTransaction());
         $this->assertSame(0, $this->anzahl($this->pdo));
     }
+
+    /** Ein in eine andere Ausnahme verpackter Sperrkonflikt wird ebenfalls erkannt. */
+    public function test_verpackter_sperrkonflikt_wird_zur_meldung(): void
+    {
+        $fehler = new \PDOException('Lock wait timeout exceeded', 0);
+        $fehler->errorInfo = ['HY000', 1205, 'Lock wait timeout exceeded; try restarting transaction'];
+        $huelle = new \RuntimeException('Speichern fehlgeschlagen', 0, $fehler);
+        try {
+            Transaktion::readCommitted($this->pdo, function () use ($huelle): void {
+                $this->pdo->exec("INSERT INTO einstellung (schluessel, wert) VALUES ('tx_e', '1')");
+                throw $huelle;
+            });
+            $this->fail('DomainFehler erwartet');
+        } catch (DomainFehler $e) {
+            $this->assertSame(Transaktion::SPERRKONFLIKT, $e->getMessage());
+            $this->assertSame($huelle, $e->getPrevious());
+        }
+        $this->assertFalse($this->pdo->inTransaction());
+        $this->assertSame(0, $this->anzahl($this->pdo));
+    }
+
+    /** Scheitert das Zurückrollen selbst (z. B. Verbindung weg), bleibt die ursprüngliche Ausnahme erhalten. */
+    public function test_fehler_beim_zurueckrollen_verdeckt_die_ursache_nicht(): void
+    {
+        $neuePdo = fn(): \PDO => new class ('sqlite::memory:') extends \PDO {
+            public function exec(string $statement): int|false
+            {
+                return 0; // SET TRANSACTION … kennt SQLite nicht
+            }
+
+            public function rollBack(): bool
+            {
+                throw new \PDOException('Verbindung verloren');
+            }
+        };
+        $ursache = new DomainFehler('Der Bestand reicht nicht.');
+        try {
+            Transaktion::readCommitted($neuePdo(), function () use ($ursache): void {
+                throw $ursache;
+            });
+            $this->fail('DomainFehler erwartet');
+        } catch (DomainFehler $e) {
+            $this->assertSame($ursache, $e);
+        }
+
+        $sperre = new \PDOException('Deadlock');
+        $sperre->errorInfo = ['40001', 1213, 'Deadlock'];
+        try {
+            Transaktion::readCommitted($neuePdo(), function () use ($sperre): void {
+                throw $sperre;
+            });
+            $this->fail('DomainFehler erwartet');
+        } catch (DomainFehler $e) {
+            $this->assertSame(Transaktion::SPERRKONFLIKT, $e->getMessage());
+        }
+    }
 }

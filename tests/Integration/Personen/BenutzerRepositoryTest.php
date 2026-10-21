@@ -81,8 +81,8 @@ final class BenutzerRepositoryTest extends DbTestCase
         $id = $r->anlegen($this->person(), 'admin@verein.de', Rolle::Admin, 'start-passwort-1');
         $meldung = 'Es muss mindestens ein aktiver Administrator bleiben.';
         foreach ([
-            fn() => $r->aendern($id, Rolle::Bearbeiter, true),
-            fn() => $r->aendern($id, Rolle::Admin, false),
+            fn() => $r->aendern($id, Rolle::Bearbeiter, true, false),
+            fn() => $r->aendern($id, Rolle::Admin, false, false),
             fn() => $r->loeschen($id),
         ] as $aktion) {
             try {
@@ -96,9 +96,24 @@ final class BenutzerRepositoryTest extends DbTestCase
 
         // Mit einem zweiten aktiven Admin geht es.
         $zweiter = $r->anlegen($this->person('Zweit'), 'zwei@verein.de', Rolle::Admin, 'start-passwort-1');
-        $r->aendern($id, Rolle::Bearbeiter, true);
+        $r->aendern($id, Rolle::Bearbeiter, true, false);
         $r->loeschen($id);
         $this->assertCount(1, $r->alle());
         $this->assertSame($zweiter, (int) $r->alle()[0]['id']);
+    }
+
+    /** Das Häkchen muss beim Ändern immer angegeben werden, damit kein Aufrufer es versehentlich entfernt. */
+    public function test_aendern_verlangt_das_boersenwart_haekchen(): void
+    {
+        $param = (new \ReflectionMethod(BenutzerRepository::class, 'aendern'))->getParameters()[3];
+        $this->assertSame('istBoersenwart', $param->getName());
+        $this->assertFalse($param->isOptional());
+
+        $r = new BenutzerRepository($this->pdo);
+        $id = $this->legeBenutzerAn('greta@verein.de', 'geheim-passwort-1', 'fahrzeugwart');
+        $r->aendern($id, Rolle::Fahrzeugwart, true, true);
+        $this->assertSame(1, (int) $r->finde($id)['ist_boersenwart']);
+        $r->aendern($id, Rolle::Fahrzeugwart, true, false);
+        $this->assertSame(0, (int) $r->finde($id)['ist_boersenwart']);
     }
 }

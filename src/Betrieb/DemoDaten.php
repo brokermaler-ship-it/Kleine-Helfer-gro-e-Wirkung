@@ -32,7 +32,7 @@ use Emc\Wartung\WartungRepository;
 final class DemoDaten
 {
     public const PASSWORT = 'Test-EMC78!';
-    private const BEHALTEN = ['schema_migration', 'spurweite', 'wartungsart'];
+    private const BEHALTEN = ['schema_migration', 'spurweite', 'wartungsart', 'magazin_kategorie'];
 
     private \PDO $pdo;
     private string $speicherPfad;

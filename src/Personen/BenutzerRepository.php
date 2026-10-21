@@ -90,7 +90,8 @@ final class BenutzerRepository
         return (int) $this->pdo->lastInsertId();
     }
 
-    public function aendern(int $id, Rolle $rolle, bool $aktiv, bool $istBoersenwart = false): void
+    /** $istBoersenwart ist Pflicht: ein vergessenes Häkchen würde die Zusatzaufgabe stillschweigend entfernen. */
+    public function aendern(int $id, Rolle $rolle, bool $aktiv, bool $istBoersenwart): void
     {
         $this->imAdminSchutz(function () use ($id, $rolle, $aktiv, $istBoersenwart): void {
             if ($rolle !== Rolle::Admin || !$aktiv) {

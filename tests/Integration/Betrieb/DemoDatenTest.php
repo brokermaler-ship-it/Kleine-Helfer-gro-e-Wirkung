@@ -202,6 +202,8 @@ final class DemoDatenTest extends DbTestCase
         $this->assertSame('Clubanlage H0', $anlage['name']);
         $this->assertSame('Vereinsheim, Raum 2', $anlage['standort']);
         $this->assertSame(8, $this->zaehle('wartungsart'), 'Stammliste bleibt beim Zurücksetzen');
+        $this->assertSame(9, $this->zaehle('magazin_kategorie'), 'Kategorien des Magazins bleiben beim Zurücksetzen');
+        $this->assertSame(['fahrzeuge', 'literatur', 'sonstiges'], $this->pdo->query('SELECT schluessel FROM magazin_kategorie WHERE schluessel IS NOT NULL ORDER BY schluessel')->fetchAll(\PDO::FETCH_COLUMN));
         $this->assertSame(3, $this->zaehle('wartung'));
         $this->assertSame(0, (int) $this->pdo->query('SELECT COUNT(*) FROM wartung WHERE ausgefuehrt_von_person_id IS NULL')->fetchColumn());
 

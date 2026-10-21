@@ -41,13 +41,29 @@ final class Transaktion
             return $ergebnis;
         } catch (\Throwable $t) {
             if ($pdo->inTransaction()) {
-                $pdo->rollBack();
+                try {
+                    $pdo->rollBack();
+                } catch (\PDOException) {
+                    // Zurückrollen gescheitert (z. B. Verbindung weg): die Datenbank verwirft die offene Transaktion
+                    // selbst; die ursprüngliche Ursache ist die aussagekräftige Ausnahme.
+                }
             }
-            if ($t instanceof \PDOException && in_array((int) ($t->errorInfo[1] ?? 0), self::SPERRFEHLER, true)) {
+            if (self::istSperrkonflikt($t)) {
                 throw new DomainFehler(self::SPERRKONFLIKT, 0, $t);
             }
             throw $t;
         }
+    }
+
+    /** Sperrkonflikt (1205/1213), auch wenn eine andere Ausnahme die PDOException verpackt hat. */
+    private static function istSperrkonflikt(\Throwable $t): bool
+    {
+        for ($f = $t; $f !== null; $f = $f->getPrevious()) {
+            if ($f instanceof \PDOException && in_array((int) ($f->errorInfo[1] ?? 0), self::SPERRFEHLER, true)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
