@@ -1,6 +1,6 @@
 # EMC 78 Lokschuppen
 
-Webanwendung „EMC 78 Lokschuppen“ des Eisenbahn Modellbahn Clubs 78 e.V. Halle („Die Modellbahnfamilie“) zur Verwaltung des Fahrzeugbestands: Fahrzeuge, Decoder (Adressen, Funktionstasten, CVs), Fotos und Dokumente, Anlagen, Wartung mit Fälligkeits-Ampel, Defektmeldungen und Reparaturen, kurze Codes mit QR-Etiketten, Personen und Benutzer. Die Anwendung läuft auf normalem PHP-Webspace und ist für PC, Tablet und Handy gedacht.
+Webanwendung „EMC 78 Lokschuppen“ des Eisenbahn Modellbahn Clubs 78 e.V. Halle („Die Modellbahnfamilie“) zur Verwaltung des Fahrzeugbestands: Fahrzeuge, Decoder (Adressen, Funktionstasten – auch aus Hersteller-PDFs –, CVs), Fotos und Dokumente, Anlagen, Wartung mit Fälligkeits-Ampel, Defektmeldungen und Reparaturen, kurze Codes mit QR-Etiketten, Personen und Benutzer. Die Anwendung läuft auf normalem PHP-Webspace und ist für PC, Tablet und Handy gedacht.
 
 ## Rollen und Rechte
 
@@ -8,7 +8,7 @@ Die Rollen bauen aufeinander auf; jede höhere Rolle darf alles, was die darunte
 
 | Rolle | Darf |
 |---|---|
-| **Mitglied** | alles lesen (Fahrzeuge, Decoder, Funktionen, CVs, Dateien, Anlagen, Wartungen und Fälligkeiten, Reparaturen); **Defekte melden** an jedem Fahrzeug und jeder Anlage; **Wartungen eintragen und Reparaturen bearbeiten an eigenen Fahrzeugen** (Eigentümer oder selbst angelegt); **eigene Fahrzeuge anlegen** (der Eigentümer ist immer das Mitglied selbst); die **selbst angelegten Fahrzeuge bearbeiten**, einschließlich Status (auch „ausgemustert“), Decoder, Funktionstasten (Formular, CSV-Import, Vorlagen), CVs sowie Fotos und Dateien dieses Fahrzeugs. Nicht erlaubt: Eigentümer ändern, Fahrzeuge löschen, Fahrzeuge anderer bearbeiten (auch nicht als Eigentümer), Personen verwalten |
+| **Mitglied** | alles lesen (Fahrzeuge, Decoder, Funktionen, CVs, Dateien, Anlagen, Wartungen und Fälligkeiten, Reparaturen); **Defekte melden** an jedem Fahrzeug und jeder Anlage; **Wartungen eintragen und Reparaturen bearbeiten an eigenen Fahrzeugen** (Eigentümer oder selbst angelegt); **eigene Fahrzeuge anlegen** (der Eigentümer ist immer das Mitglied selbst); die **selbst angelegten Fahrzeuge bearbeiten**, einschließlich Status (auch „ausgemustert“), Decoder, Funktionstasten (Formular, CSV-Import, PDF-Import, Vorlagen), CVs sowie Fotos und Dateien dieses Fahrzeugs. Nicht erlaubt: Eigentümer ändern, Fahrzeuge löschen, Fahrzeuge anderer bearbeiten (auch nicht als Eigentümer), Personen verwalten |
 | **Fahrzeugwart** | zusätzlich **alles rund um alle Fahrzeuge, auch die privaten**: anlegen (Eigentümer frei wählbar), bearbeiten, **löschen**, Decoder, Funktionstasten, CVs sowie Fotos und Dokumente an Fahrzeugen; **Wartungen an allen Fahrzeugen** eintragen und löschen, den Wartungsplan der Fahrzeuge anpassen und die **Wartungsarten** pflegen (Verwaltung → Wartungsarten); **Reparaturen an allen Fahrzeugen** bearbeiten, sieht den Hinweis auf neue Defektmeldungen an Fahrzeugen; **Etiketten drucken** (Verwaltung → Etiketten). Nicht erlaubt: Personen, Benutzer, Stammdaten und Betrieb (Sicherung, Update, OneDrive); eine Datei, die mehreren Objekten zugeordnet ist, löscht nur ein Bearbeiter |
 | **Bearbeiter** | zusätzlich Personen verwalten, **alle** Dateien (auch geteilte) löschen, **Anlagen** anlegen, bearbeiten und löschen sowie Wartungen, Wartungsplan und **Reparaturen der Anlagen** (mit Hinweis auf neue Defektmeldungen an Anlagen) |
 | **Administrator** | zusätzlich Benutzer und Rollen, Stammdaten (Spurweiten), Datensicherung, Update und OneDrive-Anbindung |
@@ -27,10 +27,12 @@ Version 0.5.0 bringt **„Kennwort vergessen?“** auf der Anmeldeseite (siehe �
 
 Version 0.6.0 bringt **„Defekt melden“** am Handy (siehe „Defekt melden“), **Reparaturen** mit Ersatzteilen, Kosten und automatischem Fahrzeug- bzw. Anlagenstatus (siehe „Reparaturen“), den Hinweis „neue Defektmeldungen“ und die Kachel „Offene Defekte“, kurze **Codes** `F12`/`A3` mit dem Feld „Code“ in der Kopfzeile und dem Kurzlink `/c/<Code>` (siehe „Codes“) sowie **Etiketten** zum Drucken (siehe „Etiketten“). Beim Update auf 0.6.0 zuerst **alle Dateien** hochladen (auch den Ordner `vendor/` – er enthält die neue Bibliothek für die QR-Codes), dann unter **Verwaltung → Update** einmal „Datenbank jetzt aktualisieren“ wählen; dabei laufen die Migrationen `014_reparatur` (Reparaturen, Ersatzteile, „gesehen“-Vermerke, Kennzeichen „Status automatisch“ an Fahrzeugen und Anlagen) und `015_etikett` („Etikett gedruckt am“). Vorhandene Daten bleiben unverändert; alle vorhandenen Status gelten als von Hand gesetzt, und alle Fahrzeuge und Anlagen stehen bei den Etiketten unter „noch nicht gedruckt“. Wer von 0.5.0 oder älter kommt, bekommt alle fehlenden Migrationen (bis 015) in einem Schritt. Für die QR-Codes auf den Anlagen-Etiketten in der `config.php` `oeffentliche_url` setzen (siehe „Etiketten“).
 
+Version 0.7.0 liest **Funktionstasten aus PDF-Anleitungen** (siehe „Funktionstasten aus PDF“) und erlaubt Tasten bis **F68** (bisher F31). Beim Update auf 0.7.0 **alle Dateien** hochladen, auch den Ordner `vendor/` – er enthält die neue Bibliothek `smalot/pdfparser`. Eine Datenbank-Änderung gibt es nicht. Außerdem: Wird ein Fahrzeug oder eine Anlage gelöscht, während jemand gerade einen Defekt daran meldet, wird die Meldung mitgelöscht (bzw. die Meldung bekommt „nicht gefunden“) statt verwaist liegen zu bleiben; Meldungen, deren Fahrzeug bzw. Anlage es nicht mehr gibt (aus älteren Versionen), zählen nicht mehr bei „neue Defektmeldungen“, „Offene Defekte“, „Reparaturen“ und „Meine Meldungen“.
+
 ## Voraussetzungen
 
-- PHP ab Version 8.2 mit den Erweiterungen `pdo_mysql`, `mbstring`, `gd`, `fileinfo` und `zip`, für die OneDrive-Ablage zusätzlich `curl` und `openssl`
-- MySQL ab Version 8 oder MariaDB ab Version 10.6
+- PHP ab Version 8.2 mit den Erweiterungen `pdo_mysql`, `mbstring`, `gd`, `fileinfo`, `zip`, `iconv` und `zlib` (die beiden letzten braucht der PDF-Import; sie sind bei praktisch jedem Hoster aktiv), für die OneDrive-Ablage zusätzlich `curl` und `openssl`
+- MySQL ab Version 8 oder MariaDB ab Version 10.6. Die App schreibt Reparaturen in Transaktionen mit `READ COMMITTED`; das verträgt sich nicht mit dem seltenen Binärlog-Format `binlog_format = STATEMENT` (Speichern scheitert dann mit Fehler 1665). Die Standardwerte (MySQL 8: `ROW`, MariaDB: `MIXED`) und Webspace ohne eigenes Binärlog sind in Ordnung.
 - HTTPS (Pflicht, weil Anmeldungen darüber laufen)
 - FTP-Zugang zum Webspace und Zugang zur Datenbankverwaltung des Hosters (z. B. phpMyAdmin)
 
@@ -189,6 +191,28 @@ Unter **Verwaltung → Etiketten** (ab Fahrzeugwart, auch über „Etikett druck
 
 Die QR-Codes erzeugt der Server als SVG mit der Bibliothek [`chillerlan/php-qrcode`](https://github.com/chillerlan/php-qrcode) (Lizenz MIT oder Apache-2.0, dazu `chillerlan/php-settings-container`, MIT). Beide sind im Release-ZIP im Ordner `vendor/` enthalten; auf dem Webspace ist kein Composer nötig.
 
+## Funktionstasten aus PDF
+
+Am Decoder unter **Funktionen → „PDF-Import“** lässt sich die Bedienungsanleitung des Decoders oder der Lok als PDF hochladen (wer die Funktionstasten bearbeiten darf, darf auch das). Die App liest den Text aus und zeigt die erkannten Tasten in derselben **Vorschau** wie der CSV-Import; erst „Übernehmen“ ändert etwas.
+
+- **Erkannt** werden Zeilen, die mit einer Taste beginnen, z. B. `F0 Licht`, `F1 Sound an`, `F2 – Pfiff`, `F 3: Glocke`, `F4 = Rangiergang`, `Taste F5 Kupplung`, `Funktion f6 Rauch`, auch mit Aufzählungszeichen oder Nummer davor, Tabellen mit `|` und **zwei Spalten nebeneinander** (`F0 Licht   F8 Rangiergang`). Tasten **F0 bis F68**. Endet die Beschreibung auf `(M)`, `[M]`, `(Moment)`, `(Taster)` oder `(Impuls)`, wird die Taste als **Moment-Taste** übernommen, sonst als Dauer-Taste. Inhaltsverzeichnisse mit Punktreihen und Seitenzahl, „frei“, „nicht belegt“ und Ähnliches werden still übergangen.
+- **Nicht übernommen** werden: **Bereiche** wie „F5–F8 Ansagen“, **doppelte Tasten** (die erste gilt), Tasten **über F68** und Tasten mitten im Satz („Mit F1 schalten Sie …“). Für Bereiche, doppelte und zu hohe Tasten sowie zu lange Beschreibungen (mehr als 100 Zeichen, werden gekürzt) zeigt die Vorschau **Hinweise**.
+- **Übernehmen ersetzt die Belegung** des Decoders wie beim CSV-Import. Was nicht erkannt wurde, danach von Hand ergänzen.
+- **Gescannte PDFs** (nur Bilder, kein Text) werden mit einem Hinweis abgelehnt; eine Texterkennung gibt es nicht. Geschützte (verschlüsselte) PDFs lassen sich ebenfalls nicht lesen.
+- **Grenzen:** Dateien bis **20 MB**, gelesen werden die **ersten 150 Seiten** (bei längeren PDFs sagt die Vorschau das). Die angezeigte Grenze kann kleiner sein, wenn der Webspace weniger erlaubt (`upload_max_mb`, `upload_max_filesize`) oder wenig Speicher hat (siehe unten). Ist die Datei größer als `post_max_size` des Webspace, kommt wie beim CSV-Import die Seite „Sitzung abgelaufen“ statt „zu groß“ (PHP verwirft dann das ganze Formular samt Sicherheitsschlüssel) – dann eine kleinere Datei nehmen oder `post_max_size` erhöhen. Ungewöhnlich aufgebaute oder absichtlich bösartige PDFs (z. B. „Zip-Bomben“) werden mit „Das PDF konnte nicht gelesen werden.“ abgelehnt; einzelne zu aufwendige Seiten oder Schrift-Tabellen werden übersprungen.
+- **Speicher:** Beim Auslesen hebt die App die PHP-Speichergrenze (`memory_limit`) auf 512 MB an, wenn der Webspace das erlaubt. Sonst richten sich die Grenzen nach dem vorhandenen Speicher:
+
+  | `memory_limit` (wirksam) | Datei höchstens | entpackter Inhalt insgesamt | ein Datenstrom | Objekte im PDF |
+  |---|---|---|---|---|
+  | 128 MB (Anheben nicht erlaubt) | 5 MB | 25,6 MB | 8 MB | 51 200 |
+  | 256 MB | 10 MB | 51,2 MB | 16 MB | 102 400 |
+  | ab 512 MB bzw. Anheben erlaubt | 20 MB | 96 MB | 32 MB | 200 000 |
+
+  Jeder PDF-Upload kann bis zu 512 MB Speicher belegen. Laden **mehrere Personen gleichzeitig** große PDFs hoch, kann das das Speicherkontingent des Webspace-Pakets überschreiten (der Hoster beendet dann Anfragen, auch andere); bei Problemen nacheinander hochladen.
+- **Das PDF wird nicht dauerhaft gespeichert:** Die App liest es nur im Speicher aus; in der Sitzung bleiben nur die erkannten Tasten bis zum Übernehmen. Die hochgeladene Datei löscht PHP am Ende der Anfrage; die PDF-Bibliothek legt beim Entpacken mancher Datenströme kurz eine temporäre Datei an, die sofort wieder gelöscht wird (liegen bleiben kann sie nur, wenn der PHP-Prozess hart abstürzt). Wer die Anleitung aufheben will, lädt sie **zusätzlich als Dokument** am Fahrzeug hoch.
+
+Den Text liest die Bibliothek [`smalot/pdfparser`](https://github.com/smalot/pdfparser) (Lizenz **LGPL-3.0**, reines PHP, ohne externe Programme), dazu [`symfony/polyfill-mbstring`](https://github.com/symfony/polyfill-mbstring) (Lizenz MIT). Beide liegen unverändert als Quelltext mit ihren Lizenzdateien im Release-ZIP im Ordner `vendor/`.
+
 ## Testumgebung test.emc78.de
 
 Neuerungen und Beispieldaten lassen sich gefahrlos auf einer eigenen Testinstanz ausprobieren:
@@ -202,7 +226,7 @@ Neuerungen und Beispieldaten lassen sich gefahrlos auf einer eigenen Testinstanz
    - im Browser als Administrator unter **Verwaltung → Testdaten** mit „Beispieldaten neu laden“ oder
    - per SSH (falls das STRATO-Paket SSH bietet) im Verzeichnis `/test/`: `php bin/demo-daten.php --zuruecksetzen`
 
-   Beides **löscht alle vorhandenen Daten der Testinstanz** und legt neu an: 7 erfundene Personen, 12 Fahrzeuge in H0 und N (Verein und Mitglieder, ein ausgemustertes), Decoder mit Funktionstasten und CVs, Beispielfotos, absichtlich **eine doppelte DCC-Adresse in H0**, an der man die Warnung der Adressprüfung sieht, die Anlage **A1 „Clubanlage H0“**, einige Wartungen (eine überfällige, eine bald fällige, eine in Ordnung; der Rest „noch nie erfasst“) und drei Reparaturen: eine dringende Meldung an der BR 01 (die Lok steht dadurch automatisch auf „defekt“), „W12 Antrieb brummt“ an der Anlage in Arbeit (Anlage „in Arbeit“) und eine erledigte Reparatur an der V 200 mit zwei Ersatzteilen. Vier Fahrzeuge gelten als schon beschriftet, die übrigen stehen bei den Etiketten unter „noch nicht gedruckt“. Die Wartungsarten der Testinstanz bleiben dabei erhalten. Nach dem Laden im Browser wird man abgemeldet.
+   Beides **löscht alle vorhandenen Daten der Testinstanz** und legt neu an: 7 erfundene Personen, 12 Fahrzeuge in H0 und N (Verein und Mitglieder, ein ausgemustertes), Decoder mit Funktionstasten und CVs, Beispielfotos, absichtlich **eine doppelte DCC-Adresse in H0**, an der man die Warnung der Adressprüfung sieht, die Anlage **A1 „Clubanlage H0“**, einige Wartungen (eine überfällige, eine bald fällige, eine in Ordnung; der Rest „noch nie erfasst“) und drei Reparaturen: eine dringende Meldung an der BR 01 (die Lok steht dadurch automatisch auf „defekt“), „W12 Antrieb brummt“ an der Anlage in Arbeit (Anlage „in Arbeit“) und eine erledigte Reparatur an der V 200 mit zwei Ersatzteilen. Vier Fahrzeuge gelten als schon beschriftet; die übrigen stehen bei den Etiketten unter „noch nicht gedruckt“ – bis auf das ausgemusterte Fahrzeug, das es dort (wie alle ausgemusterten) nur einzeln gibt. Die Wartungsarten der Testinstanz bleiben dabei erhalten. Nach dem Laden im Browser wird man abgemeldet.
 7. Als Mitglied (Carla) kannst du die E 94 279 und den Eilzugwagen Bymb 421 bearbeiten – die hat Carla selbst angelegt; andere Fahrzeuge siehst du nur.
 8. Anmelden mit `bearbeiter@test.emc78.de`, `fahrzeugwart@test.emc78.de` (Greta Wagner) oder `mitglied@test.emc78.de` (Passwort `Test-EMC78!`) oder als Administrator mit `admin@test.emc78.de` und dem Passwort aus `testumgebung_admin_passwort`. Den Admin-Zugang erfahren Tester beim Vorstand; er steht bewusst nicht auf der Anmeldeseite.
 
@@ -440,6 +464,6 @@ Umgebungsvariablen für die Tests: `TEST_DB_DSN` (Standard `mysql:host=127.0.0.1
 bash bin/release.sh
 ```
 
-Das Skript baut aus dem aktuellen Stand von `HEAD` (nur eingecheckte Dateien) im Ordner `build/` ein Paket ohne Tests (nur die Beispielfotos der Testumgebung liegen bei) und Entwicklungsdateien, installiert die Produktions-Abhängigkeiten (derzeit nur `chillerlan/php-qrcode` mit `chillerlan/php-settings-container`; `.git`-Ordner, die Composer beim Installieren aus den Quellen anlegt, werden entfernt) und erzeugt `dist/emc78-verwaltung-<Version>.zip`. Die Version steht in der Datei `VERSION`.
+Das Skript baut aus dem aktuellen Stand von `HEAD` (nur eingecheckte Dateien) im Ordner `build/` ein Paket ohne Tests (nur die Beispielfotos der Testumgebung liegen bei) und Entwicklungsdateien, installiert die Produktions-Abhängigkeiten (`chillerlan/php-qrcode` mit `chillerlan/php-settings-container` und `smalot/pdfparser` mit `symfony/polyfill-mbstring`; lädt Composer ein Paket aus den Quellen statt als ZIP, wird es wie beim ZIP ohne `.git`, Tests und Doku des Pakets übernommen) und erzeugt `dist/emc78-verwaltung-<Version>.zip`. Die Version steht in der Datei `VERSION`.
 
 Die App-Symbole (`public/assets/icons/`, aus dem Vereinslogo) und die Beispielfotos (`tests/fixtures/demo/`, Platzhalter) sind mit `php bin/erzeuge-bilder.php` erzeugt und eingecheckt; das Skript muss nur laufen, wenn sich das Aussehen ändern soll.
