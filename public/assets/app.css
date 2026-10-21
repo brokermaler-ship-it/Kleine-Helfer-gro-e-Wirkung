@@ -83,8 +83,11 @@ main { padding-bottom: 2rem; flex: 1 0 auto; }
     .emc-navbar .nav-link { white-space: nowrap; }
     .emc-benutzername { display: inline-block; max-width: 9rem; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
 }
+/* Badge „neue Defektmeldungen“ am Menüpunkt „Reparaturen“: klein, damit die Kopfzeile ab xl einzeilig bleibt. */
+.emc-navbar .nav-link .badge { font-size: .7em; padding: .3em .5em; vertical-align: .15em; }
 @media (min-width: 1200px) and (max-width: 1399.98px) {
     .emc-codefeld .form-control { width: 8.25rem; }
+    .emc-benutzername { max-width: 7.5rem; }
 }
 /* „Defekt melden“: eine Spalte, große Ziele für den Daumen */
 .emc-meldung { max-width: 36rem; }

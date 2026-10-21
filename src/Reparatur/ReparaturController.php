@@ -65,6 +65,11 @@ final class ReparaturController
             $rep = $this->lade($p);
             $typ = (string) $rep['objekt_typ'];
             $objekt = $this->objekt($typ, (int) $rep['objekt_id']);
+            $benutzer = $this->auth->benutzer();
+            // Geöffnet von jemandem, der die Defekthinweise für diesen Objekttyp sieht: nicht mehr „neu“ (für alle).
+            if ($objekt !== null && $benutzer !== null && Berechtigung::siehtDefekthinweise($benutzer, $typ)) {
+                $this->reparaturen->markiereGesehen((int) $rep['id'], $benutzer->id);
+            }
             return $this->seite('reparatur/detail', [
                 'titel' => 'Reparatur – ' . ($objekt === null ? 'Objekt gelöscht' : self::kennung($typ, $objekt) . ' ' . self::name($typ, $objekt)),
                 'reparatur' => $rep,

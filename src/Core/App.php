@@ -83,6 +83,8 @@ final class App
      * @var ?list<string>
      */
     private ?array $ausstehend = null;
+    /** Anzahl neuer Defektmeldungen für den angemeldeten Benutzer, je Anfrage einmal ermittelt (false = noch nicht). */
+    private int|false|null $neueDefekte = false;
 
     /** @param array<string,mixed> $config */
     private function __construct(private array $config, ?Session $session, private string $migrationsVerzeichnis)
@@ -258,7 +260,8 @@ final class App
         ));
         $this->container->set(StartController::class, fn(Container $c) => new StartController(
             $this->view,
-            $c->get(Wartungsplan::class)
+            $c->get(Wartungsplan::class),
+            $c->get(ReparaturRepository::class)
         ));
         $this->container->set(WartungController::class, fn(Container $c) => new WartungController(
             $this->view,
@@ -480,6 +483,7 @@ final class App
     public function handle(Request $request): Response
     {
         $this->ausstehend = null;
+        $this->neueDefekte = false;
         try {
             $this->richteViewEin();
             $antwort = $this->durchMiddleware($request);
@@ -539,6 +543,8 @@ final class App
         $this->view->teile('darfFz', fn(array $fahrzeug): bool => Berechtigung::darfFahrzeugBearbeiten($auth()->benutzer(), $fahrzeug));
         // Nur aufgerufen, wenn das Menü für angemeldete Benutzer gezeichnet wird (ein COUNT pro Seite).
         $this->view->teile('abstellgleisAnzahl', fn(): int => $c->get(FahrzeugRepository::class)->anzahlAbgestellt());
+        // Badge am Menüpunkt „Reparaturen“; dieselbe Zahl wie in der Hinweisleiste (ein COUNT pro Seite).
+        $this->view->teile('neueDefekte', fn(): ?int => $this->neueDefektmeldungen());
         $this->view->teileSpaet('benutzer', fn() => $auth()->benutzer());
         $this->view->teileSpaet('betriebshinweise', fn() => $this->betriebshinweise());
         $this->view->teileSpaet('meldungen', fn() => $c->get('session')->meldungenAbholen());
@@ -648,7 +654,8 @@ final class App
     }
 
     /**
-     * Hinweisleisten für Administratoren (Kennwort-Anfragen, Update ausstehend, Sicherung überfällig).
+     * Hinweisleisten: neue Defektmeldungen (ab Fahrzeugwart), für Administratoren Kennwort-Anfragen, Update ausstehend,
+     * Sicherung überfällig und OneDrive.
      *
      * @return list<array{typ:string,text:string,link:string,linktext:string}>
      */
@@ -665,6 +672,10 @@ final class App
             }
         } catch (\Throwable) {
             // Hinweise sind nur Beiwerk.
+        }
+        $n = $this->neueDefektmeldungen();
+        if ($n !== null && $n > 0) {
+            $hinweise[] = ['typ' => 'warning', 'text' => $n === 1 ? '1 neue Defektmeldung' : $n . ' neue Defektmeldungen', 'link' => '/reparaturen?status=gemeldet', 'linktext' => 'Ansehen'];
         }
         try {
             if (!Berechtigung::darf($this->container->get(Auth::class)->benutzer(), Berechtigung::BETRIEB)) {
@@ -691,6 +702,30 @@ final class App
             // Hinweise sind nur Beiwerk; bei Datenbankproblemen nicht die ganze Seite verhindern.
         }
         return $hinweise;
+    }
+
+    /**
+     * Neue Defektmeldungen (Status „gemeldet“, von niemandem mit Recht geöffnet, nicht selbst gemeldet) für Benutzer, die
+     * die Defekthinweise für Fahrzeuge bzw. Anlagen sehen; null für alle anderen, vor dem Datenbank-Update und bei
+     * Datenbankfehlern. Je Anfrage einmal abgefragt (Hinweisleiste und Badge im Menü teilen sich das Ergebnis).
+     */
+    private function neueDefektmeldungen(): ?int
+    {
+        if ($this->neueDefekte !== false) {
+            return $this->neueDefekte;
+        }
+        $this->neueDefekte = null;
+        try {
+            $benutzer = $this->container->get(Auth::class)->benutzer();
+            $fahrzeuge = Berechtigung::siehtDefekthinweise($benutzer, 'fahrzeug');
+            $anlagen = Berechtigung::siehtDefekthinweise($benutzer, 'anlage');
+            if ($benutzer !== null && ($fahrzeuge || $anlagen) && $this->ausstehend() === []) {
+                $this->neueDefekte = $this->container->get(ReparaturRepository::class)->anzahlNeu($fahrzeuge, $anlagen, $benutzer->id);
+            }
+        } catch (\Throwable) {
+            // Hinweise sind nur Beiwerk (z. B. Tabellen aus Migration 014 fehlen trotz eingetragener Version).
+        }
+        return $this->neueDefekte;
     }
 
     private function speicherPfad(): string

@@ -242,6 +242,62 @@ final class ReparaturRepository
         }
     }
 
+    /**
+     * Vermerkt, dass ein Benutzer mit Recht auf Defekthinweise die Reparatur geöffnet hat (danach ist sie nicht mehr
+     * „neu“, gleich für wen). Doppeltes Öffnen ändert nichts.
+     */
+    public function markiereGesehen(int $reparaturId, int $benutzerId): void
+    {
+        $this->pdo->prepare('INSERT IGNORE INTO reparatur_gesehen (benutzer_id, reparatur_id, gesehen_am) VALUES (?, ?, ?)')
+            ->execute([$benutzerId, $reparaturId, self::jetzt()]);
+    }
+
+    /**
+     * Neue Defektmeldungen: Status „gemeldet“ und noch von niemandem mit Recht auf Defekthinweise geöffnet; eigene
+     * Meldungen des Benutzers zählen nicht. Ein COUNT; ohne Objekttyp keine Abfrage.
+     */
+    public function anzahlNeu(bool $fahrzeuge, bool $anlagen, int $ausserBenutzerId): int
+    {
+        $typen = array_keys(array_filter(['fahrzeug' => $fahrzeuge, 'anlage' => $anlagen]));
+        if ($typen === []) {
+            return 0;
+        }
+        $st = $this->pdo->prepare(
+            "SELECT COUNT(*) FROM reparatur r WHERE r.status = 'gemeldet' "
+            . 'AND r.objekt_typ IN (' . implode(', ', array_fill(0, count($typen), '?')) . ') '
+            . 'AND (r.gemeldet_von_benutzer_id IS NULL OR r.gemeldet_von_benutzer_id <> ?) '
+            . 'AND NOT EXISTS (SELECT 1 FROM reparatur_gesehen g WHERE g.reparatur_id = r.id)'
+        );
+        $st->execute([...$typen, $ausserBenutzerId]);
+        return (int) $st->fetchColumn();
+    }
+
+    /**
+     * Kachel „Offene Defekte“: Anzahl offener Reparaturen, davon dringend, und die ersten $max (dringend vor normal vor
+     * niedrig, dann die älteste Meldung zuerst) mit Objektkennung, Objektname und Link aufs Objekt.
+     *
+     * @return array{anzahl:int, dringend:int, liste:list<array<string,mixed>>}
+     */
+    public function offeneDefekte(int $max = 5): array
+    {
+        $summe = $this->pdo->query(
+            "SELECT COUNT(*) AS anzahl, COALESCE(SUM(prioritaet = 'dringend'), 0) AS dringend FROM reparatur WHERE status IN " . ReparaturStatus::OFFEN_SQL
+        )->fetch(\PDO::FETCH_ASSOC);
+        $st = $this->pdo->prepare(
+            'SELECT r.id, r.objekt_typ, r.objekt_id, r.beschreibung, r.prioritaet, r.status, r.gemeldet_am, ' . self::OBJEKT_SPALTEN
+            . 'FROM reparatur r ' . self::OBJEKT_JOIN
+            . 'WHERE r.status IN ' . ReparaturStatus::OFFEN_SQL . ' '
+            . "ORDER BY FIELD(r.prioritaet, 'dringend', 'normal', 'niedrig'), r.gemeldet_am, r.id LIMIT " . max(1, $max)
+        );
+        $st->execute();
+        $liste = array_map(function (array $z): array {
+            $z = self::mitKennung($z);
+            $z['link'] = ($z['objekt_typ'] === 'anlage' ? '/anlagen/' : '/fahrzeuge/') . (int) $z['objekt_id'];
+            return $z;
+        }, $st->fetchAll(\PDO::FETCH_ASSOC));
+        return ['anzahl' => (int) $summe['anzahl'], 'dringend' => (int) $summe['dringend'], 'liste' => $liste];
+    }
+
     /** @return list<int> alle Reparaturen des Objekts, aufsteigend */
     public function idsFuerObjekt(string $objektTyp, int $objektId): array
     {

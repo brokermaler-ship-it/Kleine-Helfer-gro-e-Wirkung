@@ -5,6 +5,8 @@ $darf = $darf ?? fn(string $aktion): bool => false;
 $benutzer = $benutzer ?? null;
 /** @var ?callable $abstellgleisAnzahl liefert die Anzahl ausgemusterter Fahrzeuge (nur angemeldet abgefragt) */
 $abstellgleisAnzahl = $abstellgleisAnzahl ?? null;
+/** @var ?callable $neueDefekte liefert die Anzahl neuer Defektmeldungen oder null (ohne Recht auf Defekthinweise) */
+$neueDefekte = $neueDefekte ?? null;
 use Emc\Auth\Berechtigung;
 ?>
 <nav class="navbar navbar-expand-xl emc-navbar navbar-dark">
@@ -34,7 +36,8 @@ use Emc\Auth\Berechtigung;
                 </li>
                 <li class="nav-item"><a class="nav-link" href="<?= e(url('/anlagen')) ?>">Anlagen</a></li>
                 <li class="nav-item"><a class="nav-link" href="<?= e(url('/wartung')) ?>">Wartung</a></li>
-                <li class="nav-item"><a class="nav-link" href="<?= e(url('/reparaturen')) ?>">Reparaturen</a></li>
+                <?php $neu = $neueDefekte !== null ? $neueDefekte() : null; ?>
+                <li class="nav-item"><a class="nav-link" href="<?= e(url('/reparaturen')) ?>">Reparaturen<?php if ($neu !== null && $neu > 0): ?> <span class="badge rounded-pill text-bg-warning" data-neue-defekte="<?= (int) $neu ?>" title="<?= e($neu === 1 ? '1 neue Defektmeldung' : $neu . ' neue Defektmeldungen') ?>"><?= $neu > 99 ? '99+' : (int) $neu ?> <span class="visually-hidden">neue Meldungen</span></span><?php endif; ?></a></li>
                 <li class="nav-item"><a class="nav-link" href="<?= e(url('/defekt')) ?>">Defekt melden</a></li>
                 <li class="nav-item"><a class="nav-link" href="<?= e(url('/adressen')) ?>">Adressen</a></li>
                 <?php if ($darf(Berechtigung::PERSON_BEARBEITEN)): ?>

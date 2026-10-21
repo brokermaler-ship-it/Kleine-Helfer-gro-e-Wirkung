@@ -251,6 +251,12 @@ final class VorMigrationTest extends DbTestCase
         $r = $app()->handle(new \Emc\Core\Request('GET', '/meine-meldungen'));
         self::assertSame(303, $r->status);
         self::assertSame('/admin/update', $r->headers['Location']);
+        // Startseite ohne Kachel „Offene Defekte“ und ohne Hinweis auf neue Defektmeldungen, aber ohne Fehler.
+        $start = $app()->handle(new \Emc\Core\Request('GET', '/'));
+        self::assertSame(200, $start->status);
+        self::assertStringNotContainsString('Offene Defekte', $start->body);
+        self::assertStringNotContainsString('data-neue-defekte', $start->body);
+        self::assertStringContainsString('href="/reparaturen">Reparaturen</a>', $start->body);
 
         // Steht die Migration aus, leitet schon App weiter; die Fahrzeugseite bleibt lesbar.
         $this->pdo->exec("DELETE FROM schema_migration WHERE version >= '014'");
@@ -260,6 +266,7 @@ final class VorMigrationTest extends DbTestCase
             self::assertSame('/admin/update', $r->headers['Location'], $pfad);
         }
         self::assertSame(200, $app()->handle(new \Emc\Core\Request('GET', "/fahrzeuge/$fz"))->status);
+        self::assertSame(200, $app()->handle(new \Emc\Core\Request('GET', '/'))->status);
     }
 
     /** App merkt sich die ausstehenden Migrationen nur für eine Anfrage: nach dem Update gilt sofort der neue Stand. */
