@@ -88,7 +88,13 @@ main { padding-bottom: 2rem; flex: 1 0 auto; }
 }
 /* „Defekt melden“: eine Spalte, große Ziele für den Daumen */
 .emc-meldung { max-width: 36rem; }
-.emc-kachel { min-height: 4.5rem; display: flex; align-items: center; justify-content: center; white-space: normal; font-weight: 600; }
+.emc-kachel { min-height: 4.5rem; display: flex; align-items: center; justify-content: center; gap: .4rem; white-space: normal; font-weight: 600; }
+/* Gewählte Einstufung deutlich: gefüllt in Rot bzw. Blau mit Haken */
+.emc-kachel-haken { display: none; }
+.btn-check:checked + .emc-kachel .emc-kachel-haken { display: inline; }
+.btn-check:checked + .emc-kachel { box-shadow: 0 0 0 .2rem rgba(0, 0, 0, .25); }
+/* Schaltflächen in den Listen: mindestens 44 px hoch (Daumen) */
+.emc-tippziel { min-height: 44px; display: inline-flex; align-items: center; }
 .fahrzeug-code { font-size: 1.5rem; font-weight: 700; letter-spacing: .02em; line-height: 1; }
 
 /* Fußzeile */

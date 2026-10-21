@@ -122,10 +122,9 @@ $zeile = function (string $label, ?string $wert, bool $mehrzeilig = false): void
         <form method="post" action="<?= e(url('/reparaturen/' . $id . '/fotos')) ?>" enctype="multipart/form-data" class="d-flex flex-wrap gap-2 align-items-end">
             <?php include dirname(__DIR__) . '/partials/csrf.php'; ?>
             <div>
-                <label for="r-fotos" class="form-label small mb-0">Fotos hinzufügen (höchstens <?= ReparaturFotos::MAX_FOTOS ?>)</label>
-                <input type="file" class="form-control" id="r-fotos" name="fotos[]" accept="image/*" multiple>
+                <?php $fotoId = 'r-fotos'; $fotoBeschriftung = 'Fotos hinzufügen (höchstens ' . ReparaturFotos::MAX_FOTOS . ')'; $fotoGross = false; include dirname(__DIR__) . '/partials/fotofeld.php'; ?>
             </div>
-            <button type="submit" class="btn btn-outline-primary">Hochladen</button>
+            <button type="submit" class="btn btn-outline-primary" data-senden>Hochladen</button>
         </form>
     <?php endif; ?>
 </section>

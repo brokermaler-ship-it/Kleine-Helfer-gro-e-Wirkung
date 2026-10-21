@@ -194,6 +194,18 @@ final class AnlageHttpTest extends DbTestCase
         $this->assertSame('1', (string) $this->pdo->query("SELECT nummer FROM anlage WHERE id = $id")->fetchColumn());
     }
 
+    public function test_fehlender_oder_kaputter_stand_ist_konflikt(): void
+    {
+        $this->anmelden('bearbeiter');
+        $this->post('/anlagen', $this->formdaten());
+        $id = (int) $this->pdo->query('SELECT id FROM anlage')->fetchColumn();
+        foreach (['', 'abc', '2026-02-30 10:00:00', "x' OR 1=1 -- "] as $stand) {
+            $r = $this->post("/anlagen/$id", $this->formdaten(['name' => 'Neu', '_stand' => $stand]));
+            $this->assertSame(409, $r->status, $stand);
+        }
+        $this->assertSame('Clubanlage', $this->pdo->query("SELECT name FROM anlage WHERE id = $id")->fetchColumn());
+    }
+
     public function test_foto_hochladen_wird_titelbild_und_loeschen_raeumt_auf(): void
     {
         $this->anmelden('bearbeiter');

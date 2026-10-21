@@ -28,7 +28,7 @@ $seit = fn(array $fz): string => ($fz['ausgemustert_am'] ?? null) === null
                             <?= $eigentumBadge($fz) ?>
                         </div>
                         <?php if (!$mitSeit): ?>
-                            <a class="btn btn-sm btn-outline-danger text-nowrap position-relative z-2 mt-2" href="<?= e(url('/fahrzeuge/' . $fz['id'] . '/defekt')) ?>"
+                            <a class="btn btn-sm btn-outline-danger text-nowrap position-relative z-2 mt-2 emc-tippziel" href="<?= e(url('/fahrzeuge/' . $fz['id'] . '/defekt')) ?>"
                                aria-label="Defekt melden: <?= e($fz['bezeichnung']) ?>">Defekt melden</a>
                         <?php endif; ?>
                     </div>

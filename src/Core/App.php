@@ -25,6 +25,7 @@ use Emc\Dateien\Bildbearbeitung;
 use Emc\Dateien\DateiController;
 use Emc\Dateien\DokumentRepository;
 use Emc\Dateien\UploadService;
+use Emc\Dateien\Uploadgrenzen;
 use Emc\Digital\AdressenController;
 use Emc\Digital\Adresspruefung;
 use Emc\Digital\CvController;
@@ -532,6 +533,7 @@ final class App
         $auth = fn() => $c->get(Auth::class);
         $this->view->teile('app_name', $this->config['app_name'] ?? 'EMC 78 Lokschuppen');
         $this->view->teile('testumgebung', $this->istTestumgebung());
+        $this->view->teile('uploadGrenzen', Uploadgrenzen::ausConfig($this->config));
         $this->view->teile('csrf', $c->get(Csrf::class));
         $this->view->teile('darf', fn(string $aktion): bool => Berechtigung::darf($auth()->benutzer(), $aktion));
         $this->view->teile('darfFz', fn(array $fahrzeug): bool => Berechtigung::darfFahrzeugBearbeiten($auth()->benutzer(), $fahrzeug));
@@ -709,6 +711,15 @@ final class App
             : UploadService::iniBytes((string) ini_get('post_max_size'));
         if ($max <= 0 || $laenge <= $max) {
             return null;
+        }
+        // Fotoformulare (Defekt melden, Fotos an einer Reparatur): PHP hat alle Felder verworfen, also zurück zum
+        // Formular mit einem Hinweis, was zu tun ist. Ziel nur aus den Ziffern der ID gebaut.
+        if (preg_match('~^/(fahrzeuge|anlagen)/(\d{1,10})/defekt$~', $request->path(), $m) === 1
+            || preg_match('~^/(reparaturen)/(\d{1,10})/fotos$~', $request->path(), $m) === 1
+        ) {
+            $this->container->get('session')->meldung('fehler', 'Die Fotos sind zusammen zu groß (höchstens ' . Uploadgrenzen::mb($max)
+                . ' MB). Bitte weniger oder kleinere Fotos auswählen und den Text noch einmal eingeben.');
+            return Response::redirect(url('/' . $m[1] . '/' . $m[2] . ($m[1] === 'reparaturen' ? '' : '/defekt')));
         }
         $mb = min(max(1, (int) ($this->config['upload_max_mb'] ?? 64)), max(1, intdiv($max, 1048576)));
         $this->container->get('session')->meldung('fehler', 'Die Datei ist zu groß (höchstens ' . $mb . ' MB).');

@@ -28,6 +28,19 @@ final class MeldungValidatorTest extends TestCase
         $this->assertSame('Bitte höchstens 2000 Zeichen eingeben.', $f['beschreibung']);
     }
 
+    public function test_zeilenumbruch_zaehlt_einfach(): void
+    {
+        // Der Browser zählt bei maxlength einen Umbruch als ein Zeichen, sendet aber \r\n.
+        $text = str_repeat("Zeile\r\n", 333) . 'xx';
+        [$d, $f] = MeldungValidator::pruefe(['beschreibung' => $text], 'fahrzeug');
+        $this->assertSame([], $f);
+        $this->assertStringNotContainsString("\r", $d['beschreibung']);
+        $this->assertSame(2000, mb_strlen($d['beschreibung']));
+        [$d] = MeldungValidator::pruefe(['beschreibung' => "a\rb", 'wo_bauteil' => "W1\r\nW2"], 'anlage');
+        $this->assertSame("a\nb", $d['beschreibung']);
+        $this->assertSame("W1\nW2", $d['wo_bauteil']);
+    }
+
     public function test_einstufung(): void
     {
         [$d] = MeldungValidator::pruefe(['beschreibung' => 'Motor brummt', 'einstufung' => 'dringend'], 'fahrzeug');

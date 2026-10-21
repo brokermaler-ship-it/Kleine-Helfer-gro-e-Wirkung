@@ -45,7 +45,7 @@ $gefiltert = $filterSpurweite !== null || $filterText !== '';
                         <h2 class="h6 mb-1"><a class="stretched-link text-reset text-decoration-none" href="<?= e(url('/anlagen/' . $a['id'])) ?>"><span class="fw-bold me-1"><?= e($a['code']) ?></span> <?= e($a['name']) ?></a></h2>
                         <div class="small text-muted"><?= e($a['spurweite_name']) ?><?= $a['standort'] !== null ? ' · ' . e($a['standort']) : '' ?></div>
                         <div class="mt-1"><?= $anlageStatusBadge($a) ?></div>
-                        <a class="btn btn-sm btn-outline-danger text-nowrap position-relative z-2 mt-2" href="<?= e(url('/anlagen/' . $a['id'] . '/defekt')) ?>"
+                        <a class="btn btn-sm btn-outline-danger text-nowrap position-relative z-2 mt-2 emc-tippziel" href="<?= e(url('/anlagen/' . $a['id'] . '/defekt')) ?>"
                            aria-label="Defekt melden: <?= e($a['code'] . ' ' . $a['name']) ?>">Defekt melden</a>
                     </div>
                 </div>

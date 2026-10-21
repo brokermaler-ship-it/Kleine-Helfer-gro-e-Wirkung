@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Emc\Fahrzeuge;
 
+use Emc\Core\Zeitstempel;
 final class FahrzeugRepository
 {
     private const FELDER = [
@@ -197,6 +198,10 @@ final class FahrzeugRepository
      */
     public function aktualisieren(int $id, array $d, string $erwarteterStand): void
     {
+        // Fehlender oder manipulierter Stand: wie ein veralteter Stand (409), nicht als SQL-Fehler 1292 (500).
+        if (!Zeitstempel::istGueltig($erwarteterStand)) {
+            throw new KonfliktFehler();
+        }
         $zuweisung = implode(', ', array_map(fn(string $f) => "$f = ?", self::FELDER));
         // geaendert_am wird immer explizit gesetzt, damit auch ein unverändert gespeichertes Formular 1 Zeile trifft.
         $werte = $this->werte($d);

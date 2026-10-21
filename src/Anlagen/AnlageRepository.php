@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Emc\Anlagen;
 
+use Emc\Core\Zeitstempel;
 use Emc\Fahrzeuge\KonfliktFehler;
 
 final class AnlageRepository
@@ -116,6 +117,10 @@ final class AnlageRepository
      */
     public function aktualisieren(int $id, array $d, string $erwarteterStand): void
     {
+        // Fehlender oder manipulierter Stand: wie ein veralteter Stand (409), nicht als SQL-Fehler 1292 (500).
+        if (!Zeitstempel::istGueltig($erwarteterStand)) {
+            throw new KonfliktFehler(self::KONFLIKT);
+        }
         $zuweisung = implode(', ', array_map(fn(string $f) => "$f = ?", self::FELDER));
         // geaendert_am wird immer explizit gesetzt, damit auch ein unverändert gespeichertes Formular 1 Zeile trifft.
         // Ein von Hand geänderter Status löscht das Kennzeichen „automatisch durch Reparatur“ (vor „status = ?“).

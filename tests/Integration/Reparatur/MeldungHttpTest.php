@@ -39,9 +39,9 @@ final class MeldungHttpTest extends DbTestCase
         }
     }
 
-    private function app(): App
+    private function app(array $extra = []): App
     {
-        $app = App::erzeuge(['speicher_pfad' => $this->speicher] + self::testConfig(), new Session($this->sitzung));
+        $app = App::erzeuge(['speicher_pfad' => $this->speicher] + $extra + self::testConfig(), new Session($this->sitzung));
         // Testnaht: keine echten HTTP-Uploads.
         $app->container()->set(UploadService::class, fn() => new UploadService(
             $this->pdo, $this->speicher, 64 * 1048576, new Bildbearbeitung(), fn($t) => is_file($t), fn($a, $b) => copy($a, $b)
@@ -145,7 +145,12 @@ final class MeldungHttpTest extends DbTestCase
         $this->assertStringContainsString('fährt, aber …', $b);
         $this->assertMatchesRegularExpression('/<input[^>]*type="radio"[^>]*name="einstufung"[^>]*value="dringend"/', $b);
         $this->assertMatchesRegularExpression('/<input[^>]*type="radio"[^>]*name="einstufung"[^>]*value="normal"[^>]*checked/', $b);
-        $this->assertMatchesRegularExpression('/<input[^>]*type="file"[^>]*name="fotos\[\]"[^>]*accept="image\/\*"[^>]*multiple/', $b);
+        $this->assertMatchesRegularExpression('/<input[^>]*type="file"[^>]*name="fotos\[\]"[^>]*accept="image\/jpeg,image\/png,image\/webp,image\/heic,image\/heif"[^>]*multiple/', $b);
+        // Daten für das Verkleinern im Browser und die Größenprüfung vor dem Absenden.
+        $this->assertMatchesRegularExpression('/<input[^>]*type="file"[^>]*data-foto-feld[^>]*data-max-datei="\d+"[^>]*data-max-gesamt="\d+"/', $b);
+        $this->assertStringContainsString('JPEG, PNG, WebP oder HEIC', $b);
+        $this->assertMatchesRegularExpression('/höchstens \d+ MB je Foto/', $b);
+        $this->assertStringContainsString('src="/assets/app.js"', $b);
         // Ohne capture bietet das Handy Kamera und Galerie an.
         $this->assertStringNotContainsString('capture', $b);
         $this->assertStringNotContainsString('name="wo_bauteil"', $b);
@@ -242,7 +247,7 @@ final class MeldungHttpTest extends DbTestCase
         $this->assertSame(1, $this->zahl("SELECT COUNT(*) FROM dokument_zuordnung WHERE objekt_typ = 'reparatur' AND objekt_id = $rid"));
         $this->assertSame(0, $this->zahl("SELECT COUNT(*) FROM dokument_zuordnung WHERE objekt_typ <> 'reparatur'"));
         $this->assertSame(1, $this->zahl('SELECT COUNT(*) FROM dokument'));
-        $this->assertSame('anleitung.pdf: Nur Fotos können an eine Meldung angehängt werden.', $this->meldung('warnung')['text']);
+        $this->assertSame('anleitung.pdf: Nur Fotos (JPEG, PNG oder WebP) können an eine Meldung angehängt werden.', $this->meldung('warnung')['text']);
         $this->assertSame('Danke! Dein Defekt wurde gemeldet.', $this->meldung('erfolg')['text']);
         $dok = $this->zahl("SELECT dokument_id FROM dokument_zuordnung WHERE objekt_typ = 'reparatur'");
 
@@ -400,5 +405,37 @@ final class MeldungHttpTest extends DbTestCase
         }
         // Menü: Hauptpunkt „Defekt melden“.
         $this->assertMatchesRegularExpression('/<a class="nav-link[^"]*" href="\/defekt">Defekt melden<\/a>/', $this->get('/')->body);
+    }
+
+    public function test_zu_grosse_anfrage_zeigt_das_formular_mit_hinweis(): void
+    {
+        $fz = $this->fahrzeug();
+        $this->anmelden('mitglied');
+        $r = $this->app(['post_max_bytes' => 8 * 1048576])->handle(new Request('POST', "/fahrzeuge/$fz/defekt", [], [], [], [
+            'CONTENT_LENGTH' => (string) (9 * 1048576), 'HTTP_HOST' => 'verein.example',
+        ]));
+        $this->assertSame(303, $r->status);
+        $this->assertSame("/fahrzeuge/$fz/defekt", $r->headers['Location']);
+        $fehler = $this->meldung('fehler')['text'];
+        $this->assertStringContainsString('zusammen zu groß (höchstens 8 MB)', $fehler);
+        $this->assertStringContainsString('Bitte weniger oder kleinere Fotos auswählen', $fehler);
+        $this->assertSame(0, $this->zahl('SELECT COUNT(*) FROM reparatur'));
+        // Das Formular zeigt den Hinweis.
+        $this->assertStringContainsString('Bitte weniger oder kleinere Fotos auswählen', $this->get("/fahrzeuge/$fz/defekt")->body);
+
+        $anl = $this->anlage();
+        $r = $this->app(['post_max_bytes' => 1048576])->handle(new Request('POST', "/anlagen/$anl/defekt", [], [], [], ['CONTENT_LENGTH' => '5000000']));
+        $this->assertSame("/anlagen/$anl/defekt", $r->headers['Location']);
+    }
+
+    public function test_heic_ohne_umwandlung_ergibt_hinweis_auf_formate(): void
+    {
+        $fz = $this->fahrzeug();
+        $this->anmelden('mitglied');
+        $f = $this->upload('foto_gedreht.jpg');
+        $f['name'][0] = 'IMG_0001.HEIC';
+        $this->assertSame(303, $this->post("/fahrzeuge/$fz/defekt", ['beschreibung' => 'Puffer ab'], ['fotos' => $f])->status);
+        $this->assertSame('IMG_0001.HEIC: Nur Fotos (JPEG, PNG oder WebP) können an eine Meldung angehängt werden.', $this->meldung('warnung')['text']);
+        $this->assertSame(1, $this->zahl('SELECT COUNT(*) FROM reparatur'));
     }
 }

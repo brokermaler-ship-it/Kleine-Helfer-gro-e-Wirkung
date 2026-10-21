@@ -57,9 +57,12 @@ $pre = 'wartung-' . e($objektTyp) . '-';
         </div>
         <div class="col-12">
             <label class="form-label" for="<?= $pre ?>fotos">Fotos (optional)</label>
-            <input class="form-control" type="file" id="<?= $pre ?>fotos" name="fotos[]" multiple accept=".jpg,.jpeg,.png,.webp">
+            <input class="form-control" type="file" id="<?= $pre ?>fotos" name="fotos[]" multiple accept=".jpg,.jpeg,.png,.webp"
+                   <?php if (isset($uploadGrenzen)): ?>data-foto-feld data-max-datei="<?= (int) $uploadGrenzen->dateiBytes ?>" data-max-gesamt="<?= (int) $uploadGrenzen->fotoBytes() ?>"<?php endif; ?>>
+            <?php if (isset($uploadGrenzen)): ?><div class="form-text">JPEG, PNG oder WebP, <?= e($uploadGrenzen->text()) ?>; große Fotos werden vor dem Senden verkleinert.</div><?php endif; ?>
+            <div class="alert alert-danger mt-2 mb-0" role="alert" data-foto-fehler hidden></div>
         </div>
     </div>
-    <div class="mt-3"><button type="submit" class="btn btn-primary">Wartung eintragen</button></div>
+    <div class="mt-3"><button type="submit" class="btn btn-primary" data-senden>Wartung eintragen</button></div>
     <?php endif; ?>
 </form>

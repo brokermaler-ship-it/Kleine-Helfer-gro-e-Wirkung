@@ -133,6 +133,21 @@ final class FahrzeugHttpTest extends DbTestCase
         $this->assertSame('BR 218', $this->pdo->query("SELECT bezeichnung FROM fahrzeug WHERE id = $id")->fetchColumn());
     }
 
+    public function test_fehlender_oder_kaputter_stand_ist_konflikt(): void
+    {
+        $this->anmelden('bearbeiter');
+        $this->post('/fahrzeuge', $this->formdaten());
+        $id = (int) $this->pdo->query('SELECT id FROM fahrzeug')->fetchColumn();
+        foreach (['', 'abc', '2026-13-45 10:00:00', "2026-01-01 10:00:00' OR '1'='1", '2026-01-01 10:00:00.1234567'] as $stand) {
+            $r = $this->post("/fahrzeuge/$id", $this->formdaten(['bezeichnung' => 'Neu', '_stand' => $stand]));
+            $this->assertSame(409, $r->status, $stand);
+            $this->assertStringContainsString('inzwischen von jemand anderem geändert', $r->body);
+        }
+        $r = $this->post("/fahrzeuge/$id", $this->formdaten(['bezeichnung' => 'Neu']));
+        $this->assertSame(409, $r->status);
+        $this->assertSame('BR 218', $this->pdo->query("SELECT bezeichnung FROM fahrzeug WHERE id = $id")->fetchColumn());
+    }
+
     public function test_validierungsfehler_behaelt_urspruenglichen_stand(): void
     {
         $this->anmelden('bearbeiter');

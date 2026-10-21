@@ -39,7 +39,7 @@ final class ReparaturFotos
             $punkt = strrpos($name, '.');
             $dateiTyp = $punkt === false ? null : DateiTyp::fuerEndung(substr($name, $punkt + 1));
             if ($dateiTyp === null || !$dateiTyp['bild']) {
-                $this->session->meldung('warnung', ($name !== '' ? $name . ': ' : '') . 'Nur Fotos können an ' . $wofuer . ' angehängt werden.');
+                $this->session->meldung('warnung', ($name !== '' ? $name . ': ' : '') . 'Nur Fotos (JPEG, PNG oder WebP) können an ' . $wofuer . ' angehängt werden.');
                 continue;
             }
             try {

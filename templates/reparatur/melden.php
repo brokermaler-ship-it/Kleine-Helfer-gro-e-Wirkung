@@ -68,19 +68,17 @@ $aria = fn(string $feld): string => isset($fehler[$feld]) ? ' aria-invalid="true
                 <?php foreach (MeldungValidator::EINSTUFUNGEN as $wert => $text): ?>
                     <div class="col-6">
                         <input type="radio" class="btn-check" name="einstufung" id="m-einstufung-<?= e($wert) ?>" value="<?= e($wert) ?>" autocomplete="off"<?= $einstufung === $wert ? ' checked' : '' ?>>
-                        <label class="btn btn-lg w-100 emc-kachel <?= $wert === 'dringend' ? 'btn-outline-danger' : 'btn-outline-secondary' ?>" for="m-einstufung-<?= e($wert) ?>"><?= e($text) ?></label>
+                        <label class="btn btn-lg w-100 emc-kachel <?= $wert === 'dringend' ? 'btn-outline-danger' : 'btn-outline-primary' ?>" for="m-einstufung-<?= e($wert) ?>"><span class="emc-kachel-haken" aria-hidden="true">✓</span><?= e($text) ?></label>
                     </div>
                 <?php endforeach; ?>
             </div>
         </fieldset>
 
         <div class="mb-4">
-            <label for="m-fotos" class="form-label fw-semibold">Fotos <span class="fw-normal text-muted">(optional)</span></label>
-            <input type="file" class="form-control form-control-lg" id="m-fotos" name="fotos[]" accept="image/*" multiple aria-describedby="m-fotos-hilfe">
-            <div class="form-text" id="m-fotos-hilfe">Mit der Kamera aufnehmen oder aus der Galerie wählen, auch mehrere.</div>
+            <?php $fotoId = 'm-fotos'; $fotoBeschriftung = 'Fotos (optional)'; $fotoGross = true; include dirname(__DIR__) . '/partials/fotofeld.php'; ?>
         </div>
 
-        <button type="submit" class="btn btn-danger btn-lg w-100 py-3">Defekt melden</button>
+        <button type="submit" class="btn btn-danger btn-lg w-100 py-3" data-senden>Defekt melden</button>
     </form>
 
     <p class="mt-3 d-flex justify-content-between">

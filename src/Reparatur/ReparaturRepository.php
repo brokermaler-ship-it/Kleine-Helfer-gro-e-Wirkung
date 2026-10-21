@@ -6,6 +6,7 @@ namespace Emc\Reparatur;
 
 use Emc\Anlagen\AnlagenCode;
 use Emc\Codes\Code;
+use Emc\Core\Zeitstempel;
 use Emc\Fahrzeuge\KonfliktFehler;
 
 /**
@@ -205,7 +206,7 @@ final class ReparaturRepository
     public function aktualisieren(int $id, array $d, array $teile, string $erwarteterStand): void
     {
         // Kein Zeitstempel (Feld fehlt oder manipuliert): wie ein veralteter Stand behandeln, nicht als SQL-Fehler.
-        if (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d{1,6})?$/', $erwarteterStand) !== 1) {
+        if (!Zeitstempel::istGueltig($erwarteterStand)) {
             throw new KonfliktFehler(self::KONFLIKT);
         }
         $werte = [];

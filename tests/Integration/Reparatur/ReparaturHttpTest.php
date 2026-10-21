@@ -40,9 +40,9 @@ final class ReparaturHttpTest extends DbTestCase
         }
     }
 
-    private function app(): App
+    private function app(array $extra = []): App
     {
-        $app = App::erzeuge(['speicher_pfad' => $this->speicher] + self::testConfig(), new Session($this->sitzung));
+        $app = App::erzeuge(['speicher_pfad' => $this->speicher] + $extra + self::testConfig(), new Session($this->sitzung));
         $app->container()->set(UploadService::class, fn() => new UploadService(
             $this->pdo, $this->speicher, 64 * 1048576, new Bildbearbeitung(), fn($t) => is_file($t), fn($a, $b) => copy($a, $b)
         ));
@@ -547,7 +547,7 @@ final class ReparaturHttpTest extends DbTestCase
         $this->assertSame("/reparaturen/$rid", $r->headers['Location']);
         $this->assertSame(1, $this->zahl("SELECT COUNT(*) FROM dokument_zuordnung WHERE objekt_typ = 'reparatur' AND objekt_id = $rid"));
         $this->assertSame(1, $this->zahl('SELECT COUNT(*) FROM dokument'));
-        $this->assertSame('anleitung.pdf: Nur Fotos können an eine Reparatur angehängt werden.', $this->meldung('warnung')['text']);
+        $this->assertSame('anleitung.pdf: Nur Fotos (JPEG, PNG oder WebP) können an eine Reparatur angehängt werden.', $this->meldung('warnung')['text']);
         $this->assertSame('Das Foto wurde hinzugefügt.', $this->meldung('erfolg')['text']);
         $eintrag = json_decode((string) $this->wert("SELECT aenderungen FROM aenderungsprotokoll WHERE objekt_typ = 'fahrzeug' AND objekt_id = $fz ORDER BY id DESC LIMIT 1"), true);
         $this->assertSame(['alt' => null, 'neu' => 'foto_gedreht.jpg (Reparatur vom ' . date('d.m.Y') . ')'], $eintrag['datei']);
@@ -570,6 +570,21 @@ final class ReparaturHttpTest extends DbTestCase
         $this->assertSame(303, $r->status);
         $this->assertSame("/reparaturen/$rid", $r->headers['Location']);
         $this->assertSame(0, $this->zahl('SELECT COUNT(*) FROM dokument'));
+    }
+
+    public function test_fotoformular_und_zu_grosse_anfrage(): void
+    {
+        $fz = $this->fahrzeug();
+        $rid = $this->reparatur('fahrzeug', $fz);
+        $this->anmelden('fahrzeugwart');
+        $detail = $this->get("/reparaturen/$rid")->body;
+        $this->assertMatchesRegularExpression('/<input[^>]*type="file"[^>]*accept="image\/jpeg,image\/png,image\/webp,image\/heic,image\/heif"[^>]*multiple[^>]*data-foto-feld/', $detail);
+        $this->assertMatchesRegularExpression('/höchstens \d+ MB je Foto/', $detail);
+
+        $r = $this->app(['post_max_bytes' => 8 * 1048576])->handle(new Request('POST', "/reparaturen/$rid/fotos", [], [], [], ['CONTENT_LENGTH' => (string) (9 * 1048576)]));
+        $this->assertSame(303, $r->status);
+        $this->assertSame("/reparaturen/$rid", $r->headers['Location']);
+        $this->assertStringContainsString('Bitte weniger oder kleinere Fotos auswählen', $this->meldung('fehler')['text']);
     }
 
     public function test_ohne_fotos_hochladen(): void

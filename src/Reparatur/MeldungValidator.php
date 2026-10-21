@@ -51,6 +51,7 @@ final class MeldungValidator
             return '';
         }
         // Ungültiges UTF-8 verwerfen, damit mb_strlen und die Datenbank nicht stolpern.
-        return mb_check_encoding($wert, 'UTF-8') ? trim($wert) : '';
+        // Zeilenumbrüche als \n: der Browser zählt bei maxlength einen Umbruch als ein Zeichen, sendet aber \r\n.
+        return mb_check_encoding($wert, 'UTF-8') ? trim(str_replace(["\r\n", "\r"], "\n", $wert)) : '';
     }
 }
