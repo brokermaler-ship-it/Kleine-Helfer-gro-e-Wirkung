@@ -653,6 +653,8 @@ final class ReparaturHttpTest extends DbTestCase
         $b->exec('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
         $b->beginTransaction();
         $b->query("SELECT * FROM $tabelle")->fetchAll();
+        // Falls doch etwas auf dieser Verbindung sperrt: schnell scheitern statt 50 s warten.
+        $b->exec('SET SESSION innodb_lock_wait_timeout = 1');
         return $b;
     }
 
@@ -670,6 +672,16 @@ final class ReparaturHttpTest extends DbTestCase
         $app = $this->app();
         // Vor der Transaktion sieht der Controller noch das Mitglied als Eigentümer.
         $app->container()->set(\Emc\Fahrzeuge\FahrzeugRepository::class, fn() => new \Emc\Fahrzeuge\FahrzeugRepository($b));
+        // Der Dienst (Sperre, Status) arbeitet weiter auf der Verbindung der App: sonst wartete eine Regression auf die
+        // eigene Sperre (Fehler 1205 erst nach innodb_lock_wait_timeout) und das Ergebnis hinge vom Rollback ab.
+        $app->container()->set(\Emc\Reparatur\ReparaturDienst::class, fn(\Emc\Core\Container $c) => new \Emc\Reparatur\ReparaturDienst(
+            $c->get('pdo'),
+            $c->get(\Emc\Reparatur\ReparaturRepository::class),
+            new \Emc\Fahrzeuge\FahrzeugRepository($c->get('pdo')),
+            $c->get(\Emc\Anlagen\AnlageRepository::class),
+            $c->get(\Emc\Dateien\DokumentRepository::class),
+            $c->get(\Emc\Protokoll\Aenderungsprotokoll::class)
+        ));
         $r = $app->handle(new Request('POST', "/reparaturen/$rid", [], $formular + ['_csrf' => str_repeat('a', 64)]));
         $b->rollBack();
 

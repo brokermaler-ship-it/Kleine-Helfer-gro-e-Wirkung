@@ -67,7 +67,11 @@ final class ReparaturController
             $objekt = $this->objekt($typ, (int) $rep['objekt_id']);
             $benutzer = $this->auth->benutzer();
             // Geöffnet von jemandem, der die Defekthinweise für diesen Objekttyp sieht: nicht mehr „neu“ (für alle).
-            if ($objekt !== null && $benutzer !== null && Berechtigung::siehtDefekthinweise($benutzer, $typ)) {
+            // Ausnahme: die eigene Meldung – wer gemeldet hat, kennt den Defekt schon; das ist keine Sichtung.
+            if (
+                $objekt !== null && $benutzer !== null && Berechtigung::siehtDefekthinweise($benutzer, $typ)
+                && (int) ($rep['gemeldet_von_benutzer_id'] ?? 0) !== $benutzer->id
+            ) {
                 $this->reparaturen->markiereGesehen((int) $rep['id'], $benutzer->id);
             }
             return $this->seite('reparatur/detail', [

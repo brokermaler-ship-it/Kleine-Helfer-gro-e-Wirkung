@@ -684,7 +684,7 @@ final class App
         }
         $n = $this->neueDefektmeldungen();
         if ($n !== null && $n > 0) {
-            $hinweise[] = ['typ' => 'warning', 'text' => $n === 1 ? '1 neue Defektmeldung' : $n . ' neue Defektmeldungen', 'link' => '/reparaturen?status=gemeldet', 'linktext' => 'Ansehen'];
+            $hinweise[] = ['typ' => 'warning', 'text' => $n === 1 ? '1 neue Defektmeldung' : $n . ' neue Defektmeldungen', 'link' => $this->linkNeueDefekte(), 'linktext' => 'Ansehen'];
         }
         try {
             if (!Berechtigung::darf($this->container->get(Auth::class)->benutzer(), Berechtigung::BETRIEB)) {
@@ -735,6 +735,23 @@ final class App
             // Hinweise sind nur Beiwerk (z. B. Tabellen aus Migration 014 fehlen trotz eingetragener Version).
         }
         return $this->neueDefekte;
+    }
+
+    /** Liste der gemeldeten Reparaturen; wer nur einen Objekttyp sieht, bekommt den Filter dazu (Zahl und Liste passen). */
+    private function linkNeueDefekte(): string
+    {
+        $link = '/reparaturen?status=gemeldet';
+        try {
+            $benutzer = $this->container->get(Auth::class)->benutzer();
+            $fahrzeuge = Berechtigung::siehtDefekthinweise($benutzer, 'fahrzeug');
+            $anlagen = Berechtigung::siehtDefekthinweise($benutzer, 'anlage');
+            if ($fahrzeuge !== $anlagen) {
+                $link .= '&typ=' . ($fahrzeuge ? 'fahrzeug' : 'anlage');
+            }
+        } catch (\Throwable) {
+            // ohne Filter
+        }
+        return $link;
     }
 
     private function speicherPfad(): string

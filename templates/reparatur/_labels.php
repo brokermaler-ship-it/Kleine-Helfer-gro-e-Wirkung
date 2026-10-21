@@ -6,7 +6,8 @@ use Emc\Reparatur\ReparaturStatus;
 use Emc\Reparatur\ReparaturValidator;
 
 $reparaturStatusKlassen = [
-    'gemeldet' => 'primary', 'geplant' => 'info', 'in_arbeit' => 'warning',
+    // „gemeldet“ dunkel statt primary: primary ist das Vereinsrot und sähe neben „dringend“ (danger) gleich aus.
+    'gemeldet' => 'dark', 'geplant' => 'info', 'in_arbeit' => 'warning',
     'wartet_auf_teile' => 'warning', 'erledigt' => 'success', 'verworfen' => 'secondary',
 ];
 $reparaturStatusBadge = function (string $status) use ($reparaturStatusKlassen): string {

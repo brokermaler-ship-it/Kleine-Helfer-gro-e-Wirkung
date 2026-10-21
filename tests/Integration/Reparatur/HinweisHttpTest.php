@@ -74,15 +74,19 @@ final class HinweisHttpTest extends DbTestCase
     private function hinweis(string $rolle): ?string
     {
         $body = $this->als($rolle)->get('/')->body;
-        if (preg_match('~<div class="alert alert-warning" role="alert">\s*(\d+ neue Defektmeldung(?:en)?)\s*<a class="alert-link" href="/reparaturen\?status=gemeldet">Ansehen</a>~', $body, $m) !== 1) {
+        if (preg_match('~<div class="alert alert-warning" role="alert">\s*(\d+ neue Defektmeldung(?:en)?)\s*<a class="alert-link" href="(/reparaturen\?status=gemeldet[^"]*)">Ansehen</a>~', $body, $m) !== 1) {
             self::assertStringNotContainsString('neue Defektmeldung', $body);
             self::assertStringNotContainsString('data-neue-defekte', $body);
             return null;
         }
         // Dieselbe Zahl als Badge am Menüpunkt „Reparaturen“.
         self::assertMatchesRegularExpression('~href="/reparaturen">Reparaturen <span class="badge[^"]*" data-neue-defekte="' . (int) $m[1] . '"~', $body);
+        $this->link = html_entity_decode($m[2]);
         return $m[1];
     }
+
+    /** Ziel des Links „Ansehen“ aus dem letzten Aufruf von hinweis(). */
+    private ?string $link = null;
 
     public function test_fahrzeugwart_sieht_neue_fahrzeugmeldung(): void
     {
@@ -221,5 +225,50 @@ final class HinweisHttpTest extends DbTestCase
         self::assertLessThan(strpos($kachel, 'Lok 2<'), strpos($kachel, 'Lok 1<'));
         self::assertStringNotContainsString('Lok 5<', $kachel);
         self::assertStringNotContainsString('Lok 6<', $kachel);
+    }
+
+    /** Wer selbst gemeldet hat, nimmt den anderen den Hinweis beim Öffnen nicht weg (er kennt den Defekt ja schon). */
+    public function test_eigene_meldung_oeffnen_markiert_nicht_gesehen(): void
+    {
+        $fz = $this->fahrzeug();
+        $rid = $this->melde('fahrzeugwart', 'fahrzeug', $fz);
+        self::assertSame(200, $this->als('fahrzeugwart')->get("/reparaturen/$rid")->status);
+        self::assertSame(200, $this->als('fahrzeugwart')->get('/meine-meldungen')->status);
+        self::assertSame(0, (int) $this->pdo->query("SELECT COUNT(*) FROM reparatur_gesehen WHERE reparatur_id = $rid")->fetchColumn());
+        self::assertSame('1 neue Defektmeldung', $this->hinweis('bearbeiter'));
+
+        // Öffnet der Bearbeiter, ist sie für alle nicht mehr neu.
+        $this->als('bearbeiter')->get("/reparaturen/$rid");
+        self::assertNull($this->hinweis('bearbeiter'));
+    }
+
+    /** „Ansehen“ filtert für den Fahrzeugwart auf Fahrzeuge, damit Liste und Zahl zusammenpassen. */
+    public function test_link_ansehen_mit_objekttyp_fuer_fahrzeugwart(): void
+    {
+        $fz = $this->fahrzeug();
+        $this->melde('mitglied', 'fahrzeug', $fz, 'Licht geht nicht');
+        $this->melde('mitglied', 'anlage', $this->anlage(), 'Weiche 4 schaltet nicht');
+
+        self::assertSame('1 neue Defektmeldung', $this->hinweis('fahrzeugwart'));
+        self::assertSame('/reparaturen?status=gemeldet&typ=fahrzeug', $this->link);
+        parse_str((string) parse_url($this->link, PHP_URL_QUERY), $query);
+        $liste = $this->als('fahrzeugwart')->get('/reparaturen', $query)->body;
+        self::assertStringContainsString('Licht geht nicht', $liste);
+        self::assertStringNotContainsString('Weiche 4 schaltet nicht', $liste);
+
+        // Wer beide Objekttypen sieht, bekommt die ungefilterte Liste.
+        self::assertSame('2 neue Defektmeldungen', $this->hinweis('bearbeiter'));
+        self::assertSame('/reparaturen?status=gemeldet', $this->link);
+    }
+
+    /** Status „gemeldet“ ist nicht rot wie „dringend“ (Markenfarbe primary = Vereinsrot). */
+    public function test_badge_gemeldet_nicht_rot(): void
+    {
+        $fz = $this->fahrzeug();
+        $this->melde('mitglied', 'fahrzeug', $fz, 'Bleibt stehen', 'dringend');
+        $kachel = $this->als('mitglied')->get('/')->body;
+        $kachel = substr($kachel, (int) strpos($kachel, 'id="kachel-defekte"'));
+        self::assertMatchesRegularExpression('~<span class="badge text-bg-danger">dringend</span>~', $kachel);
+        self::assertMatchesRegularExpression('~<span class="badge text-bg-(?!primary|danger)[a-z]+">gemeldet</span>~', $kachel);
     }
 }
