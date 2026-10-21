@@ -6,6 +6,7 @@ namespace Emc\Fahrzeuge;
 
 use Emc\Auth\Auth;
 use Emc\Auth\Berechtigung;
+use Emc\Core\DomainFehler;
 use Emc\Core\HttpFehler;
 use Emc\Core\Request;
 use Emc\Core\Response;
@@ -16,6 +17,9 @@ use Emc\Digital\Adresspruefung;
 use Emc\Digital\AdressValidator;
 use Emc\Digital\DecoderRepository;
 use Emc\Digital\Protokoll;
+use Emc\Magazin\BuchungValidator;
+use Emc\Magazin\MagazinDienst;
+use Emc\Magazin\MagazinRepository;
 use Emc\OneDrive\Uebertragung;
 use Emc\Personen\PersonRepository;
 use Emc\Protokoll\Aenderungsprotokoll;
@@ -45,6 +49,8 @@ final class FahrzeugController
         private ?Uebertragung $uebertragung = null,
         private ?WartungDienst $wartung = null,
         private ?ReparaturDienst $reparatur = null,
+        private ?MagazinDienst $magazin = null,
+        private ?MagazinRepository $magazinArtikel = null,
     ) {
     }
 
@@ -68,9 +74,11 @@ final class FahrzeugController
     {
         $f = FahrzeugFilter::ausRequest($r);
         $filter = new FahrzeugFilter($f->text, $f->spurweiteId, $f->eigentuemer, $f->personId, 'ausgemustert', $f->gattung);
+        $fahrzeuge = $this->fahrzeuge->suche($filter);
         return $this->html('fahrzeuge/abstellgleis', [
             'titel' => 'Abstellgleis',
-            'fahrzeuge' => $this->fahrzeuge->suche($filter),
+            'fahrzeuge' => $fahrzeuge,
+            'magazinInfo' => $this->magazinFuer(array_map(fn(array $fz): int => (int) $fz['id'], $fahrzeuge)),
             'filter' => $f,
             'spurweiten' => $this->spurweiten->alle(),
             'personen' => $this->personen->alle(false),
@@ -87,6 +95,34 @@ final class FahrzeugController
         return $this->stelleAb($p, false, 'Das Fahrzeug ist wieder in Betrieb.');
     }
 
+    /**
+     * POST /fahrzeuge/{id}/an-magazin: ausgemustertes Vereinsfahrzeug ans Magazin übergeben (Börsenwart oder
+     * Fahrzeugwart und höher). Die fachlichen Prüfungen macht der MagazinDienst unter der Sperre des Fahrzeugs.
+     */
+    public function anMagazin(Request $r, array $p): Response
+    {
+        $benutzer = $this->auth->benutzer();
+        if (!Berechtigung::darfFahrzeugAnMagazin($benutzer)) {
+            throw new HttpFehler(403);
+        }
+        $fz = $this->lade($p);
+        $dienst = $this->magazin ?? throw new \LogicException('FahrzeugController braucht den MagazinDienst für die Übergabe.');
+        $zurueck = Response::redirect(url('/fahrzeuge/' . $fz['id']));
+        $lagerort = trim($r->text('lagerort'));
+        if (mb_strlen($lagerort) > BuchungValidator::LAGERORT_MAX) {
+            $this->session->meldung('fehler', 'Bitte für den Lagerort höchstens ' . BuchungValidator::LAGERORT_MAX . ' Zeichen eingeben.');
+            return $zurueck;
+        }
+        try {
+            $id = $dienst->uebernimmFahrzeug((int) $fz['id'], $lagerort, $benutzer?->id, new \DateTimeImmutable());
+        } catch (DomainFehler $e) {
+            $this->session->meldung('fehler', $e->getMessage());
+            return $zurueck;
+        }
+        $this->session->meldung('erfolg', 'Das Fahrzeug wurde als M' . $id . ' ans Magazin übergeben.');
+        return Response::redirect(url('/magazin/' . $id));
+    }
+
     private function stelleAb(array $p, bool $abgestellt, string $meldung): Response
     {
         $fz = $this->ladeBearbeitbar($p);
@@ -94,6 +130,12 @@ final class FahrzeugController
             $id = (int) $fz['id'];
             $benutzerId = $this->auth->benutzer()?->id;
             $arbeit = function () use ($fz, $id, $abgestellt, $benutzerId): bool {
+                // Unter der Sperre des Fahrzeugs (fahrzeug → magazin_artikel): ein ans Magazin übergebenes Fahrzeug
+                // bleibt auf dem Abstellgleis.
+                $imMagazin = $abgestellt ? null : $this->magazinFuer([$id])[$id] ?? null;
+                if ($imMagazin !== null) {
+                    throw new DomainFehler('Das Fahrzeug wurde ans Magazin übergeben (' . $imMagazin['code'] . ') und kann nicht zurückgeholt werden.');
+                }
                 $this->fahrzeuge->setzeAbgestellt($id, $abgestellt);
                 $neu = $this->fahrzeuge->finde($id);
                 if ($neu === null) {
@@ -107,7 +149,12 @@ final class FahrzeugController
             };
             // Mit Reparaturen: unter der Sperre des Fahrzeugs und mit automatischem Status – wer ein Fahrzeug mit offener
             // dringender Reparatur zurückholt, bekommt „defekt“ statt „einsatzbereit“.
-            $ok = $this->reparatur !== null ? $this->reparatur->inTransaktion('fahrzeug', $id, $benutzerId, $arbeit) : $arbeit();
+            try {
+                $ok = $this->reparatur !== null ? $this->reparatur->inTransaktion('fahrzeug', $id, $benutzerId, $arbeit) : $arbeit();
+            } catch (DomainFehler $e) {
+                $this->session->meldung('fehler', $e->getMessage());
+                return Response::redirect(url('/fahrzeuge/' . $fz['id']));
+            }
             if ($ok !== true) {
                 throw new HttpFehler(404); // zwischenzeitlich gelöscht
             }
@@ -128,7 +175,57 @@ final class FahrzeugController
             'onedriveKonfiguriert' => $this->onedriveKonfiguriert,
             'wartung' => $this->wartung?->blockDaten('fahrzeug', $fz, $this->auth->benutzer(), heute: new \DateTimeImmutable('today')),
             'reparaturen' => $this->reparatur?->blockDaten('fahrzeug', $fz, $this->auth->benutzer()),
+            'magazin' => $this->magazinBlock($fz),
         ]);
+    }
+
+    /**
+     * Block „Magazin“ auf der Fahrzeugseite: der Artikel, der aus dem Fahrzeug entstanden ist, und ob es übergeben
+     * werden kann (ausgemustert, Vereinseigentum, noch nicht im Magazin, Recht). null ohne Magazin bzw. vor Migration 016.
+     *
+     * @param array<string,mixed> $fz
+     * @return ?array{artikel: ?array{id:int, code:string, bestand:int, abgegeben_am:?string}, darfUebergeben: bool}
+     */
+    private function magazinBlock(array $fz): ?array
+    {
+        if ($this->magazinArtikel === null) {
+            return null;
+        }
+        $id = (int) $fz['id'];
+        $info = $this->magazinFuer([$id]);
+        if ($info === null) {
+            return null;
+        }
+        $artikel = $info[$id] ?? null;
+        $uebergebbar = $artikel === null && $fz['status'] === 'ausgemustert' && $fz['eigentuemer_person_id'] === null;
+        if ($artikel === null && !$uebergebbar) {
+            return null;
+        }
+        return [
+            'artikel' => $artikel,
+            'darfUebergeben' => $uebergebbar && Berechtigung::darfFahrzeugAnMagazin($this->auth->benutzer()),
+        ];
+    }
+
+    /**
+     * Magazinartikel der Fahrzeuge nach Fahrzeug-ID; null, solange das Datenbank-Update (Migration 016) aussteht.
+     *
+     * @param list<int> $ids
+     * @return ?array<int, array{id:int, code:string, bestand:int, abgegeben_am:?string}>
+     */
+    private function magazinFuer(array $ids): ?array
+    {
+        if ($this->magazinArtikel === null) {
+            return null;
+        }
+        try {
+            return $this->magazinArtikel->fuerFahrzeuge($ids);
+        } catch (\PDOException $e) {
+            if (in_array((string) $e->getCode(), ['42S02', '42S22'], true)) {
+                return null;
+            }
+            throw $e;
+        }
     }
 
     public function neu(Request $r): Response
@@ -165,6 +262,11 @@ final class FahrzeugController
         $fz = $this->ladeBearbeitbar($p);
         $stand = $r->text('_stand'); // Stand des ursprünglich geladenen Formulars, nie der aktuelle DB-Stand
         [$daten, $fehler] = $this->lies($r, $fz);
+        // Ein ans Magazin übergebenes Fahrzeug bleibt ausgemustert, auch über das Formular.
+        $imMagazin = $this->magazinFuer([(int) $fz['id']])[(int) $fz['id']] ?? null;
+        if ($imMagazin !== null && $daten['status'] !== 'ausgemustert' && !isset($fehler['status'])) {
+            $fehler['status'] = 'Das Fahrzeug wurde ans Magazin übergeben (' . $imMagazin['code'] . ') und bleibt auf dem Abstellgleis.';
+        }
         if ($fehler !== []) {
             return $this->formular($this->anzeigeWerte($daten, $r), $fehler, $fz, 422, null, $stand);
         }

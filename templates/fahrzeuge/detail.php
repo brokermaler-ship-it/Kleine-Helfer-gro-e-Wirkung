@@ -22,7 +22,9 @@ $abgestellt = $fz['status'] === 'ausgemustert';
         <?php endif; ?>
         <?php if ($darfFz($fz)): ?>
             <a class="btn btn-primary" href="<?= e(url('/fahrzeuge/' . $fz['id'] . '/bearbeiten')) ?>">Bearbeiten</a>
-            <?php if ($abgestellt): ?>
+            <?php if ($abgestellt && ($magazin['artikel'] ?? null) !== null): ?>
+            <?php /* ans Magazin übergeben: bleibt auf dem Abstellgleis */ ?>
+            <?php elseif ($abgestellt): ?>
             <form method="post" action="<?= e(url('/fahrzeuge/' . $fz['id'] . '/zurueckholen')) ?>">
                 <?php include dirname(__DIR__) . '/partials/csrf.php'; ?>
                 <button type="submit" class="btn btn-outline-success">Zurück in Betrieb</button>
@@ -50,6 +52,7 @@ $abgestellt = $fz['status'] === 'ausgemustert';
         <a href="<?= e(url('/abstellgleis')) ?>">Zum Abstellgleis</a>
     </div>
 <?php endif; ?>
+<?php if (($magazin ?? null) !== null) { include __DIR__ . '/_magazin.php'; } ?>
 
 <ul class="nav nav-tabs" id="fahrzeug-tabs" role="tablist">
     <?php

@@ -13,7 +13,7 @@ use Emc\Reparatur\ReparaturValidator;
 /**
  * Alle Schreibungen, die den Bestand eines Magazinartikels ändern (Eingang, Ausgang, Gegenbuchung, Umlagerung), und
  * Änderungen an Sammlungen. Jede läuft in einer eigenen Transaktion READ COMMITTED (Transaktion::readCommitted) und
- * sperrt zuerst das Elternobjekt: Sammlung vor Artikeln, Artikel nach id aufsteigend. Erst nach der Sperre wird der
+ * sperrt zuerst das Elternobjekt: Sammlung vor Artikeln, Artikel nach id aufsteigend, Fahrzeug vor dem Artikel. Erst nach der Sperre wird der
  * Bestand gelesen – so sieht jede Prüfung die Buchungen, die andere inzwischen festgeschrieben haben, und der Bestand
  * wird nie negativ. Die *InLaufenderTransaktion-Methoden sind für Aufrufer mit eigener Transaktion (Kasse, Storno,
  * Übergabe vom Abstellgleis) und sperren den Artikel selbst.
@@ -25,6 +25,9 @@ final class MagazinDienst
     public const NICHT_GEGENBUCHBAR = 'Diese Buchung lässt sich nicht gegenbuchen.';
     public const NICHT_GEFUNDEN = 'Diesen Artikel gibt es nicht mehr.';
     public const SAMMLUNG_LEER = 'Die Sammlung enthält keine Artikel.';
+    public const FAHRZEUG_FEHLT = 'Dieses Fahrzeug gibt es nicht mehr.';
+    public const NUR_ABSTELLGLEIS = 'Nur Fahrzeuge vom Abstellgleis können ans Magazin übergeben werden.';
+    public const NUR_VEREIN = 'Nur Vereinsfahrzeuge können ans Magazin übergeben werden.';
     /** Alle Ausgangsarten der Datenbank (das Formular bietet verkauft_boerse nicht an). */
     private const AUSGANG_ARTEN = ['gegen_spende', 'verkauft_boerse', 'verschrottet', 'ausgeliehen', 'sonstiges'];
 
@@ -79,6 +82,72 @@ final class MagazinDienst
             $this->rep->bucheZeile($id, ['art' => 'umlagerung', 'datum' => $datum, 'menge' => 0, 'lagerort_neu' => $lagerort], $benutzerId);
         }
         return $id;
+    }
+
+    /**
+     * Übergibt ein ausgemustertes Vereinsfahrzeug vom Abstellgleis ans Magazin: Sperre des Fahrzeugs zuerst (fahrzeug →
+     * magazin_artikel), dann ein Artikel der Kategorie Fahrzeuge mit Verweis auf das Fahrzeug, dem Titelfoto und einem
+     * Eingang über 1 (Herkunft sonstiges, „vom Abstellgleis“). Das Fahrzeug bleibt als Datensatz ausgemustert.
+     *
+     * @return int ID des neuen Artikels
+     * @throws DomainFehler nicht ausgemustert, nicht Eigentum des Vereins, schon im Magazin, Sperrkonflikt; nichts gespeichert
+     */
+    public function uebernimmFahrzeug(int $fahrzeugId, ?string $lagerort, ?int $benutzerId, \DateTimeImmutable $jetzt): int
+    {
+        $lagerort = trim((string) $lagerort);
+        $lagerort = $lagerort === '' ? null : mb_substr($lagerort, 0, BuchungValidator::LAGERORT_MAX);
+        return Transaktion::readCommitted($this->pdo, function () use ($fahrzeugId, $lagerort, $benutzerId, $jetzt): int {
+            $fz = $this->rep->sperreFahrzeug($fahrzeugId) ?? throw new DomainFehler(self::FAHRZEUG_FEHLT);
+            if ($fz['status'] !== 'ausgemustert') {
+                throw new DomainFehler(self::NUR_ABSTELLGLEIS);
+            }
+            if ($fz['eigentuemer_person_id'] !== null) {
+                throw new DomainFehler(self::NUR_VEREIN);
+            }
+            // Unter der Sperre des Fahrzeugs: eine gleichzeitige Übergabe ist jetzt sichtbar (READ COMMITTED).
+            $vorhanden = $this->rep->fuerFahrzeug($fahrzeugId);
+            if ($vorhanden !== null) {
+                throw new DomainFehler(self::schonImMagazin($vorhanden['code']));
+            }
+            $kategorie = $this->rep->kategorieNachSchluessel('fahrzeuge') ?? throw new DomainFehler('Die Magazin-Kategorie „Fahrzeuge“ fehlt.');
+            $herkunft = trim($fz['inventarnummer'] . ' ' . $fz['bezeichnung']);
+            $artikel = [
+                'bezeichnung' => mb_substr($herkunft, 0, 200),
+                'kategorie_id' => (int) $kategorie['id'],
+                'hersteller' => self::gekuerzt($fz['hersteller'], 100),
+                'artikelnummer' => self::gekuerzt($fz['artikelnummer'], 60),
+                'spurweite_id' => $fz['spurweite_id'] === null ? null : (int) $fz['spurweite_id'],
+                'zustand' => 'gebraucht',
+                'lagerort' => $lagerort,
+                'fahrzeug_id' => $fahrzeugId,
+            ];
+            $eingang = ['datum' => $jetzt->format('Y-m-d'), 'menge' => 1, 'herkunft' => 'sonstiges', 'freitext' => 'vom Abstellgleis', 'betrag' => null];
+            try {
+                $id = $this->legeAnMitEingangInLaufenderTransaktion($artikel, $eingang, $benutzerId);
+            } catch (\PDOException $e) {
+                // UNIQUE fahrzeug_id: nur denkbar, wenn jemand an der Sperre vorbei anlegt – dieselbe Meldung statt 500.
+                if ((string) $e->getCode() === '23000') {
+                    throw new DomainFehler(self::schonImMagazin(Code::magazin((int) ($this->rep->fuerFahrzeug($fahrzeugId)['id'] ?? 0))), 0, $e);
+                }
+                throw $e;
+            }
+            if ($fz['titelbild_dokument_id'] !== null) {
+                $this->rep->uebernimmTitelbild($id, (int) $fz['titelbild_dokument_id']);
+            }
+            $code = Code::magazin($id);
+            $this->protokoll->schreibe($benutzerId, 'fahrzeug', $fahrzeugId, 'geaendert', [
+                'magazin' => ['alt' => null, 'neu' => 'ans Magazin übergeben (' . $code . ')'],
+            ]);
+            $this->protokoll->schreibe($benutzerId, self::OBJEKT_ARTIKEL, $id, 'geaendert', [
+                'fahrzeug' => ['alt' => null, 'neu' => 'vom Abstellgleis: ' . $herkunft],
+            ]);
+            return $id;
+        });
+    }
+
+    public static function schonImMagazin(string $code): string
+    {
+        return 'Das Fahrzeug ist schon im Magazin (' . $code . ').';
     }
 
     /**
@@ -265,6 +334,12 @@ final class MagazinDienst
             default => 'Ausgang ' . self::mitVorzeichen($menge) . ' (' . (MagazinLabels::AUSGANG[(string) $b['ausgang_art']] ?? (string) $b['ausgang_art']) . ')',
         } . (($b['betrag'] ?? null) !== null ? ', ' . ReparaturValidator::betrag((string) $b['betrag']) : '')
           . (($b['gegenbuchung_zu_id'] ?? null) !== null ? ', Gegenbuchung zu Nr. ' . (int) $b['gegenbuchung_zu_id'] : '');
+    }
+
+    private static function gekuerzt(mixed $text, int $max): ?string
+    {
+        $text = trim((string) $text);
+        return $text === '' ? null : mb_substr($text, 0, $max);
     }
 
     /** „+5“, „−3“ (echtes Minuszeichen), „0“. */

@@ -235,6 +235,72 @@ final class MagazinRepository
         return (int) $st->fetchColumn();
     }
 
+    // ---- Fahrzeuge vom Abstellgleis ----------------------------------------------------------------------------------
+
+    /**
+     * Sperrt das Fahrzeug (SELECT … FOR UPDATE) vor der Übergabe ans Magazin; nur in einer laufenden Transaktion.
+     * Sperrreihenfolge: fahrzeug → magazin_artikel.
+     *
+     * @return ?array<string,mixed>
+     */
+    public function sperreFahrzeug(int $id): ?array
+    {
+        $st = $this->pdo->prepare('SELECT * FROM fahrzeug WHERE id = ? FOR UPDATE');
+        $st->execute([$id]);
+        $z = $st->fetch(\PDO::FETCH_ASSOC);
+        return $z === false ? null : $z;
+    }
+
+    /**
+     * Magazinartikel, der aus dem Fahrzeug entstanden ist. abgegeben_am ist das Datum des letzten Ausgangs, aber nur,
+     * wenn kein Bestand mehr da ist.
+     *
+     * @return ?array{id:int, code:string, bestand:int, abgegeben_am:?string}
+     */
+    public function fuerFahrzeug(int $fahrzeugId): ?array
+    {
+        return $this->fuerFahrzeuge([$fahrzeugId])[$fahrzeugId] ?? null;
+    }
+
+    /**
+     * Wie fuerFahrzeug für mehrere Fahrzeuge (Abstellgleis).
+     *
+     * @param list<int> $fahrzeugIds
+     * @return array<int, array{id:int, code:string, bestand:int, abgegeben_am:?string}> nach Fahrzeug-ID
+     */
+    public function fuerFahrzeuge(array $fahrzeugIds): array
+    {
+        $fahrzeugIds = array_values(array_unique(array_map('intval', $fahrzeugIds)));
+        if ($fahrzeugIds === []) {
+            return [];
+        }
+        $st = $this->pdo->prepare(
+            'SELECT a.id, a.fahrzeug_id, ' . self::BESTAND . ' AS bestand, '
+            . "(SELECT b.datum FROM magazin_buchung b WHERE b.artikel_id = a.id AND b.art = 'ausgang' AND b.menge < 0 ORDER BY b.datum DESC, b.id DESC LIMIT 1) AS letzter_ausgang "
+            . 'FROM magazin_artikel a WHERE a.fahrzeug_id IN (' . implode(', ', array_fill(0, count($fahrzeugIds), '?')) . ')'
+        );
+        $st->execute($fahrzeugIds);
+        $ergebnis = [];
+        foreach ($st->fetchAll(\PDO::FETCH_ASSOC) as $z) {
+            $bestand = (int) $z['bestand'];
+            $ergebnis[(int) $z['fahrzeug_id']] = [
+                'id' => (int) $z['id'],
+                'code' => Code::magazin((int) $z['id']),
+                'bestand' => $bestand,
+                'abgegeben_am' => $bestand === 0 && $z['letzter_ausgang'] !== null ? (string) $z['letzter_ausgang'] : null,
+            ];
+        }
+        return $ergebnis;
+    }
+
+    /** Hängt ein vorhandenes Dokument (Titelfoto des Fahrzeugs) zusätzlich an den Artikel und macht es zum Titelbild. */
+    public function uebernimmTitelbild(int $artikelId, int $dokumentId): void
+    {
+        $this->pdo->prepare("INSERT IGNORE INTO dokument_zuordnung (dokument_id, objekt_typ, objekt_id) VALUES (?, 'magazin_artikel', ?)")
+            ->execute([$dokumentId, $artikelId]);
+        $this->setzeTitelbild($artikelId, $dokumentId);
+    }
+
     // ---- Buchungen --------------------------------------------------------------------------------------------------
 
     /**

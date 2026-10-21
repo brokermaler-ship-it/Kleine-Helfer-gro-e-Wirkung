@@ -302,7 +302,9 @@ final class App
             Uebertragung::konfiguriert($this->config),
             $c->get(Uebertragung::class),
             $c->get(WartungDienst::class),
-            $c->get(ReparaturDienst::class)
+            $c->get(ReparaturDienst::class),
+            $c->get(MagazinDienst::class),
+            $c->get(MagazinRepository::class)
         ));
         $this->container->set(AnlageRepository::class, fn(Container $c) => new AnlageRepository($c->get('pdo')));
         $this->container->set(ReparaturRepository::class, fn(Container $c) => new ReparaturRepository($c->get('pdo')));
@@ -676,8 +678,8 @@ final class App
                 return true;
             }
         }
-        // Kurzlink /c/<Code> und „Defekt melden“ an Fahrzeug oder Anlage (…/defekt).
-        return str_starts_with($pfad, '/c/') || str_ends_with($pfad, '/defekt');
+        // Kurzlink /c/<Code>, „Defekt melden“ an Fahrzeug oder Anlage (…/defekt) und die Übergabe ans Magazin.
+        return str_starts_with($pfad, '/c/') || str_ends_with($pfad, '/defekt') || (str_starts_with($pfad, '/fahrzeuge/') && str_ends_with($pfad, '/an-magazin'));
     }
 
     /** @return list<string> ausstehende Migrationen, je Anfrage einmal ermittelt */

@@ -73,6 +73,8 @@ return function (Router $router, App $app): void {
     $router->add('POST', '/fahrzeuge/{id}/loeschen', $app->erfordert('fahrzeug_bearbeiten', $fz('loeschen')));
     $router->add('POST', '/fahrzeuge/{id}/abstellen', $app->erfordert('lesen', $fz('abstellen')));
     $router->add('POST', '/fahrzeuge/{id}/zurueckholen', $app->erfordert('lesen', $fz('zurueckholen')));
+    // Übergabe ans Magazin: Börsenwart oder Fahrzeugwart und höher (prüft der Controller).
+    $router->add('POST', '/fahrzeuge/{id}/an-magazin', $app->erfordert('lesen', $fz('anMagazin')));
     $router->add('GET', '/abstellgleis', $app->erfordert('lesen', $fz('abstellgleis')));
 
     $anl = fn(string $m) => fn(Request $r, array $p = []) => $c->get(AnlageController::class)->$m($r, $p);

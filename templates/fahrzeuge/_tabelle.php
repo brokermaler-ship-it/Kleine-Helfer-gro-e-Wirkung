@@ -10,6 +10,17 @@
 $seit = fn(array $fz): string => ($fz['ausgemustert_am'] ?? null) === null
     ? 'ausgemustert'
     : 'seit ' . e(date('d.m.Y', (int) strtotime((string) $fz['ausgemustert_am'])));
+// Abstellgleis: ans Magazin übergebene Fahrzeuge (Magazinartikel nach Fahrzeug-ID; fehlt vor Migration 016).
+$magazinInfo ??= [];
+$imMagazin = function (array $fz) use ($magazinInfo): string {
+    $m = $magazinInfo[(int) $fz['id']] ?? null;
+    if ($m === null) {
+        return '';
+    }
+    return $m['bestand'] > 0
+        ? ' <span class="badge text-bg-info">im Magazin ' . e($m['code']) . '</span>'
+        : ' <span class="badge text-bg-secondary">abgegeben (' . e($m['code']) . ')</span>';
+};
 ?>
 <?php if ($fahrzeuge === []): ?>
     <p class="text-muted">Keine Fahrzeuge gefunden.</p>
@@ -24,7 +35,7 @@ $seit = fn(array $fz): string => ($fz['ausgemustert_am'] ?? null) === null
                         <div class="small text-muted"><?= e($fz['inventarnummer']) ?> · <?= e($fz['spurweite_name']) ?></div>
                         <div class="small">Adresse: <?= $adressen($fz) ?></div>
                         <div class="mt-1">
-                            <?= $mitSeit ? '<span class="small">' . $seit($fz) . '</span>' : $statusBadge($fz) ?>
+                            <?= $mitSeit ? '<span class="small">' . $seit($fz) . '</span>' . $imMagazin($fz) : $statusBadge($fz) ?>
                             <?= $eigentumBadge($fz) ?>
                         </div>
                         <?php if (!$mitSeit): ?>
@@ -48,7 +59,7 @@ $seit = fn(array $fz): string => ($fz['ausgemustert_am'] ?? null) === null
                     <td><?= e($fz['spurweite_name']) ?></td>
                     <td><?= $adressen($fz) ?></td>
                     <td><?= $eigentumBadge($fz) ?></td>
-                    <td><?= $mitSeit ? $seit($fz) : $statusBadge($fz) ?></td>
+                    <td><?= $mitSeit ? $seit($fz) . $imMagazin($fz) : $statusBadge($fz) ?></td>
                     <?php if (!$mitSeit): ?>
                         <td class="text-end"><a class="btn btn-sm btn-outline-danger text-nowrap" href="<?= e(url('/fahrzeuge/' . $fz['id'] . '/defekt')) ?>"
                                aria-label="Defekt melden: <?= e($fz['bezeichnung']) ?>">Defekt melden</a></td>
