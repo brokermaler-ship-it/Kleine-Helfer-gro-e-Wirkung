@@ -38,21 +38,23 @@ $gefiltert = $filterSpurweite !== null || $filterText !== '';
 <?php else: ?>
     <div class="d-md-none">
         <?php foreach ($anlagen as $a): ?>
-            <a class="card mb-2 text-decoration-none text-reset" href="<?= e(url('/anlagen/' . $a['id'])) ?>">
+            <div class="card mb-2">
                 <div class="card-body d-flex gap-3">
                     <?= $anlageTitelbild($a) ?>
                     <div class="flex-grow-1">
-                        <h2 class="h6 mb-1"><span class="fw-bold me-1"><?= e($a['code']) ?></span> <?= e($a['name']) ?></h2>
+                        <h2 class="h6 mb-1"><a class="stretched-link text-reset text-decoration-none" href="<?= e(url('/anlagen/' . $a['id'])) ?>"><span class="fw-bold me-1"><?= e($a['code']) ?></span> <?= e($a['name']) ?></a></h2>
                         <div class="small text-muted"><?= e($a['spurweite_name']) ?><?= $a['standort'] !== null ? ' · ' . e($a['standort']) : '' ?></div>
                         <div class="mt-1"><?= $anlageStatusBadge($a) ?></div>
+                        <a class="btn btn-sm btn-outline-danger text-nowrap position-relative z-2 mt-2" href="<?= e(url('/anlagen/' . $a['id'] . '/defekt')) ?>"
+                           aria-label="Defekt melden: <?= e($a['code'] . ' ' . $a['name']) ?>">Defekt melden</a>
                     </div>
                 </div>
-            </a>
+            </div>
         <?php endforeach; ?>
     </div>
     <div class="table-responsive d-none d-md-block">
         <table class="table table-hover align-middle">
-            <thead><tr><th>Code</th><th>Name</th><th>Spurweite</th><th>Standort</th><th>Status</th></tr></thead>
+            <thead><tr><th>Code</th><th>Name</th><th>Spurweite</th><th>Standort</th><th>Status</th><th><span class="visually-hidden">Aktionen</span></th></tr></thead>
             <tbody>
             <?php foreach ($anlagen as $a): ?>
                 <tr>
@@ -61,6 +63,8 @@ $gefiltert = $filterSpurweite !== null || $filterText !== '';
                     <td><?= e($a['spurweite_name']) ?></td>
                     <td><?= $a['standort'] === null ? '–' : e($a['standort']) ?></td>
                     <td><?= $anlageStatusBadge($a) ?></td>
+                    <td class="text-end"><a class="btn btn-sm btn-outline-danger text-nowrap" href="<?= e(url('/anlagen/' . $a['id'] . '/defekt')) ?>"
+                           aria-label="Defekt melden: <?= e($a['code'] . ' ' . $a['name']) ?>">Defekt melden</a></td>
                 </tr>
             <?php endforeach; ?>
             </tbody>

@@ -17,12 +17,15 @@ use Emc\OneDrive\GraphFehler;
 use Emc\OneDrive\Uebertragung;
 use Emc\Protokoll\Aenderungsprotokoll;
 use Emc\OneDrive\Graph;
+use Emc\Reparatur\ReparaturRepository;
 use Emc\Wartung\WartungController;
 use Emc\Wartung\WartungRepository;
 
 final class DateiController
 {
     private const MAX_DATEIEN = 20;
+    /** Anzeigename je Art eines Fotos an einem Vorgang (Protokolltext „… (Wartung vom 01.02.2026)“). */
+    private const BEZUG_NAMEN = ['wartung' => 'Wartung', 'reparatur' => 'Reparatur'];
 
     public function __construct(
         private View $view,
@@ -36,6 +39,7 @@ final class DateiController
         private ?Uebertragung $uebertragung = null,
         private ?Graph $graph = null,
         private ?WartungRepository $wartungen = null,
+        private ?ReparaturRepository $reparaturen = null,
     ) {
     }
 
@@ -146,8 +150,8 @@ final class DateiController
     public function loeschen(Request $r, array $p): Response
     {
         $dok = $this->ladeDokument($p);
-        $wartungsObjekte = $this->wartungsObjekte((int) $dok['id']);
-        $this->verlangeLoeschrecht($dok, $wartungsObjekte);
+        $bezuege = $this->bezuege((int) $dok['id']);
+        $this->verlangeLoeschrecht($dok, $bezuege);
         $objekte = [
             'fahrzeug' => $this->dokumente->objekte((int) $dok['id'], 'fahrzeug'),
             'anlage' => $this->dokumente->objekte((int) $dok['id'], 'anlage'),
@@ -159,10 +163,10 @@ final class DateiController
                 $this->protokoll->schreibe($this->auth->benutzer()?->id, $typ, $objektId, 'geaendert', ['datei' => ['alt' => $dok['titel'], 'neu' => null]]);
             }
         }
-        // Wartungsfoto: Protokoll am Fahrzeug bzw. an der Anlage der Wartung.
-        foreach ($wartungsObjekte as $w) {
-            $this->protokoll->schreibe($this->auth->benutzer()?->id, $w['typ'], (int) $w['objekt']['id'], 'geaendert', [
-                'datei' => ['alt' => $dok['titel'] . ' (Wartung vom ' . date('d.m.Y', (int) strtotime($w['datum'])) . ')', 'neu' => null],
+        // Foto einer Wartung bzw. Reparatur: Protokoll am Fahrzeug bzw. an der Anlage.
+        foreach ($bezuege as $b) {
+            $this->protokoll->schreibe($this->auth->benutzer()?->id, $b['typ'], (int) $b['objekt']['id'], 'geaendert', [
+                'datei' => ['alt' => $dok['titel'] . ' (' . self::BEZUG_NAMEN[$b['art']] . ' vom ' . date('d.m.Y', (int) strtotime($b['datum'])) . ')', 'neu' => null],
             ]);
         }
         $this->session->meldung('erfolg', 'Die Datei wurde gelöscht.');
@@ -171,63 +175,70 @@ final class DateiController
                 return $this->zurueck($typ, $ids[0]);
             }
         }
-        if (isset($wartungsObjekte[0])) {
-            return Response::redirect(WartungController::objektUrl($wartungsObjekte[0]['typ'], (int) $wartungsObjekte[0]['objekt']['id']));
+        if (isset($bezuege[0])) {
+            $b = $bezuege[0];
+            return Response::redirect($b['art'] === 'wartung'
+                ? WartungController::objektUrl($b['typ'], (int) $b['objekt']['id'])
+                : url(($b['typ'] === 'anlage' ? '/anlagen/' : '/fahrzeuge/') . (int) $b['objekt']['id']) . '#reparaturen');
         }
         return Response::redirect(url('/fahrzeuge'));
     }
 
     /**
-     * Löschregel für Dateien (die Route kennt keinen Fahrzeugkontext, daher wird er aus den Zuordnungen abgeleitet):
-     * Bearbeiter und Admin dürfen jede Datei löschen. Alle anderen (Fahrzeugwart und Mitglied) nur, wenn die Datei
-     * genau einem Fahrzeug zugeordnet ist (keine weiteren Zuordnungen, auch nicht zu anderen Objekttypen) und sie
-     * dieses Fahrzeug bearbeiten dürfen. Geteilte Dokumente bleiben damit Bearbeitern vorbehalten.
+     * Wartungen und Reparaturen, denen das Dokument (als Foto) zugeordnet ist, samt Objekt und Datum (Wartungsdatum bzw.
+     * Meldedatum).
      *
-     * @param array<string,mixed> $dok
+     * @return list<array{art:string, typ:string, objekt:array<string,mixed>, datum:string}>
      */
-    /**
-     * Wartungen, denen das Dokument (als Foto) zugeordnet ist, samt Objekt.
-     *
-     * @return list<array{typ:string, objekt:array<string,mixed>, datum:string}>
-     */
-    private function wartungsObjekte(int $dokumentId): array
+    private function bezuege(int $dokumentId): array
     {
         $ergebnis = [];
-        foreach ($this->dokumente->objekte($dokumentId, 'wartung') as $wartungId) {
-            $w = $this->wartungen?->finde($wartungId);
-            if ($w === null) {
-                continue;
-            }
-            $typ = (string) $w['objekt_typ'];
-            $objekt = $typ === 'anlage' ? $this->anlagen->finde((int) $w['objekt_id']) : $this->fahrzeuge->finde((int) $w['objekt_id']);
-            if ($objekt !== null) {
-                $ergebnis[] = ['typ' => $typ, 'objekt' => $objekt, 'datum' => (string) $w['datum']];
+        foreach (['wartung', 'reparatur'] as $art) {
+            foreach ($this->dokumente->objekte($dokumentId, $art) as $id) {
+                $vorgang = $art === 'wartung' ? $this->wartungen?->finde($id) : $this->reparaturen?->finde($id);
+                if ($vorgang === null) {
+                    continue;
+                }
+                $typ = (string) $vorgang['objekt_typ'];
+                $objekt = $typ === 'anlage' ? $this->anlagen->finde((int) $vorgang['objekt_id']) : $this->fahrzeuge->finde((int) $vorgang['objekt_id']);
+                if ($objekt !== null) {
+                    $datum = (string) ($art === 'wartung' ? $vorgang['datum'] : $vorgang['gemeldet_am']);
+                    $ergebnis[] = ['art' => $art, 'typ' => $typ, 'objekt' => $objekt, 'datum' => $datum];
+                }
             }
         }
         return $ergebnis;
     }
 
     /**
-     * Ab Bearbeiter (Dateien bearbeiten) immer; sonst nur eine Datei mit genau einer Zuordnung: an einem Fahrzeug,
-     * das man bearbeiten darf, oder als Foto einer Wartung mit demselben Recht wie beim Löschen der Wartung.
+     * Löschregel für Dateien (die Route kennt keinen Fahrzeugkontext, daher wird er aus den Zuordnungen abgeleitet):
+     * Bearbeiter und Admin (Dateien bearbeiten) dürfen jede Datei löschen. Alle anderen nur eine Datei mit genau einer
+     * Zuordnung: an einem Fahrzeug, das sie bearbeiten dürfen, oder als Foto einer Wartung bzw. Reparatur mit demselben
+     * Recht wie beim Eintragen der Wartung bzw. Bearbeiten der Reparatur. Geteilte Dokumente bleiben damit Bearbeitern
+     * vorbehalten.
      *
-     * @param list<array{typ:string, objekt:array<string,mixed>, datum:string}> $wartungsObjekte
+     * @param array<string,mixed> $dok
+     * @param list<array{art:string, typ:string, objekt:array<string,mixed>, datum:string}> $bezuege
      */
-    private function verlangeLoeschrecht(array $dok, array $wartungsObjekte = []): void
+    private function verlangeLoeschrecht(array $dok, array $bezuege = []): void
     {
         $benutzer = $this->auth->benutzer();
         if (Berechtigung::darf($benutzer, Berechtigung::DATEI_BEARBEITEN)) {
             return;
         }
         $zuordnungen = $this->dokumente->zuordnungen((int) $dok['id']);
-        if (count($zuordnungen) === 1 && $zuordnungen[0]['objekt_typ'] === 'wartung') {
-            $w = $wartungsObjekte[0] ?? throw new HttpFehler(403);
-            if (!Berechtigung::darfWartungEintragen($benutzer, $w['typ'], $w['objekt'])) {
+        $art = count($zuordnungen) === 1 ? $zuordnungen[0]['objekt_typ'] : null;
+        if ($art === 'wartung' || $art === 'reparatur') {
+            $b = $bezuege[0] ?? throw new HttpFehler(403);
+            $erlaubt = $art === 'wartung'
+                ? Berechtigung::darfWartungEintragen($benutzer, $b['typ'], $b['objekt'])
+                : Berechtigung::darfReparaturBearbeiten($benutzer, $b['typ'], $b['objekt']);
+            if (!$erlaubt) {
                 throw new HttpFehler(403);
             }
             return;
         }
-        if (count($zuordnungen) !== 1 || $zuordnungen[0]['objekt_typ'] !== 'fahrzeug') {
+        if ($art !== 'fahrzeug') {
             throw new HttpFehler(403);
         }
         $fz = $this->fahrzeuge->finde($zuordnungen[0]['objekt_id']) ?? throw new HttpFehler(403);

@@ -56,6 +56,7 @@ use Emc\Personen\PersonRepository;
 use Emc\Stammdaten\SpurweiteController;
 use Emc\Stammdaten\SpurweiteRepository;
 use Emc\Start\StartController;
+use Emc\Reparatur\MeldungController;
 use Emc\Reparatur\ReparaturDienst;
 use Emc\Reparatur\ReparaturRepository;
 use Emc\Wartung\AusnahmeRepository;
@@ -300,6 +301,19 @@ final class App
             $c->get(DokumentRepository::class),
             $c->get(Aenderungsprotokoll::class)
         ));
+        $this->container->set(MeldungController::class, fn(Container $c) => new MeldungController(
+            $this->view,
+            $c->get('pdo'),
+            $c->get(ReparaturRepository::class),
+            $c->get(ReparaturDienst::class),
+            $c->get(FahrzeugRepository::class),
+            $c->get(AnlageRepository::class),
+            $c->get(DokumentRepository::class),
+            $c->get(UploadService::class),
+            $c->get(Aenderungsprotokoll::class),
+            $c->get(Auth::class),
+            $c->get('session')
+        ));
         $this->container->set(CodeAufloesung::class, fn(Container $c) => new CodeAufloesung(
             $c->get(FahrzeugRepository::class),
             $c->get(AnlageRepository::class)
@@ -384,7 +398,8 @@ final class App
             $c->get('session'),
             $c->get(Uebertragung::class),
             $c->get(Uebertragung::class) !== null ? $c->get(Graph::class) : null,
-            $c->get(WartungRepository::class)
+            $c->get(WartungRepository::class),
+            $c->get(ReparaturRepository::class)
         ));
         $this->container->set(Sicherung::class, fn(Container $c) => new Sicherung(
             $c->get('pdo'),
@@ -575,15 +590,11 @@ final class App
                 $this->container->get('session')->meldung('warnung', 'Bitte zuerst das Datenbank-Update ausführen; bis dahin ruht die OneDrive-Übertragung.');
                 return Response::redirect(url('/admin/update'));
             }
-            // 3c. Anlagen, Wartungsarten, die Übersicht „Wartung“ und das Feld „Code“ (sucht auch Anlagen) brauchen die
-            //     Tabellen aus Migration 011–013.
-            //     Geprüft wird bewusst „irgendeine Migration steht aus“ (nicht einzeln 011/012/013): Administratoren
+            // 3c. Anlagen, Wartungsarten, die Übersicht „Wartung“, das Feld „Code“ (sucht auch Anlagen) sowie Defekt
+            //     melden, Reparaturen und Etiketten brauchen die Tabellen aus Migration 011–015.
+            //     Geprüft wird bewusst „irgendeine Migration steht aus“ (nicht einzeln 011 … 015): Administratoren
             //     sollen ohnehin zuerst das Update ausführen. Nicht-Administratoren sehen schon die Wartungsseite (3a).
-            if (($pfad === '/anlagen' || str_starts_with($pfad, '/anlagen/') || $pfad === '/wartung'
-                    || $pfad === '/admin/wartungsarten' || str_starts_with($pfad, '/admin/wartungsarten/')
-                    || $pfad === '/code' || str_starts_with($pfad, '/c/'))
-                && $this->ausstehend() !== []
-            ) {
+            if (self::brauchtNeuesSchema($pfad) && $this->ausstehend() !== []) {
                 $this->container->get('session')->meldung('warnung', 'Bitte zuerst das Datenbank-Update ausführen.');
                 return Response::redirect(url('/admin/update'));
             }
@@ -594,6 +605,18 @@ final class App
         }
 
         return $this->router->dispatchOderWirf($request);
+    }
+
+    /** Pfade, die vor dem Datenbank-Update zu /admin/update führen (siehe 3c in handle()). */
+    private static function brauchtNeuesSchema(string $pfad): bool
+    {
+        foreach (['/anlagen', '/wartung', '/admin/wartungsarten', '/code', '/defekt', '/meine-meldungen', '/reparaturen', '/etiketten'] as $p) {
+            if ($pfad === $p || str_starts_with($pfad, $p . '/')) {
+                return true;
+            }
+        }
+        // Kurzlink /c/<Code> und „Defekt melden“ an Fahrzeug oder Anlage (…/defekt).
+        return str_starts_with($pfad, '/c/') || str_ends_with($pfad, '/defekt');
     }
 
     /** @return list<string> ausstehende Migrationen, je Anfrage einmal ermittelt */

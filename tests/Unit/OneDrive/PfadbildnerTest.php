@@ -25,9 +25,17 @@ final class PfadbildnerTest extends TestCase
 
     public function test_wartungsfoto_im_unterordner_wartung(): void
     {
-        self::assertSame('Fahrzeuge/EMC-0001 V 200/Wartung/Foto.jpg', Pfadbildner::fuerDokument(['titel' => 'Foto', 'endung' => 'jpg'], ['inventarnummer' => 'EMC-0001', 'bezeichnung' => 'V 200'], null, true));
-        self::assertSame('Anlagen/A3 Clubanlage/Wartung/Foto.jpg', Pfadbildner::fuerDokument(['titel' => 'Foto', 'endung' => 'jpg'], null, ['nummer' => 3, 'name' => 'Clubanlage'], true));
-        self::assertSame('Sonstiges/Foto.jpg', Pfadbildner::fuerDokument(['titel' => 'Foto', 'endung' => 'jpg'], null, null, true));
+        self::assertSame('Fahrzeuge/EMC-0001 V 200/Wartung/Foto.jpg', Pfadbildner::fuerDokument(['titel' => 'Foto', 'endung' => 'jpg'], ['inventarnummer' => 'EMC-0001', 'bezeichnung' => 'V 200'], null, 'Wartung'));
+        self::assertSame('Anlagen/A3 Clubanlage/Wartung/Foto.jpg', Pfadbildner::fuerDokument(['titel' => 'Foto', 'endung' => 'jpg'], null, ['nummer' => 3, 'name' => 'Clubanlage'], 'Wartung'));
+        self::assertSame('Sonstiges/Foto.jpg', Pfadbildner::fuerDokument(['titel' => 'Foto', 'endung' => 'jpg'], null, null, 'Wartung'));
+    }
+
+    public function test_reparatur_unterordner(): void
+    {
+        self::assertSame('Fahrzeuge/EMC-0012 V 200/Reparatur/Foto.jpg', Pfadbildner::fuerDokument(['titel' => 'Foto', 'endung' => 'jpg'], ['inventarnummer' => 'EMC-0012', 'bezeichnung' => 'V 200'], null, 'Reparatur'));
+        self::assertSame('Anlagen/A3 Clubanlage/Reparatur/Foto.jpg', Pfadbildner::fuerDokument(['titel' => 'Foto', 'endung' => 'jpg'], null, ['nummer' => 3, 'name' => 'Clubanlage'], 'Reparatur'));
+        // Der Unterordner wird wie jeder Ordnername bereinigt.
+        self::assertSame('Fahrzeuge/EMC-0012 V 200/a_b/Foto.jpg', Pfadbildner::fuerDokument(['titel' => 'Foto', 'endung' => 'jpg'], ['inventarnummer' => 'EMC-0012', 'bezeichnung' => 'V 200'], null, 'a/b'));
     }
 
     public function testOhneFahrzeugSonstiges(): void

@@ -21,6 +21,7 @@ use Emc\Digital\FunktionController;
 use Emc\Fahrzeuge\FahrzeugController;
 use Emc\OneDrive\OneDriveController;
 use Emc\Personen\BenutzerController;
+use Emc\Reparatur\MeldungController;
 use Emc\Personen\KontoController;
 use Emc\Personen\PersonController;
 use Emc\Stammdaten\SpurweiteController;
@@ -87,6 +88,15 @@ return function (Router $router, App $app): void {
     $router->add('POST', '/wartungen/{id}/loeschen', $app->erfordert('lesen', $wtg('loeschen')));
     $router->add('POST', '/fahrzeuge/{id}/wartungsplan', $app->erfordert('lesen', $wtg('planFahrzeug')));
     $router->add('POST', '/anlagen/{id}/wartungsplan', $app->erfordert('lesen', $wtg('planAnlage')));
+
+    // Defekt melden: alle Mitglieder („lesen“), an jedem Fahrzeug und jeder Anlage.
+    $mld = fn(string $m) => fn(Request $r, array $p = []) => $c->get(MeldungController::class)->$m($r, $p);
+    $router->add('GET', '/defekt', $app->erfordert('lesen', $mld('waehlen')));
+    $router->add('GET', '/fahrzeuge/{id}/defekt', $app->erfordert('lesen', $mld('formularFahrzeug')));
+    $router->add('POST', '/fahrzeuge/{id}/defekt', $app->erfordert('lesen', $mld('meldenFahrzeug')));
+    $router->add('GET', '/anlagen/{id}/defekt', $app->erfordert('lesen', $mld('formularAnlage')));
+    $router->add('POST', '/anlagen/{id}/defekt', $app->erfordert('lesen', $mld('meldenAnlage')));
+    $router->add('GET', '/meine-meldungen', $app->erfordert('lesen', $mld('meine')));
 
     $dec = fn(string $m) => fn(Request $r, array $p = []) => $c->get(DecoderController::class)->$m($r, $p);
     $router->add('POST', '/fahrzeuge/{id}/decoder', $app->erfordert('lesen', $dec('anlegen')));

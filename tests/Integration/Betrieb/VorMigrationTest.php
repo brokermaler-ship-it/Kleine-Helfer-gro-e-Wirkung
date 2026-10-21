@@ -204,6 +204,49 @@ final class VorMigrationTest extends DbTestCase
         self::assertSame('/admin/update', $r->headers['Location']);
     }
 
+    private function ohneReparaturTabellen(): void
+    {
+        $this->pdo->exec('DROP TABLE reparatur_gesehen');
+        $this->pdo->exec('DROP TABLE ersatzteil');
+        $this->pdo->exec('DROP TABLE reparatur');
+    }
+
+    /** Vor Migration 014 führen „Defekt melden“ und „Meine Meldungen“ Administratoren zum Update, nicht zu einem Fehler 500. */
+    public function test_defekt_melden_vor_migration_014(): void
+    {
+        $id = $this->legeBenutzerAn('admin@verein.de', 'geheim-passwort-1', 'admin');
+        [$fz] = $this->dokumentMitFahrzeug();
+        $this->ohneReparaturTabellen();
+        $sitzung = ['_csrf' => str_repeat('a', 64)];
+        $this->sitzungAnmelden($sitzung, $id);
+        $app = fn() => \Emc\Core\App::erzeuge(self::testConfig(), new \Emc\Core\Session($sitzung));
+        $post = fn(string $pfad) => $app()->handle(new \Emc\Core\Request('POST', $pfad, [], ['_csrf' => str_repeat('a', 64), 'beschreibung' => 'Licht geht nicht']));
+
+        // Tabellen fehlen, obwohl die Version eingetragen ist: der Controller fängt es ab.
+        foreach (['/defekt', '/meine-meldungen', "/fahrzeuge/$fz/defekt"] as $pfad) {
+            $r = $app()->handle(new \Emc\Core\Request('GET', $pfad));
+            self::assertContains($r->status, [200, 303], $pfad);
+            if ($r->status === 303) {
+                self::assertSame('/admin/update', $r->headers['Location'], $pfad);
+            }
+        }
+        $r = $post("/fahrzeuge/$fz/defekt");
+        self::assertSame(303, $r->status);
+        self::assertSame('/admin/update', $r->headers['Location']);
+        $r = $app()->handle(new \Emc\Core\Request('GET', '/meine-meldungen'));
+        self::assertSame(303, $r->status);
+        self::assertSame('/admin/update', $r->headers['Location']);
+
+        // Steht die Migration aus, leitet schon App weiter; die Fahrzeugseite bleibt lesbar.
+        $this->pdo->exec("DELETE FROM schema_migration WHERE version >= '014'");
+        foreach (['/defekt', '/meine-meldungen', "/fahrzeuge/$fz/defekt", '/reparaturen', '/etiketten'] as $pfad) {
+            $r = $app()->handle(new \Emc\Core\Request('GET', $pfad));
+            self::assertSame(303, $r->status, $pfad);
+            self::assertSame('/admin/update', $r->headers['Location'], $pfad);
+        }
+        self::assertSame(200, $app()->handle(new \Emc\Core\Request('GET', "/fahrzeuge/$fz"))->status);
+    }
+
     /** App merkt sich die ausstehenden Migrationen nur für eine Anfrage: nach dem Update gilt sofort der neue Stand. */
     public function test_ausstehende_migrationen_je_anfrage_neu_ermittelt(): void
     {

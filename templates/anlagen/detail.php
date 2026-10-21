@@ -13,16 +13,17 @@ $zeile = function (string $label, ?string $wert): void { ?>
         <h1 class="h3 mb-1"><span class="anlage-code display-6 fw-bold me-2"><?= e($a['code']) ?></span><?= e($a['name']) ?></h1>
         <div><?= $anlageStatusBadge($a) ?></div>
     </div>
-    <?php if ($darfBearbeiten): ?>
-        <div class="d-flex flex-wrap gap-2">
+    <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-danger" href="<?= e(url('/anlagen/' . $a['id'] . '/defekt')) ?>">Defekt melden</a>
+        <?php if ($darfBearbeiten): ?>
             <a class="btn btn-primary" href="<?= e(url('/anlagen/' . $a['id'] . '/bearbeiten')) ?>">Bearbeiten</a>
             <form method="post" action="<?= e(url('/anlagen/' . $a['id'] . '/loeschen')) ?>"
                   onsubmit="return confirm('Anlage samt Fotos und Dokumenten endgültig löschen?');">
                 <?php include dirname(__DIR__) . '/partials/csrf.php'; ?>
                 <button type="submit" class="btn btn-outline-danger">Löschen</button>
             </form>
-        </div>
-    <?php endif; ?>
+        <?php endif; ?>
+    </div>
 </div>
 
 <dl class="row">

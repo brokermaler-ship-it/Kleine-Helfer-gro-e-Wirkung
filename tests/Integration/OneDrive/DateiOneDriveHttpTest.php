@@ -131,6 +131,24 @@ final class DateiOneDriveHttpTest extends OneDriveTestCase
         self::assertSame([['objekt_typ' => 'wartung', 'objekt_id' => $wartung]], (new \Emc\Dateien\DokumentRepository($this->pdo, $this->speicher))->zuordnungen((int) $d['id']));
     }
 
+    public function testReparaturfotoLandetImOrdnerReparaturDesFahrzeugs(): void
+    {
+        $this->verbinde();
+        $this->http->antwort(201, ['id' => 'ITEM1', 'name' => 'foto_gedreht.jpg']);
+        $tmp = tempnam(sys_get_temp_dir(), 'up');
+        $this->temp[] = $tmp;
+        copy(dirname(__DIR__, 2) . '/fixtures/dateien/foto_gedreht.jpg', $tmp);
+        $datei = ['name' => ['foto_gedreht.jpg'], 'tmp_name' => [$tmp], 'error' => [UPLOAD_ERR_OK], 'size' => [filesize($tmp)]];
+        $daten = ['_csrf' => str_repeat('a', 64), 'beschreibung' => 'Licht vorne geht nicht', 'einstufung' => 'normal'];
+        $r = $this->app()->handle(new Request('POST', "/fahrzeuge/{$this->fz}/defekt", [], $daten, ['fotos' => $datei]));
+        self::assertSame(303, $r->status);
+        $d = $this->letztes();
+        self::assertSame('onedrive', $d['ablage']);
+        self::assertSame('Fahrzeuge/EMC-0001 V 200 060/Reparatur/foto_gedreht.jpg', $d['onedrive_pfad']);
+        $reparatur = (int) $this->pdo->query('SELECT id FROM reparatur')->fetchColumn();
+        self::assertSame([['objekt_typ' => 'reparatur', 'objekt_id' => $reparatur]], (new \Emc\Dateien\DokumentRepository($this->pdo, $this->speicher))->zuordnungen((int) $d['id']));
+    }
+
     public function testUploadBeiServerfehlerBleibtLokalNutzbar(): void
     {
         $this->verbinde();

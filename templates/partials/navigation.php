@@ -34,6 +34,7 @@ use Emc\Auth\Berechtigung;
                 </li>
                 <li class="nav-item"><a class="nav-link" href="<?= e(url('/anlagen')) ?>">Anlagen</a></li>
                 <li class="nav-item"><a class="nav-link" href="<?= e(url('/wartung')) ?>">Wartung</a></li>
+                <li class="nav-item"><a class="nav-link" href="<?= e(url('/defekt')) ?>">Defekt melden</a></li>
                 <li class="nav-item"><a class="nav-link" href="<?= e(url('/adressen')) ?>">Adressen</a></li>
                 <?php if ($darf(Berechtigung::PERSON_BEARBEITEN)): ?>
                     <li class="nav-item"><a class="nav-link" href="<?= e(url('/personen')) ?>">Personen</a></li>

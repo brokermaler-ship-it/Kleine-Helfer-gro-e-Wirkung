@@ -15,8 +15,9 @@ $abgestellt = $fz['status'] === 'ausgemustert';
             <?= $eigentumBadge($fz) ?>
         </div>
     </div>
-    <?php if ($darfFz($fz)): ?>
-        <div class="d-flex flex-wrap gap-2">
+    <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-danger" href="<?= e(url('/fahrzeuge/' . $fz['id'] . '/defekt')) ?>">Defekt melden</a>
+        <?php if ($darfFz($fz)): ?>
             <a class="btn btn-primary" href="<?= e(url('/fahrzeuge/' . $fz['id'] . '/bearbeiten')) ?>">Bearbeiten</a>
             <?php if ($abgestellt): ?>
             <form method="post" action="<?= e(url('/fahrzeuge/' . $fz['id'] . '/zurueckholen')) ?>">
@@ -36,8 +37,8 @@ $abgestellt = $fz['status'] === 'ausgemustert';
                 <button type="submit" class="btn btn-outline-danger">Löschen</button>
             </form>
             <?php endif; ?>
-        </div>
-    <?php endif; ?>
+        <?php endif; ?>
+    </div>
 </div>
 
 <?php if ($abgestellt): ?>

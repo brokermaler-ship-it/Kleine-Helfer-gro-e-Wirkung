@@ -13,9 +13,9 @@ final class Pfadbildner
      * @param array<string,mixed> $dokument titel, endung
      * @param ?array<string,mixed> $fahrzeug inventarnummer, bezeichnung
      * @param ?array<string,mixed> $anlage nummer, name (nur, wenn kein Fahrzeug angegeben ist)
-     * @param bool $wartung Foto einer Wartung: Unterordner „Wartung“ im Ordner des Objekts
+     * @param string $unterordner Unterordner im Ordner des Objekts, z. B. „Wartung“ bzw. „Reparatur“ für deren Fotos; leer: keiner
      */
-    public static function fuerDokument(array $dokument, ?array $fahrzeug, ?array $anlage = null, bool $wartung = false): string
+    public static function fuerDokument(array $dokument, ?array $fahrzeug, ?array $anlage = null, string $unterordner = ''): string
     {
         $endung = self::bereinige((string) ($dokument['endung'] ?? ''));
         $endung = $endung === '_' ? '' : $endung;
@@ -27,7 +27,7 @@ final class Pfadbildner
             $schluss = $endung === '' ? '' : '.' . $endung;
         }
         $name = self::bereinige($titel, self::MAX_SEGMENT - mb_strlen($schluss)) . $schluss;
-        $unterordner = $wartung ? 'Wartung/' : '';
+        $unterordner = trim($unterordner) === '' ? '' : self::bereinige($unterordner) . '/';
 
         if ($fahrzeug === null && $anlage !== null) {
             $ordner = self::bereinige(trim('A' . (int) ($anlage['nummer'] ?? 0) . ' ' . (string) ($anlage['name'] ?? '')));

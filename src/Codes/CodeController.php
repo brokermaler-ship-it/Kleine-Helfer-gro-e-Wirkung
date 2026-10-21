@@ -15,9 +15,10 @@ final class CodeController
     {
     }
 
+    /** Mit fuer=defekt (Seite „Defekt melden“) führen Ziel und Links zum Formular „Defekt melden“ des Objekts. */
     public function suche(Request $r): Response
     {
-        return $this->zeige($r->text('q'));
+        return $this->zeige($r->text('q'), $r->text('fuer') === 'defekt' ? '/defekt' : '');
     }
 
     /** @param array<string,string> $p */
@@ -30,7 +31,7 @@ final class CodeController
     {
         $ergebnis = $this->aufloesung->loese($eingabe, $zusatz);
         if ($ergebnis->art === CodeErgebnis::LEER) {
-            return Response::redirect(url('/'));
+            return Response::redirect(url($zusatz === '/defekt' ? '/defekt' : '/'));
         }
         if ($ergebnis->art === CodeErgebnis::DIREKT && $ergebnis->ziel !== null) {
             // Das Ziel baut CodeAufloesung selbst aus IDs (/fahrzeuge/<id>…), nie aus der Eingabe.
@@ -43,6 +44,7 @@ final class CodeController
             'ergebnis' => $ergebnis,
             'adresse' => $ergebnis->art === CodeErgebnis::AUSWAHL ? Code::istAdresse($q) : null,
             'zusatz' => $zusatz,
+            'fuerDefekt' => $zusatz === '/defekt',
         ]);
         return new Response($html, 200, ['Content-Type' => 'text/html; charset=utf-8']);
     }

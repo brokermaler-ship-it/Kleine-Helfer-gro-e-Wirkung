@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Emc\Reparatur;
 
+use Emc\Anlagen\AnlagenCode;
+use Emc\Codes\Code;
 use Emc\Fahrzeuge\KonfliktFehler;
 
 /**
@@ -105,6 +107,36 @@ final class ReparaturRepository
         $st->execute([$objektTyp, $objektId]);
         return array_map(function (array $z): array {
             $z['kosten_gesamt'] = (string) $z['kosten_gesamt'];
+            return $z;
+        }, $st->fetchAll(\PDO::FETCH_ASSOC));
+    }
+
+    /**
+     * Meldungen eines Benutzers („Meine Meldungen“), neueste zuerst, mit Objektkennung (Code F<n> bzw. A<n>, sonst die
+     * Inventarnummer) und Objektname; beides null, wenn das Objekt fehlt.
+     *
+     * @return list<array<string,mixed>> mit objekt_kennung, objekt_name, titelbild_dokument_id
+     */
+    public function vonBenutzer(int $benutzerId): array
+    {
+        $st = $this->pdo->prepare(
+            'SELECT r.id, r.objekt_typ, r.objekt_id, r.beschreibung, r.wo_bauteil, r.prioritaet, r.status, r.gemeldet_am, '
+            . 'f.inventarnummer, f.bezeichnung, a.nummer AS anlage_nummer, a.name AS anlage_name, '
+            . 'COALESCE(f.titelbild_dokument_id, a.titelbild_dokument_id) AS titelbild_dokument_id '
+            . 'FROM reparatur r '
+            . "LEFT JOIN fahrzeug f ON r.objekt_typ = 'fahrzeug' AND f.id = r.objekt_id "
+            . "LEFT JOIN anlage a ON r.objekt_typ = 'anlage' AND a.id = r.objekt_id "
+            . 'WHERE r.gemeldet_von_benutzer_id = ? ORDER BY r.gemeldet_am DESC, r.id DESC'
+        );
+        $st->execute([$benutzerId]);
+        return array_map(function (array $z): array {
+            if ($z['objekt_typ'] === 'fahrzeug') {
+                $z['objekt_kennung'] = $z['inventarnummer'] === null ? null : (Code::fahrzeug((string) $z['inventarnummer']) ?? (string) $z['inventarnummer']);
+                $z['objekt_name'] = $z['bezeichnung'];
+            } else {
+                $z['objekt_kennung'] = $z['anlage_nummer'] === null ? null : AnlagenCode::formatiere((int) $z['anlage_nummer']);
+                $z['objekt_name'] = $z['anlage_name'];
+            }
             return $z;
         }, $st->fetchAll(\PDO::FETCH_ASSOC));
     }

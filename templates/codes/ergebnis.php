@@ -6,6 +6,7 @@
  * @var \Emc\Codes\CodeErgebnis $ergebnis
  * @var ?int $adresse bei Auswahl die gesuchte Digitaladresse
  * @var string $zusatz an jeden Link gehängt (z. B. „/defekt“)
+ * @var bool $fuerDefekt Suche von „Defekt melden“: eine neue Suche behält das bei
  */
 use Emc\Codes\Code;
 use Emc\Codes\CodeAufloesung;
@@ -17,8 +18,12 @@ $zusatz = $zusatz ?? '';
 $auswahl = $ergebnis->art === CodeErgebnis::AUSWAHL;
 ?>
 <h1 class="h3 mb-3"><?= $auswahl ? 'Mehrere Fahrzeuge mit Adresse ' . (int) $adresse : 'Suche' ?></h1>
+<?php if (!empty($fuerDefekt)): ?>
+    <p class="lead">Defekt melden: Bitte wähle das Fahrzeug oder die Anlage.</p>
+<?php endif; ?>
 
 <form method="get" action="<?= e(url('/code')) ?>" role="search" class="card card-body mb-3">
+    <?php if (!empty($fuerDefekt)): ?><input type="hidden" name="fuer" value="defekt"><?php endif; ?>
     <label for="code-seite-q" class="form-label small mb-1">Code, Digitaladresse oder Name</label>
     <div class="d-flex gap-2">
         <input type="search" class="form-control" id="code-seite-q" name="q" value="<?= e($q) ?>"

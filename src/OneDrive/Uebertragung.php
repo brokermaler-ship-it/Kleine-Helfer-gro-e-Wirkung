@@ -243,6 +243,27 @@ final class Uebertragung
         return $st->rowCount();
     }
 
+    /**
+     * Objekt (Fahrzeug bzw. Anlage) der ersten Wartung bzw. Reparatur, der das Dokument zugeordnet ist.
+     *
+     * @param string $typ wartung oder reparatur (feste Tabellennamen)
+     * @return ?array{objekt_typ:string, objekt_id:int|string}
+     */
+    private function objektVon(int $dokumentId, string $typ): ?array
+    {
+        $tabelle = match ($typ) {
+            'wartung' => 'wartung',
+            'reparatur' => 'reparatur',
+        };
+        foreach ($this->dokumente->objekte($dokumentId, $typ) as $id) {
+            $st = $this->pdo->prepare("SELECT objekt_typ, objekt_id FROM $tabelle WHERE id = ?");
+            $st->execute([$id]);
+            $z = $st->fetch(\PDO::FETCH_ASSOC);
+            return $z === false ? null : $z;
+        }
+        return null;
+    }
+
     /** @param array{drive_id:string,item_id:string,name:string} $ziel */
     private function hochladen(int $dokumentId, array $ziel): void
     {
@@ -256,22 +277,20 @@ final class Uebertragung
         }
         $fahrzeugIds = $this->dokumente->objekte($dokumentId, 'fahrzeug');
         $anlageIds = $this->dokumente->objekte($dokumentId, 'anlage');
-        $wartung = false;
+        $unterordner = '';
         if ($fahrzeugIds === [] && $anlageIds === []) {
-            // Foto einer Wartung: landet im Ordner des gewarteten Objekts (Unterordner „Wartung“).
-            foreach ($this->dokumente->objekte($dokumentId, 'wartung') as $wartungId) {
-                $st = $this->pdo->prepare('SELECT objekt_typ, objekt_id FROM wartung WHERE id = ?');
-                $st->execute([$wartungId]);
-                $w = $st->fetch(\PDO::FETCH_ASSOC);
-                if ($w !== false) {
-                    $wartung = true;
-                    if ($w['objekt_typ'] === 'fahrzeug') {
-                        $fahrzeugIds = [(int) $w['objekt_id']];
+            // Foto einer Wartung bzw. Reparatur: landet im Ordner des Objekts (Unterordner „Wartung“ bzw. „Reparatur“).
+            foreach (['wartung' => 'Wartung', 'reparatur' => 'Reparatur'] as $typ => $ordner) {
+                $bezug = $this->objektVon($dokumentId, $typ);
+                if ($bezug !== null) {
+                    $unterordner = $ordner;
+                    if ($bezug['objekt_typ'] === 'fahrzeug') {
+                        $fahrzeugIds = [(int) $bezug['objekt_id']];
                     } else {
-                        $anlageIds = [(int) $w['objekt_id']];
+                        $anlageIds = [(int) $bezug['objekt_id']];
                     }
+                    break;
                 }
-                break;
             }
         }
         $fahrzeug = null;
@@ -290,7 +309,7 @@ final class Uebertragung
                 break;
             }
         }
-        $e = $this->graph->hochladen($ziel['drive_id'], $ziel['item_id'], Pfadbildner::fuerDokument($dok, $fahrzeug, $anlage, $wartung), $basis);
+        $e = $this->graph->hochladen($ziel['drive_id'], $ziel['item_id'], Pfadbildner::fuerDokument($dok, $fahrzeug, $anlage, $unterordner), $basis);
 
         // Erst vermerken, dann das Original entfernen: bricht etwas dazwischen ab, bleibt die Datei erreichbar.
         $st = $this->pdo->prepare("UPDATE dokument SET ablage = 'onedrive', onedrive_item_id = ?, onedrive_drive_id = ?, onedrive_pfad = ?, original_lokal = 1 WHERE id = ? AND ablage = 'lokal'");
