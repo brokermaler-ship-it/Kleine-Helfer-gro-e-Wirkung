@@ -73,8 +73,9 @@ final class Faelligkeitsrechner
         }
 
         if ($rest === null) {
-            // Kein Kriterium berechenbar (z. B. nur Stundenintervall, Fahrzeug ohne Betriebsstunden): wie „noch nie erfasst“.
-            return new Faelligkeit(Ampel::Gelb, true, $faelligAm, $faelligBei, 0.0);
+            // Kein Kriterium berechenbar (nur Stundenintervall, Fahrzeug ohne Betriebsstunden), aber es gibt Wartungen:
+            // gelb „Stundenstand fehlt“ wie beim fehlenden Stundenbezug – nicht grün und nicht „noch nie erfasst“.
+            return new Faelligkeit(Ampel::Gelb, false, $faelligAm, $faelligBei, 0.0, true);
         }
         return new Faelligkeit($ampel, false, $faelligAm, $faelligBei, $rest, $stundenstandFehlt);
     }

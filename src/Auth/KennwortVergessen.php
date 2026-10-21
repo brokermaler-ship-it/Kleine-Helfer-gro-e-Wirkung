@@ -24,7 +24,8 @@ final class KennwortVergessen
     public const AUFBEWAHRUNG_STUNDEN = 24;
     public const ANTWORT = 'Wenn die Adresse bei uns bekannt ist, bekommst du gleich eine E-Mail mit einem Link zum Zurücksetzen. Kommt keine E-Mail an, meldet sich ein Administrator mit einem neuen Kennwort bei dir.';
     public const UNGUELTIG = 'Der Link ist ungültig oder abgelaufen.';
-    private const SALZ = 'kennwort_ip_salz';
+    /** Einstellung mit dem geheimen Salz für IP- und E-Mail-Hashes in `kennwort_versuch`. */
+    public const SALZ = 'kennwort_ip_salz';
 
     public function __construct(
         private \PDO $pdo,
@@ -38,10 +39,13 @@ final class KennwortVergessen
         $this->linkBasis = rtrim($linkBasis, '/');
     }
 
-    /** Hash, unter dem eine E-Mail-Adresse in `kennwort_versuch` steht (auch für die DSGVO-Löschung). */
-    public static function emailHash(string $email): string
+    /**
+     * Hash, unter dem eine E-Mail-Adresse in `kennwort_versuch` steht (auch für die DSGVO-Löschung): HMAC mit dem
+     * geheimen Salz der Instanz, damit sich die Adressen nicht per Wörterbuch der Mitgliederadressen zurückrechnen lassen.
+     */
+    public static function emailHash(string $email, string $salz): string
     {
-        return hash('sha256', mb_strtolower(trim($email)));
+        return hash_hmac('sha256', mb_strtolower(trim($email)), $salz);
     }
 
     /**
@@ -51,7 +55,8 @@ final class KennwortVergessen
     public function beantrage(string $email, string $ip): ?string
     {
         $email = mb_strtolower(trim($email));
-        $ipHash = hash_hmac('sha256', $ip, $this->salz());
+        $salz = $this->salz();
+        $ipHash = hash_hmac('sha256', $ip, $salz);
 
         $this->pdo->exec('DELETE FROM kennwort_versuch WHERE zeitpunkt < NOW() - INTERVAL ' . self::AUFBEWAHRUNG_STUNDEN . ' HOUR');
         $this->pdo->exec('DELETE FROM kennwort_token WHERE gueltig_bis < NOW() - INTERVAL ' . self::AUFBEWAHRUNG_STUNDEN . ' HOUR');
@@ -66,7 +71,7 @@ final class KennwortVergessen
         }
         // Begrenzung je Konto: die Datenbank vergleicht ohne Groß-/Kleinschreibung und Akzente („máx@…“ trifft
         // „max@…“), deshalb zählt bei einem Treffer die gespeicherte Adresse, nicht die Schreibweise der Eingabe.
-        $emailHash = self::emailHash($konto !== null ? (string) $konto['email'] : $email);
+        $emailHash = self::emailHash($konto !== null ? (string) $konto['email'] : $email, $salz);
 
         // Token in beiden Fällen erzeugen, damit bekannte und unbekannte Adressen vergleichbar viel Arbeit machen.
         $token = bin2hex(random_bytes(32));
@@ -316,7 +321,7 @@ final class KennwortVergessen
         return $zustand === '40001' || in_array($nummer, [1205, 1213], true);
     }
 
-    /** Geheimes Salz für die IP-Hashes (32 Zufallsbytes, beim ersten Bedarf erzeugt). */
+    /** Geheimes Salz für die IP- und E-Mail-Hashes (32 Zufallsbytes, beim ersten Bedarf erzeugt). */
     private function salz(): string
     {
         $salz = $this->einstellungen->hole(self::SALZ);

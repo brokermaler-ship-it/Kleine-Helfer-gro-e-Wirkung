@@ -1,7 +1,8 @@
 -- Version 0.5.0: Wartungsprotokoll und Ausnahmen im Wartungsplan (MySQL >= 8 / MariaDB >= 10.6).
 -- Objektbezug über objekt_typ + objekt_id (fahrzeug, anlage); beim Löschen eines Objekts räumt die Anwendung auf.
 -- betriebsstunden: eingegebener Stand (optional); stundenstand_bezug: eingegebener Stand, sonst der Stand des
--- Fahrzeugs beim Eintragen (Bezug für die Fälligkeit nach Stunden; bei Anlagen NULL).
+-- Fahrzeugs beim Eintragen – nur bei einem Eintrag für heute an einem Fahrzeug, das Betriebsstunden führt; bei
+-- Nachträgen ohne Stand, Fahrzeugen ohne Betriebsstunden und Anlagen NULL (Bezug für die Fälligkeit nach Stunden).
 -- Personenbezüge werden bei der DSGVO-Löschung per ON DELETE SET NULL geleert (Anzeige „ehemaliges Mitglied“).
 -- Fotos hängen über dokument_zuordnung mit objekt_typ = 'wartung' an der Wartung.
 

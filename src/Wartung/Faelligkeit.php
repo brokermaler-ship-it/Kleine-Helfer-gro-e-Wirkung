@@ -11,8 +11,9 @@ final class Faelligkeit
      * @param ?\DateTimeImmutable $faelligAm fällig an diesem Tag (nur mit Intervall in Monaten und letzter Wartung)
      * @param ?float $faelligBeiStunden fällig bei diesem Betriebsstundenstand (nur mit Stundenintervall und Stundenstand der letzten Wartung)
      * @param float $rest kleinster verbleibender Anteil des Intervalls über alle Kriterien (negativ = überfällig; nie erfasst: 0.0)
-     * @param bool $stundenstandFehlt Gelb kommt allein daher, dass das Fahrzeug Betriebsstunden führt, aber keine Wartung
-     *        dieser Art einen Stundenstand hat (das Stundenkriterium gilt dann wie „noch nie erfasst“: Gelb, Rest 0.0)
+     * @param bool $stundenstandFehlt Gelb kommt allein daher, dass zur letzten Wartung dieser Art kein Stundenstand
+     *        bekannt ist (das Stundenkriterium gilt dann wie „noch nie erfasst“: Gelb, Rest 0.0) – auch wenn bei einem
+     *        Fahrzeug ohne Betriebsstunden nur ein Stundenintervall gilt und daher gar nichts berechenbar ist
      */
     public function __construct(
         public readonly Ampel $ampel,

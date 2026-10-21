@@ -113,14 +113,17 @@ final class FaelligkeitsrechnerTest extends TestCase
         self::assertSame('bald fällig', $f->text());
     }
 
-    public function test_kein_kriterium_berechenbar_ist_noch_nie_erfasst(): void
+    public function test_kein_kriterium_berechenbar_ist_gelb_stundenstand_fehlt(): void
     {
-        // Nur Stundenintervall, Fahrzeug ohne Betriebsstunden (aktuell null): nichts berechenbar → gelb „noch nie erfasst“.
+        // Nur Stundenintervall, Fahrzeug ohne Betriebsstunden (aktuell null), aber es gibt eine Wartung:
+        // nichts berechenbar → gelb „Stundenstand fehlt“ (nicht „noch nie erfasst“, nicht grün).
         $f = Faelligkeitsrechner::berechne(null, 20, self::d('2026-10-01'), null, null, self::d('2026-10-21'));
         self::assertSame(Ampel::Gelb, $f->ampel);
-        self::assertTrue($f->nochNieErfasst);
+        self::assertFalse($f->nochNieErfasst);
+        self::assertTrue($f->stundenstandFehlt);
         self::assertSame(0.0, $f->rest);
-        self::assertSame('noch nie erfasst', $f->text());
+        self::assertSame('Stundenstand fehlt', $f->text());
+        self::assertSame('gelb', $f->kategorie());
     }
 
     public function test_rest_ordnet_dringlichkeit(): void

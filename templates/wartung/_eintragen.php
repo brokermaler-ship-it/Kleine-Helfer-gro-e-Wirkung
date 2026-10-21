@@ -26,7 +26,7 @@ $pre = 'wartung-' . e($objektTyp) . '-';
             <label class="form-label" for="<?= $pre ?>stunden">Betriebsstunden (optional)</label>
             <input class="form-control<?= $ungueltig('betriebsstunden') ?>" type="text" inputmode="decimal" id="<?= $pre ?>stunden" name="betriebsstunden"
                    value="<?= e((string) ($werte['betriebsstunden'] ?? '')) ?>" placeholder="z. B. 52,5" aria-describedby="<?= $pre ?>stunden-hilfe">
-            <div class="form-text" id="<?= $pre ?>stunden-hilfe">Bisher <?= e($stundenText($objekt['betriebsstunden'] ?? 0)) ?>. Ein höherer Stand wird am Fahrzeug übernommen.</div>
+            <div class="form-text" id="<?= $pre ?>stunden-hilfe">Stundenstand zum Zeitpunkt der Arbeit eintragen. Bisher <?= e($stundenText($objekt['betriebsstunden'] ?? 0)) ?>; ein höherer Stand wird am Fahrzeug übernommen. Bei Nachträgen bitte den damaligen Stand angeben – sonst gilt für diese Wartung kein Stundenstand.</div>
             <?= $feldFehler('betriebsstunden') ?>
         </div>
         <?php endif; ?>

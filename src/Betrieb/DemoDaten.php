@@ -19,6 +19,7 @@ use Emc\Digital\FunktionsvorlageRepository;
 use Emc\Fahrzeuge\FahrzeugRepository;
 use Emc\Personen\BenutzerRepository;
 use Emc\Personen\PersonRepository;
+use Emc\Wartung\Faelligkeitsrechner;
 use Emc\Wartung\WartungRepository;
 
 /**
@@ -130,11 +131,12 @@ final class DemoDaten
         $konto = fn(string $email): ?int => ((int) $this->pdo->query('SELECT id FROM benutzer WHERE email = ' . $this->pdo->quote($email))->fetchColumn()) ?: null;
         $stand = fn(int $fahrzeugId): float => (float) $this->pdo->query('SELECT betriebsstunden FROM fahrzeug WHERE id = ' . $fahrzeugId)->fetchColumn();
         $heute = new \DateTimeImmutable('today');
+        // Monate mit Monatsende-Begrenzung (31.10. − 4 Monate = 30.06., nicht 01.07.; − 11 Monate nicht im Dezember des Vorjahres).
         $wartungen = $c->get(WartungRepository::class);
         foreach ([
-            ['anlage', $anlage, 'Gleise reinigen', $heute->modify('-4 months'), null, 'bernd', 'bearbeiter@test.emc78.de', 'Mit Reinigungswagen und Isopropanol.'],
+            ['anlage', $anlage, 'Gleise reinigen', Faelligkeitsrechner::plusMonate($heute, -4), null, 'bernd', 'bearbeiter@test.emc78.de', 'Mit Reinigungswagen und Isopropanol.'],
             ['fahrzeug', $ids['v200'], 'Räder und Radschleifer reinigen', $heute->modify('-14 days'), $stand($ids['v200']), 'wart', 'fahrzeugwart@test.emc78.de', null],
-            ['fahrzeug', $ids['br01'], 'Getriebe und Lager schmieren', $heute->modify('-11 months')->modify('-15 days'), $stand($ids['br01']), 'wart', 'fahrzeugwart@test.emc78.de', 'Etwas Öl an den Achslagern.'],
+            ['fahrzeug', $ids['br01'], 'Getriebe und Lager schmieren', Faelligkeitsrechner::plusMonate($heute, -11)->modify('-15 days'), $stand($ids['br01']), 'wart', 'fahrzeugwart@test.emc78.de', 'Etwas Öl an den Achslagern.'],
         ] as [$typ, $objektId, $art, $datum, $stunden, $person, $email, $notiz]) {
             if (!isset($arten[$art])) {
                 continue;

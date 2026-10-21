@@ -167,6 +167,7 @@ final class WartungHttpTest extends DbTestCase
         $this->assertLessThan(strpos($seite, 'id="tab-verlauf"'), strpos($seite, 'id="tab-wartung"'));
         $this->assertGreaterThan(strpos($seite, 'id="tab-dateien"'), strpos($seite, 'id="tab-wartung"'));
         $this->assertStringContainsString('Wartung eintragen', $seite);
+        $this->assertStringContainsString('Stundenstand zum Zeitpunkt der Arbeit eintragen', $seite);
         $this->assertStringContainsString('Max Muster', $seite);
         $this->assertStringContainsString('Alles sauber', $seite);
         $this->assertStringContainsString(e("/fahrzeuge/$fz/wartungen"), $seite);

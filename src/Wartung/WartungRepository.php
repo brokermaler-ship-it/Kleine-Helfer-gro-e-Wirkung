@@ -120,8 +120,10 @@ final class WartungRepository
     /**
      * Letzte Wartung je Objekt und Wartungsart: maßgeblich ist das jüngste Datum (bei gleichem Datum die höchste ID),
      * nicht der höchste Stundenstand – ein nachgetragener älterer Eintrag verdrängt die jüngere Wartung nicht.
-     * Der Stundenstand kommt aus der jüngsten Wartung dieser Art **mit** Stundenstand (stundenstand_bezug nicht NULL),
-     * damit ein Nachtrag ohne Stand den Stundenbezug nicht verliert. Eine Abfrage (zwei Fensterfunktionen).
+     * Der Stundenstand kommt aus der jüngsten Wartung dieser Art mit Stundenstand – aber nur, wenn sie am selben Tag
+     * wie die jüngste Wartung liegt. Hat die jüngste Wartung keinen Stand, ist der Stundenbezug unbekannt (null →
+     * „Stundenstand fehlt“): ein älterer Stand würde eine gerade erledigte Wartung sonst fälschlich „überfällig“ machen.
+     * Ein älterer Nachtrag ohne Stand hinter einer jüngeren Wartung mit Stand ändert nichts. Eine Abfrage.
      *
      * @return array<string, array{datum:string, stundenstand:?float}> Schlüssel "<typ>:<id>:<artId>"
      */
@@ -145,12 +147,13 @@ final class WartungRepository
                 $datum[$k] = (string) $z['datum'];
             }
             if ($z['stundenstand_bezug'] !== null && (int) $z['rang_stand'] === 1) {
-                $stand[$k] = (float) $z['stundenstand_bezug'];
+                $stand[$k] = ['datum' => (string) $z['datum'], 'wert' => (float) $z['stundenstand_bezug']];
             }
         }
         $ergebnis = [];
         foreach ($datum as $k => $d) {
-            $ergebnis[$k] = ['datum' => $d, 'stundenstand' => $stand[$k] ?? null];
+            $s = $stand[$k] ?? null;
+            $ergebnis[$k] = ['datum' => $d, 'stundenstand' => $s !== null && $s['datum'] === $d ? $s['wert'] : null];
         }
         return $ergebnis;
     }

@@ -232,7 +232,9 @@ final class DsgvoLoeschungTest extends DbTestCase
     {
         $s = $this->szenario();
         $andere = $this->konto($this->person('Dora', 'Andere', 'dora@privat.de'), 'dora@verein.de');
-        $hash = fn(string $m): string => hash('sha256', $m);
+        $salz = str_repeat('ab', 32);
+        $this->pdo->prepare("INSERT INTO einstellung (schluessel, wert) VALUES ('kennwort_ip_salz', ?)")->execute([$salz]);
+        $hash = fn(string $m): string => \Emc\Auth\KennwortVergessen::emailHash($m, $salz);
         foreach ([$s['konto'], $andere] as $konto) {
             $this->pdo->prepare('INSERT INTO kennwort_token (benutzer_id, token_hash, gueltig_bis) VALUES (?, ?, NOW() + INTERVAL 1 HOUR)')
                 ->execute([$konto, hash('sha256', 'token' . $konto)]);

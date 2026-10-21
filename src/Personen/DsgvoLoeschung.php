@@ -208,10 +208,16 @@ final class DsgvoLoeschung
             if ($k['mails'] !== []) {
                 $this->pdo->prepare('DELETE FROM login_versuch WHERE email IN (' . implode(', ', array_fill(0, count($k['mails']), '?')) . ')')
                     ->execute($k['mails']);
-                // „Kennwort vergessen“-Versuche stehen nur gehasht da; Tokens und Anfragen gehen per CASCADE mit dem Konto.
-                $hashes = array_values(array_unique(array_map(KennwortVergessen::emailHash(...), $k['mails'])));
-                $this->pdo->prepare('DELETE FROM kennwort_versuch WHERE email_hash IN (' . implode(', ', array_fill(0, count($hashes), '?')) . ')')
-                    ->execute($hashes);
+                // „Kennwort vergessen“-Versuche stehen nur gehasht (HMAC mit dem Salz der Instanz) da; ohne Salz gab es
+                // noch keine. Tokens und Anfragen gehen per CASCADE mit dem Konto.
+                $st = $this->pdo->prepare('SELECT wert FROM einstellung WHERE schluessel = ?');
+                $st->execute([KennwortVergessen::SALZ]);
+                $salz = (string) $st->fetchColumn();
+                if ($salz !== '') {
+                    $hashes = array_values(array_unique(array_map(fn(string $m): string => KennwortVergessen::emailHash($m, $salz), $k['mails'])));
+                    $this->pdo->prepare('DELETE FROM kennwort_versuch WHERE email_hash IN (' . implode(', ', array_fill(0, count($hashes), '?')) . ')')
+                        ->execute($hashes);
+                }
             }
             if ($benutzerId !== null) {
                 $this->pdo->prepare('DELETE FROM benutzer WHERE id = ?')->execute([$benutzerId]);

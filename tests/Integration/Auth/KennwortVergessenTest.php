@@ -225,8 +225,12 @@ final class KennwortVergessenTest extends DbTestCase
         $this->assertStringNotContainsString(self::IP, $alles);
         $this->assertStringNotContainsString('verein.de', $alles);
         $this->assertStringNotContainsString(hash('sha256', self::IP), $alles);
-        $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM kennwort_versuch WHERE email_hash = ?', [hash('sha256', 'max@verein.de')]));
-        $this->assertSame(64, strlen((string) (new Einstellungen($this->pdo))->hole('kennwort_ip_salz')));
+        // Auch die Adresse nur mit dem geheimen Salz (HMAC), nicht als einfacher SHA-256 (per Wörterbuch umkehrbar).
+        $this->assertStringNotContainsString(hash('sha256', 'max@verein.de'), $alles);
+        $salz = (string) (new Einstellungen($this->pdo))->hole('kennwort_ip_salz');
+        $this->assertSame(64, strlen($salz));
+        $this->assertSame(1, $this->zaehle('SELECT COUNT(*) FROM kennwort_versuch WHERE email_hash = ?', [hash_hmac('sha256', 'max@verein.de', $salz)]));
+        $this->assertSame(hash_hmac('sha256', 'max@verein.de', $salz), KennwortVergessen::emailHash(' MAX@verein.de ', $salz));
 
         // Einträge älter als 24 Stunden verschwinden beim nächsten Aufruf.
         $this->pdo->exec('UPDATE kennwort_versuch SET zeitpunkt = NOW() - INTERVAL 25 HOUR');
@@ -242,7 +246,8 @@ final class KennwortVergessenTest extends DbTestCase
             $this->dienst()->beantrage($variante, '198.51.100.' . $i);
         }
         $this->assertCount(KennwortVergessen::MAX_JE_EMAIL, $this->mailer->gesendet);
-        $this->assertSame(3, $this->zaehle('SELECT COUNT(*) FROM kennwort_versuch WHERE email_hash = ?', [hash('sha256', 'max@verein.de')]));
+        $salz = (string) (new Einstellungen($this->pdo))->hole('kennwort_ip_salz');
+        $this->assertSame(3, $this->zaehle('SELECT COUNT(*) FROM kennwort_versuch WHERE email_hash = ?', [KennwortVergessen::emailHash('max@verein.de', $salz)]));
         $this->assertSame(3, $this->zaehle('SELECT COUNT(*) FROM kennwort_versuch'));
         // Der zuletzt verschickte Link bleibt gültig.
         $this->assertNotNull($this->dienst()->pruefeToken((string) $this->mailer->letzterToken()));
