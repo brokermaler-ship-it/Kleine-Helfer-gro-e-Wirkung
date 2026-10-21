@@ -65,6 +65,26 @@ python -m tutor.textmode phishing-melden
 
 Tests: `cd backend && pytest`
 
+### Windows ohne Docker, Agent in LiveKit Cloud
+
+So läuft der erste Test mit echten Sprachdiensten (Oktober 2026). Auf Firmenrechnern kann die
+Windows-Anwendungssteuerung die Audio-Bibliothek PyAV blockieren; der Sprach-Agent läuft dann
+nicht lokal, sondern in LiveKit Cloud (Region `eu-central`). Lokal läuft nur der Web-Server.
+
+1. `start-textmode.ps1` ausführen: legt beim ersten Start `.env` aus `.env.example` an und öffnet
+   sie zum Eintragen der Keys. Danach startet der Tutor im Textmodus.
+2. In LiveKit Cloud ein Projekt anlegen und `LIVEKIT_URL` (`wss://…`), `LIVEKIT_API_KEY` und
+   `LIVEKIT_API_SECRET` in `.env` eintragen.
+3. `deploy-cloud.ps1` ausführen: installiert die LiveKit-CLI, baut den Agenten mit
+   `deploy/livekit-cloud/Dockerfile` und lädt ihn mit den Keys aus `.env` als Secrets hoch
+   (`LIVEKIT_*` setzt LiveKit Cloud selbst). Später erneut ausführen, um eine neue Version hochzuladen.
+4. `start-voice.ps1` ausführen: startet den Web-Server und öffnet den Browser. Ohne `wss://`-URL
+   startet es stattdessen alles lokal (LiveKit-Server als Windows-Programm, Agent, Web-Server).
+
+Hört der Tutor nicht zu, im Browser das richtige Mikrofon wählen (Mikrofon-Symbol in der
+Adresszeile). Ob Sprache ankommt, steht im Agent-Log (`lk agent logs`): `user state` und
+`user transcript final` mit der Zeichenzahl, ohne Inhalt.
+
 > Hinweis: Hinter einem HTTP-Proxy ignoriert der Agent beim Verbindungsaufbau zu LiveKit
 > die `NO_PROXY`-Liste. Für einen lokalen LiveKit-Server dann `HTTPS_PROXY` für den
 > Agent-Prozess entfernen.

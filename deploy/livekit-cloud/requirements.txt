@@ -1,0 +1,2 @@
+# Nur damit "lk agent" das Projekt erkennt; gebaut wird mit dem Dockerfile (Abhaengigkeiten aus backend/pyproject.toml).
+livekit-agents[deepgram,cartesia,silero,anthropic,turn-detector]~=1.8

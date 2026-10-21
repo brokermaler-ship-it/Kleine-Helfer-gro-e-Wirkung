@@ -83,7 +83,7 @@ class TutorAgent(Agent):
 
     async def on_enter(self) -> None:
         self.session.generate_reply(
-            instructions="Begrüße die Person kurz und frag, was sie über das Thema schon weiß."
+            instructions="Begrüße die Person kurz, stell dich als Lukas vor und frag, was sie über das Thema schon weiß."
         )
 
 
@@ -146,8 +146,19 @@ async def entrypoint(ctx: JobContext) -> None:
         keys = ("e2e_latency", "end_of_turn_delay", "transcription_delay", "llm_node_ttft", "tts_node_ttfb")
         turns.append({"role": item.role, **{k: item.metrics[k] for k in keys if k in item.metrics}})
 
+    # Diagnose ohne Inhalt: nur ob und wie viel Sprache erkannt wurde (kein Transkript im Log).
+    @session.on("user_state_changed")
+    def _on_user_state(ev) -> None:
+        logger.info("user state: %s -> %s", ev.old_state, ev.new_state)
+
+    @session.on("user_input_transcribed")
+    def _on_transcribed(ev) -> None:
+        if ev.is_final:
+            logger.info("user transcript final: %d Zeichen", len(ev.transcript))
+
     @session.on("agent_state_changed")
     def _on_state(ev: AgentStateChangedEvent) -> None:
+        logger.info("agent state: %s -> %s", ev.old_state, ev.new_state)
         asyncio.create_task(publish(ctx.room, TOPIC_STATE, {"status": ev.new_state}))
 
     def _write_session_record() -> None:
