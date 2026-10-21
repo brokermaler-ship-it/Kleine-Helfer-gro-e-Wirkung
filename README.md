@@ -121,7 +121,7 @@ Interne Module, die nicht in dieses öffentliche Repository gehören, liegen in
 ## Tutor-Stimmen
 
 Die lernende Person wählt zwischen **Lukas** (Cartesia-Stimme aus `CARTESIA_VOICE_ID`) und
-**Luisa** (`CARTESIA_VOICE_ID_LUISA`, Vorgabe „Lorelei – Helpful Guide“). `GET /api/tutors`
+**Luisa** (`CARTESIA_VOICE_ID_LUISA`, Vorgabe „Lea – Breezy Voice“). `GET /api/tutors`
 liefert die Auswahl.
 
 ## Moodle (SCORM 1.2)

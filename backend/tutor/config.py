@@ -12,9 +12,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 
-# Deutsche Cartesia-Stimmen: "Lukas - Professional" und "Lorelei - Helpful Guide" (für Luisa).
+# Deutsche Cartesia-Stimmen: "Lukas - Professional" und "Lea - Breezy Voice" (für Luisa).
 VOICE_LUKAS = "e00dd3df-19e7-4cd4-827a-7ff6687b6954"
-VOICE_LUISA = "0b66a153-548f-4f2c-b734-09a13b0bd163"
+VOICE_LUISA = "1ade29fc-6b82-4607-9e70-361720139b12"
 DEFAULT_TUTOR = "lukas"
 
 
