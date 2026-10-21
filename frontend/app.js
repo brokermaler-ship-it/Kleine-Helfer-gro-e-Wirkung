@@ -51,8 +51,8 @@ async function api(path, options = {}) {
 // ---------- Start ----------
 
 // Aufruf aus Moodle: ?kennung=P-017&modul=phishing-melden&tutor=luisa&direkt=1
-// füllt das Formular vor; mit direkt=1 geht es ohne Wissenscheck sofort ins Gespräch,
-// weil das Moodle-Paket den Wissenscheck selbst enthält.
+// füllt das Formular vor; mit direkt=1 geht es ohne Wissenscheck vorher sofort ins Gespräch,
+// weil das Moodle-Paket die Lerninhalte schon abfragt. Danach folgt der Wissenscheck.
 const params = new URLSearchParams(location.search);
 
 async function initStart() {
@@ -117,7 +117,11 @@ const QUIZ_COPY = {
 
 async function startQuiz(phase) {
   const questions = await api(`/api/modules/${state.module.id}/quiz`);
-  const [title, lead] = QUIZ_COPY[phase];
+  let [title, lead] = QUIZ_COPY[phase];
+  if (phase === "nachher" && state.preScore === null) {
+    title = "Wissenscheck";
+    lead = "Zum Abschluss ein paar Fragen zum Gespräch. Danach siehst du die Auflösung.";
+  }
   $("quiz-title").textContent = `${title}: ${state.module.title}`;
   $("quiz-lead").textContent = lead;
   $("quiz-result").hidden = true;
@@ -169,7 +173,10 @@ function onQuizResult(phase, result) {
   if (phase === "nachher" && state.preScore !== null) {
     box.append(el("p", { class: "muted", textContent: `Vorher: ${state.preScore} von ${result.total}.` }));
   }
-  box.append(el("p", { class: "muted", textContent: "Danke! Du kannst das Fenster jetzt schließen." }));
+  const bye = params.get("direkt") === "1"
+    ? "Danke! Du kannst das Fenster jetzt schließen und in Moodle weitermachen."
+    : "Danke! Du kannst das Fenster jetzt schließen.";
+  box.append(el("p", { class: "muted", textContent: bye }));
   box.hidden = false;
   box.scrollIntoView({ behavior: "smooth" });
 }
@@ -305,10 +312,8 @@ async function endSession() {
   state.room = null;
 }
 
-// Aus Moodle gestartet: Der Wissenscheck liegt im Moodle-Paket, das Fenster kann zu.
 function afterSession() {
-  if (params.get("direkt") === "1") show("view-done");
-  else startQuiz("nachher");
+  startQuiz("nachher");
 }
 
 function initSessionControls() {
