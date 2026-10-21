@@ -6,6 +6,8 @@ const state = {
   pilotId: "",
   module: null,
   modules: [],
+  tutor: null,
+  tutors: [],
   room: null,
   preScore: null,
   protocolMarkdown: "",
@@ -15,10 +17,10 @@ const $ = (id) => document.getElementById(id);
 
 const STATUS_TEXT = {
   connecting: "Verbinde …",
-  initializing: "Tutor startet …",
+  initializing: "startet …",
   listening: "Ich höre zu",
   thinking: "Denke nach …",
-  speaking: "Tutor spricht",
+  speaking: "spricht",
   idle: "Bereit",
 };
 
@@ -48,12 +50,30 @@ async function api(path, options = {}) {
 
 // ---------- Start ----------
 
+// Aufruf aus Moodle: ?kennung=P-017&modul=phishing-melden&tutor=luisa&direkt=1
+// füllt das Formular vor; mit direkt=1 geht es ohne Wissenscheck vorher sofort ins Gespräch,
+// weil das Moodle-Paket die Lerninhalte schon abfragt. Danach folgt der Wissenscheck.
+const params = new URLSearchParams(location.search);
+
 async function initStart() {
-  state.modules = await api("/api/modules");
+  [state.modules, state.tutors] = await Promise.all([api("/api/modules"), api("/api/tutors")]);
   const select = $("module-select");
   for (const m of state.modules) select.append(el("option", { value: m.id, textContent: m.title }));
   select.addEventListener("change", renderModuleInfo);
+  if (params.get("modul")) select.value = params.get("modul");
   renderModuleInfo();
+
+  const wanted = params.get("tutor") || state.tutors[0].id;
+  for (const t of state.tutors) {
+    $("tutor-choice").append(
+      el("label", {}, el("input", { type: "radio", name: "tutor", value: t.id, checked: t.id === wanted, required: true }), t.name),
+    );
+  }
+  if (params.get("kennung")) $("pilot-id").value = params.get("kennung");
+  if (params.get("direkt") === "1" && readStartForm()) {
+    startSession();
+    return;
+  }
 
   $("start-form").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -82,7 +102,9 @@ function readStartForm() {
   if (!form.reportValidity()) return false;
   state.pilotId = $("pilot-id").value.trim();
   state.module = state.modules.find((x) => x.id === $("module-select").value);
-  return true;
+  const id = new FormData(form).get("tutor");
+  state.tutor = state.tutors.find((t) => t.id === id) || state.tutors[0];
+  return Boolean(state.module);
 }
 
 // ---------- Wissenscheck ----------
@@ -95,7 +117,11 @@ const QUIZ_COPY = {
 
 async function startQuiz(phase) {
   const questions = await api(`/api/modules/${state.module.id}/quiz`);
-  const [title, lead] = QUIZ_COPY[phase];
+  let [title, lead] = QUIZ_COPY[phase];
+  if (phase === "nachher" && state.preScore === null) {
+    title = "Wissenscheck";
+    lead = "Zum Abschluss ein paar Fragen zum Gespräch. Danach siehst du die Auflösung.";
+  }
   $("quiz-title").textContent = `${title}: ${state.module.title}`;
   $("quiz-lead").textContent = lead;
   $("quiz-result").hidden = true;
@@ -147,7 +173,10 @@ function onQuizResult(phase, result) {
   if (phase === "nachher" && state.preScore !== null) {
     box.append(el("p", { class: "muted", textContent: `Vorher: ${state.preScore} von ${result.total}.` }));
   }
-  box.append(el("p", { class: "muted", textContent: "Danke! Du kannst das Fenster jetzt schließen." }));
+  const bye = params.get("direkt") === "1"
+    ? "Danke! Du kannst das Fenster jetzt schließen und in Moodle weitermachen."
+    : "Danke! Du kannst das Fenster jetzt schließen.";
+  box.append(el("p", { class: "muted", textContent: bye }));
   box.hidden = false;
   box.scrollIntoView({ behavior: "smooth" });
 }
@@ -156,7 +185,9 @@ function onQuizResult(phase, result) {
 
 function setStatus(s) {
   $("status").dataset.state = s;
-  $("status-text").textContent = STATUS_TEXT[s] ?? s;
+  const text = STATUS_TEXT[s] ?? s;
+  const name = state.tutor?.name ?? "Tutor";
+  $("status-text").textContent = s === "speaking" ? `${name} ${text}` : s === "initializing" ? `${name} startet …` : text;
 }
 
 function renderObjectives(objectives) {
@@ -235,7 +266,7 @@ async function startSession() {
 
   const { url, token } = await api("/api/session", {
     method: "POST",
-    body: JSON.stringify({ module_id: state.module.id, pilot_id: state.pilotId }),
+    body: JSON.stringify({ module_id: state.module.id, pilot_id: state.pilotId, tutor: state.tutor.id }),
   });
 
   const room = new Room({ adaptiveStream: true, dynacast: true });
@@ -259,7 +290,7 @@ async function startSession() {
   room.on(RoomEvent.Disconnected, () => setStatus("idle"));
 
   room.registerTextStreamHandler("lk.transcription", async (reader, participantInfo) => {
-    const who = participantInfo.identity === room.localParticipant.identity ? "Du" : "Tutor";
+    const who = participantInfo.identity === room.localParticipant.identity ? "Du" : state.tutor.name;
     const key = reader.info.attributes?.["lk.segment_id"] ?? reader.info.id;
     let text = "";
     for await (const chunk of reader) {
@@ -268,15 +299,21 @@ async function startSession() {
     }
   });
 
+  // Vor dem Verbinden setzen: Die ersten Status-Events des Agenten können eintreffen,
+  // während der Browser noch nach dem Mikrofon fragt, und dürfen nicht überschrieben werden.
+  setStatus("initializing");
   await room.connect(url, token);
   await room.startAudio();
   await room.localParticipant.setMicrophoneEnabled(true);
-  setStatus("initializing");
 }
 
 async function endSession() {
   if (state.room) await state.room.disconnect();
   state.room = null;
+}
+
+function afterSession() {
+  startQuiz("nachher");
 }
 
 function initSessionControls() {
@@ -289,12 +326,12 @@ function initSessionControls() {
   });
   $("end").addEventListener("click", async () => {
     await endSession();
-    if (!$("protocol-dialog").open) startQuiz("nachher");
+    if (!$("protocol-dialog").open) afterSession();
   });
   $("protocol-continue").addEventListener("click", async () => {
     $("protocol-dialog").close();
     await endSession();
-    startQuiz("nachher");
+    afterSession();
   });
   $("protocol-download").addEventListener("click", () => {
     const blob = new Blob([state.protocolMarkdown], { type: "text/markdown" });

@@ -65,6 +65,26 @@ python -m tutor.textmode phishing-melden
 
 Tests: `cd backend && pytest`
 
+### Windows ohne Docker, Agent in LiveKit Cloud
+
+So läuft der erste Test mit echten Sprachdiensten (Oktober 2026). Auf Firmenrechnern kann die
+Windows-Anwendungssteuerung die Audio-Bibliothek PyAV blockieren; der Sprach-Agent läuft dann
+nicht lokal, sondern in LiveKit Cloud (Region `eu-central`). Lokal läuft nur der Web-Server.
+
+1. `start-textmode.ps1` ausführen: legt beim ersten Start `.env` aus `.env.example` an und öffnet
+   sie zum Eintragen der Keys. Danach startet der Tutor im Textmodus.
+2. In LiveKit Cloud ein Projekt anlegen und `LIVEKIT_URL` (`wss://…`), `LIVEKIT_API_KEY` und
+   `LIVEKIT_API_SECRET` in `.env` eintragen.
+3. `deploy-cloud.ps1` ausführen: installiert die LiveKit-CLI, baut den Agenten mit
+   `deploy/livekit-cloud/Dockerfile` und lädt ihn mit den Keys aus `.env` als Secrets hoch
+   (`LIVEKIT_*` setzt LiveKit Cloud selbst). Später erneut ausführen, um eine neue Version hochzuladen.
+4. `start-voice.ps1` ausführen: startet den Web-Server und öffnet den Browser. Ohne `wss://`-URL
+   startet es stattdessen alles lokal (LiveKit-Server als Windows-Programm, Agent, Web-Server).
+
+Hört der Tutor nicht zu, im Browser das richtige Mikrofon wählen (Mikrofon-Symbol in der
+Adresszeile). Ob Sprache ankommt, steht im Agent-Log (`lk agent logs`): `user state` und
+`user transcript final` mit der Zeichenzahl, ohne Inhalt.
+
 > Hinweis: Hinter einem HTTP-Proxy ignoriert der Agent beim Verbindungsaufbau zu LiveKit
 > die `NO_PROXY`-Liste. Für einen lokalen LiveKit-Server dann `HTTPS_PROXY` für den
 > Agent-Prozess entfernen.
@@ -93,6 +113,27 @@ Eine YAML-Datei nach dem Muster von `content/modules/phishing-melden.yaml` anleg
 Beispielmodul ist **erfundener Inhalt** und muss vor einem echten Pilot durch eine
 freigegebene SOP ersetzt werden. Beim Laden wird geprüft, dass jede Quizfrage auf ein
 Lernziel verweist und einen gültigen Lösungsindex hat.
+
+Interne Module, die nicht in dieses öffentliche Repository gehören, liegen in
+`content-intern/` (per `.gitignore` ausgeschlossen). Der Tutor lädt sie zusätzlich,
+`deploy-cloud.ps1` lädt sie mit zu LiveKit Cloud hoch.
+
+## Tutor-Stimmen
+
+Die lernende Person wählt zwischen **Lukas** (Cartesia-Stimme aus `CARTESIA_VOICE_ID`) und
+**Luisa** (`CARTESIA_VOICE_ID_LUISA`, Vorgabe „Lea – Breezy Voice“). `GET /api/tutors`
+liefert die Auswahl.
+
+## Moodle (SCORM 1.2)
+
+    python moodle/build_scorm.py content/modules/phishing-melden.yaml --tutor-url https://tutor.example.de
+
+erzeugt `moodle/dist/<modul>_SCORM.zip`: Lernskript mit einem Modul je Lernziel,
+Freischaltung ab 70 % im Quiz des Vormoduls, Punktzahl an Moodle (`cmi.core.score.raw`) und
+am Ende je Tutor ein Knopf, der das Lerngespräch in einem neuen Fenster öffnet
+(`?kennung=M-…&modul=…&tutor=…&direkt=1`). Statt der Moodle-Kennung geht nur ein
+Pseudonym an den Tutor. In Moodle: Arbeitsmaterial → Lernpaket → ZIP hochladen.
+Firmen-CI (`moodle/template/hsl-ci.css`, Logo) wird nur übernommen, wenn sie lokal vorliegt.
 
 ## Stand und Grenzen
 

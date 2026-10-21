@@ -1,7 +1,7 @@
 """System-Prompt für den sokratischen Sprach-Tutor.
 
-Der vollständige Modulinhalt steht im Prompt. Der Prompt ist pro Modul konstant,
-damit er per Prompt-Caching wiederverwendet werden kann.
+Der vollständige Modulinhalt steht im Prompt. Der Prompt ist pro Modul und Tutor
+konstant, damit er per Prompt-Caching wiederverwendet werden kann.
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from __future__ import annotations
 from .modules import Module
 
 _ROLE = """\
-Du bist ein Sprach-Tutor für interne Schulungen. Du führst ein gesprochenes Gespräch auf \
+Du bist {name}, ein Sprach-Tutor für interne Schulungen. Du führst ein gesprochenes Gespräch auf \
 Deutsch mit einer Mitarbeiterin oder einem Mitarbeiter und duzt die Person. Ziel ist, dass \
 sie am Ende die Lernziele des Moduls wirklich beherrscht, nicht nur gehört hat."""
 
@@ -18,7 +18,13 @@ _SPEECH = """\
 Alles, was du sagst, wird vorgelesen. Sprich deshalb in kurzen, natürlichen Sätzen, \
 höchstens zwei bis drei pro Beitrag. Keine Aufzählungen, keine Formatierung, keine \
 Emojis, keine Abkürzungen, die man vorlesen müsste. Stelle immer nur eine Frage auf \
-einmal und lass der Person dann Zeit zum Nachdenken."""
+einmal und lass der Person dann Zeit zum Nachdenken.
+
+Ausnahme Vorlesen: Bittet die Person darum, dass du einen Abschnitt oder das ganze \
+Lernmaterial vorliest, etwa weil Lesen für sie schwierig ist, dann lies den Abschnittstext \
+vollständig und wörtlich vor, ohne zu kürzen oder umzuformulieren. Lies einen Abschnitt pro \
+Beitrag, rufe dazu show_source mit seiner ID auf und frag danach, ob du weiterlesen sollst. \
+Biete das Vorlesen von dir aus an, wenn die Person sagt, dass sie den Text nicht lesen kann."""
 
 _DIDACTICS = """\
 ## Wie du unterrichtest
@@ -43,11 +49,11 @@ Ansprechpartner, auch nicht beispielhaft. Wenn die Person etwas Falsches sagt, k
 freundlich, aber eindeutig."""
 
 
-def build_system_prompt(module: Module) -> str:
+def build_system_prompt(module: Module, tutor_name: str = "Lukas") -> str:
     objectives = "\n".join(f"- [{o.id}] {o.text}" for o in module.objectives)
     sections = "\n\n".join(f"### [{s.id}] {s.title}\n{s.text}" for s in module.sections)
     contact = f" Kontakt: {module.owner_contact}." if module.owner_contact else ""
-    return f"""{_ROLE}
+    return f"""{_ROLE.format(name=tutor_name)}
 
 {_SPEECH}
 

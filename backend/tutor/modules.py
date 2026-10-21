@@ -125,9 +125,11 @@ def load_module(path: Path) -> Module:
     return parse_module(data, source=str(path))
 
 
-def load_modules(directory: Path) -> dict[str, Module]:
+def load_modules(*directories: Path) -> dict[str, Module]:
+    """Lädt alle Module; Ordner, die es nicht gibt (z. B. ``content-intern``), werden übersprungen."""
     modules: dict[str, Module] = {}
-    for path in sorted(directory.glob("*.yaml")):
+    paths = [p for d in directories if d.is_dir() for p in sorted(d.glob("*.yaml"))]
+    for path in paths:
         module = load_module(path)
         if module.id in modules:
             raise ModuleError(f"{path}: Modul-ID '{module.id}' ist doppelt vergeben")

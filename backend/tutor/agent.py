@@ -32,7 +32,7 @@ from livekit.agents import (
 )
 from livekit.plugins import anthropic, cartesia, deepgram, silero
 
-from .config import Settings, claude_request_options, load_settings
+from .config import DEFAULT_TUTOR, Settings, Tutor, claude_request_options, load_settings
 from .modules import Module, load_modules
 from .prompts import build_system_prompt
 from .tools import TOPIC_STATE, TutorSession, tool_specs
@@ -55,11 +55,12 @@ class TutorLLM(anthropic.LLM):
 
 
 class TutorAgent(Agent):
-    def __init__(self, module: Module, session_state: TutorSession, room: rtc.Room) -> None:
+    def __init__(self, module: Module, tutor: Tutor, session_state: TutorSession, room: rtc.Room) -> None:
         self._state = session_state
         self._room = room
+        self._tutor = tutor
         super().__init__(
-            instructions=build_system_prompt(module),
+            instructions=build_system_prompt(module, tutor.name),
             tools=[self._make_tool(spec) for spec in tool_specs(module)],
         )
 
@@ -83,7 +84,7 @@ class TutorAgent(Agent):
 
     async def on_enter(self) -> None:
         self.session.generate_reply(
-            instructions="Begrüße die Person kurz und frag, was sie über das Thema schon weiß."
+            instructions=f"Begrüße die Person kurz, stell dich als {self._tutor.name} vor und frag, was sie über das Thema schon weiß."
         )
 
 
@@ -102,7 +103,7 @@ server = AgentServer(setup_fnc=prewarm)
 @server.rtc_session(agent_name="voice-tutor")
 async def entrypoint(ctx: JobContext) -> None:
     settings = load_settings()
-    modules = load_modules(settings.content_dir)
+    modules = load_modules(settings.content_dir, settings.intern_content_dir)
 
     meta = json.loads(ctx.job.metadata or "{}")
     module = modules.get(meta.get("module_id", ""))
@@ -112,6 +113,7 @@ async def entrypoint(ctx: JobContext) -> None:
         ctx.shutdown(reason="unknown module")
         return
 
+    tutor = settings.tutors.get(meta.get("tutor", DEFAULT_TUTOR), settings.tutors[DEFAULT_TUTOR])
     state = TutorSession(module)
     session = AgentSession(
         vad=ctx.proc.userdata["vad"],
@@ -120,7 +122,7 @@ async def entrypoint(ctx: JobContext) -> None:
         tts=cartesia.TTS(
             model=settings.tts_model,
             language="de",
-            **({"voice": settings.tts_voice} if settings.tts_voice else {}),
+            voice=tutor.voice,
         ),
         turn_handling={
             # Lokales Modell, entscheidet anhand des Satzinhalts, ob die Person fertig ist.
@@ -146,8 +148,19 @@ async def entrypoint(ctx: JobContext) -> None:
         keys = ("e2e_latency", "end_of_turn_delay", "transcription_delay", "llm_node_ttft", "tts_node_ttfb")
         turns.append({"role": item.role, **{k: item.metrics[k] for k in keys if k in item.metrics}})
 
+    # Diagnose ohne Inhalt: nur ob und wie viel Sprache erkannt wurde (kein Transkript im Log).
+    @session.on("user_state_changed")
+    def _on_user_state(ev) -> None:
+        logger.info("user state: %s -> %s", ev.old_state, ev.new_state)
+
+    @session.on("user_input_transcribed")
+    def _on_transcribed(ev) -> None:
+        if ev.is_final:
+            logger.info("user transcript final: %d Zeichen", len(ev.transcript))
+
     @session.on("agent_state_changed")
     def _on_state(ev: AgentStateChangedEvent) -> None:
+        logger.info("agent state: %s -> %s", ev.old_state, ev.new_state)
         asyncio.create_task(publish(ctx.room, TOPIC_STATE, {"status": ev.new_state}))
 
     def _write_session_record() -> None:
@@ -157,6 +170,7 @@ async def entrypoint(ctx: JobContext) -> None:
             "module_id": module.id,
             "module_version": module.version,
             "pilot_id": meta.get("pilot_id"),
+            "tutor": tutor.id,
             "started_at": state.started_at.isoformat(),
             "ended_at": datetime.now().isoformat(),
             "finished": state.finished,
@@ -173,7 +187,7 @@ async def entrypoint(ctx: JobContext) -> None:
 
     await ctx.wait_for_participant()
     # Keine Audioaufzeichnung (PROJECT.md, Abschnitt 6).
-    await session.start(agent=TutorAgent(module, state, ctx.room), room=ctx.room, record=False)
+    await session.start(agent=TutorAgent(module, tutor, state, ctx.room), room=ctx.room, record=False)
 
 
 def main() -> None:
