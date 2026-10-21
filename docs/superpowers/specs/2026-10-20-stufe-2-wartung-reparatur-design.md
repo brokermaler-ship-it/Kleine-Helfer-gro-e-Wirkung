@@ -19,7 +19,7 @@ Stufe 2 wird in vier Teilen umgesetzt; jeder Teil bekommt einen eigenen Umsetzun
 | Teil | Inhalt |
 |---|---|
 | **2a** | Rolle **Fahrzeugwart** · **DSGVO-Löschung** einer Person · **Abstellgleis** für ausgemusterte Fahrzeuge |
-| **2b** | **Einfache Anlagenliste** · Wartungsarten (Startbestand) · Wartungspläne mit Ausnahmen · Wartungsprotokoll · Fälligkeit/Ampel |
+| **2b** | **Kennwort vergessen** · **Einfache Anlagenliste** · Wartungsarten (Startbestand) · Wartungspläne mit Ausnahmen · Wartungsprotokoll · Fälligkeit/Ampel |
 | **2c** | Reparaturen · **Defekt melden** · Hinweise für Fahrzeugwart/Bearbeiter · Feld **„Code“** · Etiketten (Fahrzeug-Klebchen, Anlagen-QR) |
 | **2d** | Funktionstasten aus **PDF** auslesen |
 | **2e** | **Magazin** (Vereinsinventar mit Eingang/Ausgang) und **Modellbahnbörse** (Angebote, Kasse, Abrechnung, öffentlicher Bereich) – eigene Spezifikation `2026-10-20-magazin-modellbahnboerse-design.md` |
@@ -140,6 +140,16 @@ QR-Codes werden serverseitig als SVG erzeugt (Bibliothek per Composer, im Releas
 ## 7. Teil 2d – Funktionstasten aus PDF
 
 Am Decoder kann neben CSV auch ein **PDF** hochgeladen werden. Die App liest den Text aus (Bibliothek per Composer) und erkennt Zeilen der Form `F0 Licht`, `F1 Sound an`, `F2 – Pfiff`, `F 3: Glocke` (F0–F68). Erkannte Tasten erscheinen in derselben **Vorschau wie beim CSV-Import** zum Prüfen und Übernehmen. Enthält das PDF keinen Text (Scan), meldet die App das; OCR ist nicht vorgesehen. Unbekannte Tabellenaufbauten werden teilweise erkannt, der Rest von Hand ergänzt.
+
+## 7a. Kennwort vergessen (Teil 2b, erste Aufgabe)
+
+Entscheidung (Variante C, 21.10.2026): funktioniert **sofort ohne Einrichtung** über eine Anfrage an die Administratoren und **automatisch per E-Mail**, sobald ein Postfach konfiguriert ist.
+
+- Anmeldeseite: Link **„Kennwort vergessen?“** → Formular mit E-Mail-Adresse. Die Antwort ist **immer gleich** („Wenn die Adresse bei uns bekannt ist, …“), unabhängig davon, ob es ein aktives Konto gibt. Begrenzung: höchstens 3 Anfragen je E-Mail-Adresse und 10 je IP-Adresse pro Stunde (IP nur gehasht gespeichert, nach 24 h gelöscht).
+- **Mit E-Mail-Versand** (Konfiguration `mail_smtp_host`, `mail_smtp_port` (Standard 465), `mail_smtp_verschluesselung` (`ssl`/`tls`), `mail_smtp_benutzer`, `mail_smtp_passwort`, `mail_absender`, `mail_absender_name` (Standard „EMC 78 Lokschuppen“)): Die App schickt einen Link `<oeffentliche_url><basis_url>/kennwort/neu?t=<Token>`. Token: 32 Zufallsbytes, in der Datenbank nur als SHA-256-Hash, **gültig 60 Minuten**, **einmal** verwendbar; eine neue Anfrage macht ältere Tokens des Kontos ungültig. Neues Kennwort mit denselben Regeln wie bisher (mindestens 10 Zeichen); danach werden alle Sitzungen des Kontos beendet und das Konto ist angemeldet. Versand über **SMTP mit Anmeldung** (eigene kleine SMTP-Klasse, keine neue Abhängigkeit); scheitert der Versand, wird automatisch auf die Admin-Anfrage zurückgefallen.
+- **Ohne E-Mail-Versand:** Es entsteht eine **Kennwort-Anfrage**; Administratoren sehen oben „N Anfragen auf neues Kennwort“ und unter *Verwaltung › Benutzer* die Anfragen mit Zeitpunkt. Der Admin setzt wie bisher ein Startkennwort (Pflicht zur Änderung bei der nächsten Anmeldung) und gibt es persönlich weiter; die Anfrage wird damit erledigt. Anfragen für unbekannte Adressen werden **nicht** angezeigt (nur gezählt im Protokoll ohne Adresse), damit niemand Fremdadressen einschleusen kann.
+- Testumgebung: Ist kein Postfach eingetragen, zeigt die Testinstanz den Link zusätzlich direkt nach dem Absenden an (nur bei `testumgebung = true`), damit sich der Ablauf ohne E-Mail ausprobieren lässt.
+- Die DSGVO-Löschung entfernt Tokens und Anfragen der Person.
 
 ## 8. Datenmodell (Überblick)
 
