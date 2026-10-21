@@ -7,6 +7,7 @@ namespace Emc\Tests\Unit\Auth;
 use Emc\Auth\Benutzer;
 use Emc\Auth\Berechtigung;
 use Emc\Auth\Rolle;
+use Emc\Core\HttpFehler;
 use PHPUnit\Framework\TestCase;
 
 final class BerechtigungTest extends TestCase
@@ -194,6 +195,57 @@ final class BerechtigungTest extends TestCase
         foreach ([$w, $b, $a] as $x) {
             $this->assertTrue(Berechtigung::darf($x, Berechtigung::ETIKETTEN_DRUCKEN));
         }
+    }
+
+    public function test_boersenwart_unabhaengig_von_rolle(): void
+    {
+        $mit = fn(Rolle $r, bool $haken, int $personId = 10): Benutzer => new Benutzer(1, $personId, 'a@b.de', 'A B', $r, false, 'A', $haken);
+        $mitglied = $mit(Rolle::Mitglied, false);
+        $mitgliedBw = $mit(Rolle::Mitglied, true);
+        $wart = $mit(Rolle::Fahrzeugwart, false);
+        $wartBw = $mit(Rolle::Fahrzeugwart, true);
+        $bearbeiter = $mit(Rolle::Bearbeiter, false);
+        $admin = $mit(Rolle::Admin, false);
+
+        $this->assertFalse((new Benutzer(1, 1, 'a@b.de', 'A B', Rolle::Mitglied, false))->istBoersenwart);
+        $this->assertTrue(Berechtigung::istBoersenwart($mitgliedBw));
+        $this->assertFalse(Berechtigung::istBoersenwart($mitglied));
+        $this->assertFalse(Berechtigung::istBoersenwart($wart));
+        $this->assertTrue(Berechtigung::istBoersenwart($wartBw));
+        $this->assertTrue(Berechtigung::istBoersenwart($bearbeiter));
+        $this->assertTrue(Berechtigung::istBoersenwart($admin));
+        $this->assertFalse(Berechtigung::istBoersenwart(null));
+
+        Berechtigung::verlangeBoersenwart($mitgliedBw);
+        foreach ([$mitglied, $wart, null] as $x) {
+            try {
+                Berechtigung::verlangeBoersenwart($x);
+                $this->fail('HttpFehler 403 erwartet');
+            } catch (HttpFehler $e) {
+                $this->assertSame(403, $e->status);
+            }
+        }
+
+        $this->assertTrue(Berechtigung::darfFahrzeugAnMagazin($wart));
+        $this->assertTrue(Berechtigung::darfFahrzeugAnMagazin($mitgliedBw));
+        $this->assertFalse(Berechtigung::darfFahrzeugAnMagazin($mitglied));
+        $this->assertFalse(Berechtigung::darfFahrzeugAnMagazin(null));
+
+        $eigenes = ['herkunft' => 'mitglied', 'person_id' => 10, 'status' => 'angeboten'];
+        $this->assertTrue(Berechtigung::darfAngebotBearbeiten($mitglied, $eigenes));
+        $this->assertTrue(Berechtigung::darfAngebotBearbeiten($mitglied, ['person_id' => '10'] + $eigenes));
+        $this->assertFalse(Berechtigung::darfAngebotBearbeiten($mitglied, ['status' => 'reserviert'] + $eigenes));
+        $this->assertFalse(Berechtigung::darfAngebotBearbeiten($mitglied, ['person_id' => 11] + $eigenes));
+        $this->assertFalse(Berechtigung::darfAngebotBearbeiten($mitglied, ['herkunft' => 'verein', 'person_id' => null, 'status' => 'angeboten']));
+        $this->assertFalse(Berechtigung::darfAngebotBearbeiten($wart, ['person_id' => 11] + $eigenes));
+        $this->assertTrue(Berechtigung::darfAngebotBearbeiten($mitgliedBw, ['person_id' => 11] + $eigenes));
+        $this->assertTrue(Berechtigung::darfAngebotBearbeiten($bearbeiter, ['herkunft' => 'verein', 'person_id' => null, 'status' => 'reserviert']));
+        $this->assertFalse(Berechtigung::darfAngebotBearbeiten(null, $eigenes));
+
+        $this->assertSame('boerse_wieder_oeffnen', Berechtigung::BOERSE_WIEDER_OEFFNEN);
+        $this->assertTrue(Berechtigung::darf($admin, 'boerse_wieder_oeffnen'));
+        $this->assertFalse(Berechtigung::darf($bearbeiter, 'boerse_wieder_oeffnen'));
+        $this->assertFalse(Berechtigung::darf($wartBw, 'boerse_wieder_oeffnen'));
     }
 
     public function test_unbekannte_aktion_ist_verboten(): void

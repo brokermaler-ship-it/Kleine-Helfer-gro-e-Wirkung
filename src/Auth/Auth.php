@@ -127,7 +127,7 @@ final class Auth
         if ($this->geladenId === $id) {
             return $this->geladen;
         }
-        // b.*: vor Migration 010 fehlt kennwort_stand (gilt dann als 0).
+        // b.*: vor Migration 010 fehlt kennwort_stand (gilt dann als 0), vor 016 ist_boersenwart (gilt dann als 0).
         $st = $this->pdo->prepare(
             'SELECT b.*, p.vorname, p.nachname FROM benutzer b JOIN person p ON p.id = b.person_id WHERE b.id = ? AND b.aktiv = 1'
         );
@@ -148,6 +148,7 @@ final class Auth
             Rolle::from((string) $z['rolle']),
             (int) $z['muss_passwort_aendern'] === 1,
             trim((string) $z['vorname']),
+            (int) ($z['ist_boersenwart'] ?? 0) === 1,
         );
         return $this->geladen;
     }

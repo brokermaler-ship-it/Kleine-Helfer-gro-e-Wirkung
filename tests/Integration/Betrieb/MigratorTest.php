@@ -19,14 +19,14 @@ final class MigratorTest extends DbTestCase
         self::alleTabellenLoeschen($this->pdo);
         $migrator = new Migrator($this->pdo, $this->migrationen());
         $this->assertFalse($migrator->istInstalliert());
-        $this->assertSame(['001_grundgeruest', '002_spurweiten_start', '003_fahrzeug_angelegt_von', '004_onedrive', '005_onedrive_auftrag_sperre', '006_onedrive_sperr_token_index', '007_onedrive_laufwerk', '008_rolle_fahrzeugwart', '009_abstellgleis', '010_kennwort_vergessen', '011_anlage', '012_wartungsart', '013_wartung', '014_reparatur', '015_etikett'], $migrator->ausstehend());
+        $this->assertSame(['001_grundgeruest', '002_spurweiten_start', '003_fahrzeug_angelegt_von', '004_onedrive', '005_onedrive_auftrag_sperre', '006_onedrive_sperr_token_index', '007_onedrive_laufwerk', '008_rolle_fahrzeugwart', '009_abstellgleis', '010_kennwort_vergessen', '011_anlage', '012_wartungsart', '013_wartung', '014_reparatur', '015_etikett', '016_magazin'], $migrator->ausstehend());
     }
 
     public function test_ausfuehren_legt_tabellen_an_und_ist_idempotent(): void
     {
         self::alleTabellenLoeschen($this->pdo);
         $migrator = new Migrator($this->pdo, $this->migrationen());
-        $this->assertSame(['001_grundgeruest', '002_spurweiten_start', '003_fahrzeug_angelegt_von', '004_onedrive', '005_onedrive_auftrag_sperre', '006_onedrive_sperr_token_index', '007_onedrive_laufwerk', '008_rolle_fahrzeugwart', '009_abstellgleis', '010_kennwort_vergessen', '011_anlage', '012_wartungsart', '013_wartung', '014_reparatur', '015_etikett'], $migrator->ausfuehren());
+        $this->assertSame(['001_grundgeruest', '002_spurweiten_start', '003_fahrzeug_angelegt_von', '004_onedrive', '005_onedrive_auftrag_sperre', '006_onedrive_sperr_token_index', '007_onedrive_laufwerk', '008_rolle_fahrzeugwart', '009_abstellgleis', '010_kennwort_vergessen', '011_anlage', '012_wartungsart', '013_wartung', '014_reparatur', '015_etikett', '016_magazin'], $migrator->ausfuehren());
         $this->assertTrue($migrator->istInstalliert());
         $this->assertSame([], $migrator->ausstehend());
         $this->assertSame([], $migrator->ausfuehren());
@@ -156,6 +156,103 @@ final class MigratorTest extends DbTestCase
             rmdir($verz);
             self::alleTabellenLoeschen($this->pdo);
             (new Migrator($this->pdo, $this->migrationen()))->ausfuehren();
+        }
+    }
+
+    /** Migration 016: Börsenwart-Häkchen (bestehende Benutzer ohne) und Magazin mit dem Startbestand der Kategorien. */
+    public function test_migration_016_magazin(): void
+    {
+        self::alleTabellenLoeschen($this->pdo);
+        $verz = sys_get_temp_dir() . '/emc_mig_' . uniqid();
+        mkdir($verz);
+        try {
+            foreach (glob($this->migrationen() . '/0*.sql') as $datei) {
+                if (basename($datei) < '016') {
+                    copy($datei, $verz . '/' . basename($datei));
+                }
+            }
+            $migrator = new Migrator($this->pdo, $verz);
+            $migrator->ausfuehren();
+            $this->legeBenutzerAn('alt@verein.de', 'geheim-passwort-1', 'fahrzeugwart');
+            $this->legeBenutzerAn('chef@verein.de', 'geheim-passwort-1', 'admin');
+            copy($this->migrationen() . '/016_magazin.sql', $verz . '/016_magazin.sql');
+            $this->assertSame(['016_magazin'], $migrator->ausfuehren());
+
+            $this->assertSame(['0', '0'], array_map('strval', $this->pdo->query('SELECT ist_boersenwart FROM benutzer ORDER BY id')->fetchAll(\PDO::FETCH_COLUMN)));
+            $kategorien = $this->pdo->query('SELECT name, schluessel FROM magazin_kategorie ORDER BY sortierung, id')->fetchAll(\PDO::FETCH_NUM);
+            $this->assertSame([
+                ['Gleise und Weichen', null],
+                ['Fahrzeuge', 'fahrzeuge'],
+                ['Elektrik und Digital', null],
+                ['Gebäude und Bausätze', null],
+                ['Landschaft und Figuren', null],
+                ['Ersatzteile', null],
+                ['Werkzeug', null],
+                ['Literatur', 'literatur'],
+                ['Sonstiges', 'sonstiges'],
+            ], $kategorien);
+            foreach (['magazin_kategorie', 'magazin_artikel', 'magazin_sammlung', 'magazin_sammlung_artikel', 'magazin_buchung'] as $tabelle) {
+                $this->assertSame(1, (int) $this->pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = '$tabelle'")->fetchColumn(), $tabelle);
+            }
+        } finally {
+            array_map('unlink', glob($verz . '/*.sql'));
+            rmdir($verz);
+            self::alleTabellenLoeschen($this->pdo);
+            (new Migrator($this->pdo, $this->migrationen()))->ausfuehren();
+        }
+    }
+
+    /** Eindeutigkeiten und Fremdschlüssel aus 016, auf die sich die Dienste verlassen. */
+    public function test_migration_016_regeln(): void
+    {
+        $sonst = (int) $this->pdo->query("SELECT id FROM magazin_kategorie WHERE schluessel = 'sonstiges'")->fetchColumn();
+        $this->assertGreaterThan(0, $sonst, 'Startbestand der Kategorien bleibt zwischen den Tests erhalten');
+        $h0 = (int) $this->pdo->query("SELECT id FROM spurweite WHERE name = 'H0'")->fetchColumn();
+        $this->pdo->prepare('INSERT INTO fahrzeug (inventarnummer, bezeichnung, spurweite_id, status) VALUES (?, ?, ?, ?)')->execute(['EMC-0001', 'Köf', $h0, 'ausgemustert']);
+        $fz = (int) $this->pdo->lastInsertId();
+        $artikel = $this->pdo->prepare('INSERT INTO magazin_artikel (bezeichnung, kategorie_id, fahrzeug_id) VALUES (?, ?, ?)');
+        $artikel->execute(['Köf', $sonst, $fz]);
+        $a1 = (int) $this->pdo->lastInsertId();
+        $artikel->execute(['Gleis', $sonst, null]);
+        $a2 = (int) $this->pdo->lastInsertId();
+        $this->assertSame('gebraucht', $this->pdo->query("SELECT zustand FROM magazin_artikel WHERE id = $a1")->fetchColumn());
+        $this->assertDoppelt(fn() => $artikel->execute(['Köf 2', $sonst, $fz]), 'ein Fahrzeug höchstens einmal im Magazin');
+
+        $this->pdo->exec("INSERT INTO magazin_sammlung (name) VALUES ('Kiste 1'), ('Kiste 2')");
+        $this->pdo->exec("INSERT INTO magazin_sammlung_artikel (sammlung_id, artikel_id) VALUES (1, $a1)");
+        $this->assertDoppelt(fn() => $this->pdo->exec("INSERT INTO magazin_sammlung_artikel (sammlung_id, artikel_id) VALUES (2, $a1)"), 'ein Artikel in höchstens einer Sammlung');
+
+        $buchung = $this->pdo->prepare("INSERT INTO magazin_buchung (artikel_id, art, datum, menge, herkunft, betrag, gegenbuchung_zu_id, erstellt_am) VALUES (?, ?, '2026-10-01', ?, ?, ?, ?, NOW())");
+        $buchung->execute([$a2, 'eingang', 5, 'spende', '12.50', null]);
+        $b1 = (int) $this->pdo->lastInsertId();
+        $buchung->execute([$a2, 'eingang', -5, 'spende', null, $b1]);
+        $this->assertDoppelt(fn() => $buchung->execute([$a2, 'eingang', -5, 'spende', null, $b1]), 'höchstens eine Gegenbuchung je Buchung');
+        $this->assertSame('12.50', $this->pdo->query("SELECT betrag FROM magazin_buchung WHERE id = $b1")->fetchColumn());
+        $this->assertSame(0, (int) $this->pdo->query("SELECT SUM(menge) FROM magazin_buchung WHERE artikel_id = $a2")->fetchColumn());
+
+        try {
+            $this->pdo->exec("DELETE FROM magazin_artikel WHERE id = $a2");
+            $this->fail('Artikel mit Buchungen darf nicht gelöscht werden');
+        } catch (\PDOException $e) {
+            $this->assertSame('23000', $e->getCode());
+        }
+        try {
+            $this->pdo->exec("DELETE FROM magazin_kategorie WHERE id = $sonst");
+            $this->fail('benutzte Kategorie darf nicht gelöscht werden');
+        } catch (\PDOException $e) {
+            $this->assertSame('23000', $e->getCode());
+        }
+        $this->pdo->exec("DELETE FROM fahrzeug WHERE id = $fz");
+        $this->assertNull($this->pdo->query("SELECT fahrzeug_id FROM magazin_artikel WHERE id = $a1")->fetchColumn());
+    }
+
+    private function assertDoppelt(callable $aktion, string $grund): void
+    {
+        try {
+            $aktion();
+            $this->fail($grund);
+        } catch (\PDOException $e) {
+            $this->assertSame('23000', $e->getCode(), $grund);
         }
     }
 

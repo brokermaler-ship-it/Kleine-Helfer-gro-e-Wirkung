@@ -14,12 +14,15 @@ abstract class DbTestCase extends TestCase
 {
     protected \PDO $pdo;
 
+    /** Tabellen mit Startbestand aus den Migrationen, der nach dem Leeren je Test wiederhergestellt wird. */
+    private const STARTBESTAND_TABELLEN = ['wartungsart', 'magazin_kategorie'];
+
     /**
-     * Zeilen der Tabelle wartungsart direkt nach dem Migrieren (Startbestand aller Migrationen).
+     * Zeilen der Tabellen mit Startbestand direkt nach dem Migrieren (Startbestand aller Migrationen), je Tabelle.
      *
-     * @var list<array<string,mixed>>
+     * @var array<string, list<array<string,mixed>>>
      */
-    private static array $wartungsartBestand = [];
+    private static array $startbestand = [];
 
     public static function verbindung(): \PDO
     {
@@ -78,7 +81,9 @@ abstract class DbTestCase extends TestCase
         $pdo = self::verbindung();
         self::alleTabellenLoeschen($pdo);
         (new Migrator($pdo, dirname(__DIR__, 2) . '/migrations'))->ausfuehren();
-        self::$wartungsartBestand = $pdo->query('SELECT * FROM wartungsart ORDER BY id')->fetchAll(\PDO::FETCH_ASSOC);
+        foreach (self::STARTBESTAND_TABELLEN as $tabelle) {
+            self::$startbestand[$tabelle] = $pdo->query("SELECT * FROM `$tabelle` ORDER BY id")->fetchAll(\PDO::FETCH_ASSOC);
+        }
     }
 
     protected function setUp(): void
@@ -92,26 +97,30 @@ abstract class DbTestCase extends TestCase
             }
         }
         $this->pdo->exec('SET FOREIGN_KEY_CHECKS=1');
-        if (in_array('wartungsart', $tabellen, true)) {
-            self::startbestandWartungsarten($this->pdo);
+        foreach (self::STARTBESTAND_TABELLEN as $tabelle) {
+            if (in_array($tabelle, $tabellen, true)) {
+                self::startbestandWiederherstellen($this->pdo, $tabelle);
+            }
         }
     }
 
     /**
-     * Stellt den Startbestand der Wartungsarten wieder her, wie er nach dem Migrieren in setUpBeforeClass() war (die
-     * Tabelle wird wie alle anderen geleert, damit Änderungen eines Tests nicht in den nächsten durchschlagen). So folgt
-     * die Testdatenbank jeder Migration, die den Startbestand ändert, ohne die SQL-Dateien selbst auszuwerten.
+     * Stellt den Startbestand einer Tabelle (Wartungsarten, Magazin-Kategorien) wieder her, wie er nach dem Migrieren in
+     * setUpBeforeClass() war (die Tabelle wird wie alle anderen geleert, damit Änderungen eines Tests nicht in den
+     * nächsten durchschlagen). So folgt die Testdatenbank jeder Migration, die den Startbestand ändert, ohne die
+     * SQL-Dateien selbst auszuwerten.
      */
-    protected static function startbestandWartungsarten(\PDO $pdo): void
+    protected static function startbestandWiederherstellen(\PDO $pdo, string $tabelle): void
     {
-        if (self::$wartungsartBestand === []) {
+        $zeilen = self::$startbestand[$tabelle] ?? [];
+        if ($zeilen === []) {
             return;
         }
-        $spalten = array_keys(self::$wartungsartBestand[0]);
+        $spalten = array_keys($zeilen[0]);
         $st = $pdo->prepare(
-            'INSERT INTO wartungsart (`' . implode('`, `', $spalten) . '`) VALUES (' . implode(', ', array_fill(0, count($spalten), '?')) . ')'
+            "INSERT INTO `$tabelle` (`" . implode('`, `', $spalten) . '`) VALUES (' . implode(', ', array_fill(0, count($spalten), '?')) . ')'
         );
-        foreach (self::$wartungsartBestand as $zeile) {
+        foreach ($zeilen as $zeile) {
             $st->execute(array_values($zeile));
         }
     }

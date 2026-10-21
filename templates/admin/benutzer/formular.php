@@ -16,6 +16,13 @@ $rollenAuswahl = function () use ($rollen, $werte, $ungueltig, $meldung): void {
         </select>
         <?php $meldung('rolle'); ?>
     </div>
+<?php };
+$boersenwartFeld = function () use ($werte): void { ?>
+    <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" id="ist_boersenwart" name="ist_boersenwart" value="1"<?= !empty($werte['ist_boersenwart']) ? ' checked' : '' ?> aria-describedby="ist_boersenwart_hilfe">
+        <label class="form-check-label" for="ist_boersenwart">Börsenwart (Magazin und Modellbahnbörse)</label>
+        <div class="form-text" id="ist_boersenwart_hilfe">Zusatzaufgabe, unabhängig von der Rolle. Bearbeiter und Administratoren dürfen das ohnehin.</div>
+    </div>
 <?php }; ?>
 <div class="row">
     <div class="col-lg-6">
@@ -41,6 +48,7 @@ $rollenAuswahl = function () use ($rollen, $werte, $ungueltig, $meldung): void {
                     <?php $meldung('email'); ?>
                 </div>
                 <?php $rollenAuswahl(); ?>
+                <?php $boersenwartFeld(); ?>
                 <div class="mb-3">
                     <label for="passwort" class="form-label">Startpasswort (mindestens 10 Zeichen)</label>
                     <input type="text" class="form-control<?= $ungueltig('passwort') ?>" id="passwort" name="passwort" autocomplete="off" required>
@@ -55,6 +63,7 @@ $rollenAuswahl = function () use ($rollen, $werte, $ungueltig, $meldung): void {
             <form method="post" action="<?= e(url('/admin/benutzer/' . $benutzerEintrag['id'])) ?>">
                 <?php include dirname(__DIR__, 2) . '/partials/csrf.php'; ?>
                 <?php $rollenAuswahl(); ?>
+                <?php $boersenwartFeld(); ?>
                 <div class="form-check mb-3">
                     <input class="form-check-input" type="checkbox" id="aktiv" name="aktiv" value="1"<?= !empty($werte['aktiv']) ? ' checked' : '' ?>>
                     <label class="form-check-label" for="aktiv">Zugang aktiv</label>

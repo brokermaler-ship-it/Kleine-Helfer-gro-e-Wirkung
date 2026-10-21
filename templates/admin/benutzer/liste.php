@@ -35,7 +35,7 @@
             <tr>
                 <td><?= e($b['nachname'] . ', ' . $b['vorname']) ?></td>
                 <td><?= e($b['email']) ?></td>
-                <td><?= e(\Emc\Auth\Rolle::tryFrom((string) $b['rolle'])?->label() ?? (string) $b['rolle']) ?></td>
+                <td><?= e(\Emc\Auth\Rolle::tryFrom((string) $b['rolle'])?->label() ?? (string) $b['rolle']) ?><?php if ((int) ($b['ist_boersenwart'] ?? 0) === 1): ?> <span class="badge text-bg-info">Börsenwart</span><?php endif; ?></td>
                 <td>
                     <?= (int) $b['aktiv'] === 1 ? 'aktiv' : 'deaktiviert' ?>
                     <?php if ((int) $b['muss_passwort_aendern'] === 1): ?><span class="badge text-bg-warning">Passwort offen</span><?php endif; ?>

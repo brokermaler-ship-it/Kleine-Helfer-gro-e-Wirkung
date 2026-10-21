@@ -19,25 +19,49 @@ final class BenutzerRepository
     /** @return list<array<string,mixed>> ohne Passwort-Hash */
     public function alle(): array
     {
-        return $this->pdo->query(
-            'SELECT b.id, b.person_id, b.email, b.rolle, b.aktiv, b.muss_passwort_aendern, b.letzter_login, p.vorname, p.nachname '
-            . 'FROM benutzer b JOIN person p ON p.id = b.person_id ORDER BY p.nachname, p.vorname, b.id'
-        )->fetchAll(\PDO::FETCH_ASSOC);
+        return $this->vorUndNach016(
+            fn(string $haken) => $this->pdo->query(self::auswahl($haken) . ' ORDER BY p.nachname, p.vorname, b.id')->fetchAll(\PDO::FETCH_ASSOC)
+        );
     }
 
     /** @return ?array<string,mixed> ohne Passwort-Hash */
     public function finde(int $id): ?array
     {
-        $st = $this->pdo->prepare(
-            'SELECT b.id, b.person_id, b.email, b.rolle, b.aktiv, b.muss_passwort_aendern, b.letzter_login, p.vorname, p.nachname '
-            . 'FROM benutzer b JOIN person p ON p.id = b.person_id WHERE b.id = ?'
-        );
-        $st->execute([$id]);
-        $z = $st->fetch(\PDO::FETCH_ASSOC);
+        $z = $this->vorUndNach016(function (string $haken) use ($id): array|false {
+            $st = $this->pdo->prepare(self::auswahl($haken) . ' WHERE b.id = ?');
+            $st->execute([$id]);
+            return $st->fetch(\PDO::FETCH_ASSOC);
+        });
         return $z === false ? null : $z;
     }
 
-    public function anlegen(int $personId, string $email, Rolle $rolle, string $startPasswort): int
+    private static function auswahl(string $haken): string
+    {
+        return 'SELECT b.id, b.person_id, b.email, b.rolle, b.aktiv, b.muss_passwort_aendern, b.letzter_login, '
+            . $haken . ' AS ist_boersenwart, p.vorname, p.nachname FROM benutzer b JOIN person p ON p.id = b.person_id';
+    }
+
+    /**
+     * Vor dem Datenbank-Update auf 016 fehlt die Spalte ist_boersenwart; die Benutzerverwaltung lässt sich trotzdem
+     * lesen (das Häkchen gilt dann als nicht gesetzt). Speichern lässt App::handle vor dem Update ohnehin nicht zu.
+     *
+     * @template T
+     * @param callable(string): T $aktion bekommt den SQL-Ausdruck für das Häkchen (Spalte bzw. 0)
+     * @return T
+     */
+    private function vorUndNach016(callable $aktion): mixed
+    {
+        try {
+            return $aktion('b.ist_boersenwart');
+        } catch (\PDOException $e) {
+            if ($e->getCode() !== '42S22' || !str_contains($e->getMessage(), 'ist_boersenwart')) {
+                throw $e;
+            }
+            return $aktion('0');
+        }
+    }
+
+    public function anlegen(int $personId, string $email, Rolle $rolle, string $startPasswort, bool $istBoersenwart = false): int
     {
         $email = mb_strtolower(trim($email));
         if (filter_var($email, FILTER_VALIDATE_EMAIL) === false || mb_strlen($email) > 190) {
@@ -55,8 +79,8 @@ final class BenutzerRepository
         }
         try {
             $this->pdo->prepare(
-                'INSERT INTO benutzer (person_id, email, passwort_hash, rolle, aktiv, muss_passwort_aendern) VALUES (?, ?, ?, ?, 1, 1)'
-            )->execute([$personId, $email, password_hash($startPasswort, PASSWORD_DEFAULT), $rolle->value]);
+                'INSERT INTO benutzer (person_id, email, passwort_hash, rolle, aktiv, muss_passwort_aendern, ist_boersenwart) VALUES (?, ?, ?, ?, 1, 1, ?)'
+            )->execute([$personId, $email, password_hash($startPasswort, PASSWORD_DEFAULT), $rolle->value, $istBoersenwart ? 1 : 0]);
         } catch (\PDOException $e) {
             if ($e->getCode() === '23000') {
                 throw new DomainFehler('Diese E-Mail-Adresse ist bereits vergeben oder die Person hat schon einen Zugang.');
@@ -66,14 +90,14 @@ final class BenutzerRepository
         return (int) $this->pdo->lastInsertId();
     }
 
-    public function aendern(int $id, Rolle $rolle, bool $aktiv): void
+    public function aendern(int $id, Rolle $rolle, bool $aktiv, bool $istBoersenwart = false): void
     {
-        $this->imAdminSchutz(function () use ($id, $rolle, $aktiv): void {
+        $this->imAdminSchutz(function () use ($id, $rolle, $aktiv, $istBoersenwart): void {
             if ($rolle !== Rolle::Admin || !$aktiv) {
                 $this->sichereAnderenAdmin($id);
             }
-            $this->pdo->prepare('UPDATE benutzer SET rolle = ?, aktiv = ? WHERE id = ?')
-                ->execute([$rolle->value, $aktiv ? 1 : 0, $id]);
+            $this->pdo->prepare('UPDATE benutzer SET rolle = ?, aktiv = ?, ist_boersenwart = ? WHERE id = ?')
+                ->execute([$rolle->value, $aktiv ? 1 : 0, $istBoersenwart ? 1 : 0, $id]);
         });
     }
 

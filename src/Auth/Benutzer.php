@@ -14,6 +14,8 @@ final class Benutzer
         public readonly Rolle $rolle,
         public readonly bool $mussPasswortAendern,
         public readonly string $vorname = '',
+        /** Zusatzaufgabe Börsenwart (Häkchen am Konto), unabhängig von der Rolle; siehe Berechtigung::istBoersenwart. */
+        public readonly bool $istBoersenwart = false,
     ) {
     }
 
