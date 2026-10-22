@@ -1,0 +1,24 @@
+EMC 78 Lokschuppen – Paket für die STRATO-Installation (Version 0.8.3)
+
+Inhalt:
+1. EMC78-Lokschuppen-Integrationsanleitung-STRATO.pdf
+2. emc78-verwaltung-0.8.3.zip  (Installationspaket)
+3. config-testumgebung.php     (unverändert, keine neuen Einträge)
+
+UPDATE:
+1. Als Administrator Verwaltung › Sicherung herunterladen.
+2. Neues ZIP über die bestehenden Dateien laden
+   (config.php und storage/ NICHT löschen).
+3. Als Administrator Verwaltung › Update ausführen.
+   Von 0.8.1 aus: keine neue Migration, der Schritt schadet aber nicht.
+   Von 0.8.0 aus: Migration 020 wird ausgeführt.
+
+Neu in 0.8.3:
+- Korrektur „Zugang anlegen“: War keine Person ohne Zugang vorhanden,
+  blieb die Personenauswahl leer. Jetzt gibt es „+ Neue Person anlegen“
+  (Vor- und Nachname direkt im Formular).
+Enthält außerdem alles aus 0.8.1 (Fahrzeug-Import, Kennzeichen „ungeprüft“).
+- Smartphone: manifest.webmanifest wird mit korrektem Dateityp ausgeliefert,
+  public/.htaccess setzt Sicherheits-Header (mod_headers, bei STRATO aktiv).
+  Kontrolle nach dem Hochladen: https://mitglieder.emc78.de/manifest.webmanifest
+  muss den Typ application/manifest+json haben (Browser-Entwicklertools).
