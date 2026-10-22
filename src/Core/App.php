@@ -241,7 +241,8 @@ final class App
             $c->get(Aenderungsprotokoll::class),
             $c->get(Auth::class),
             $c->get('session'),
-            $c->get(KennwortVergessen::class)
+            $c->get(KennwortVergessen::class),
+            $c->get('pdo')
         ));
         $this->container->set(DsgvoLoeschung::class, fn(Container $c) => new DsgvoLoeschung(
             $c->get('pdo'),

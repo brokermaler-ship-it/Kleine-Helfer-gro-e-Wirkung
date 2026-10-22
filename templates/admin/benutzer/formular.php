@@ -31,16 +31,33 @@ $boersenwartFeld = function () use ($werte): void { ?>
         <?php if ($neu): ?>
             <form method="post" action="<?= e(url('/admin/benutzer')) ?>">
                 <?php include dirname(__DIR__, 2) . '/partials/csrf.php'; ?>
+                <?php $istNeu = (string) ($werte['person_id'] ?? '') === \Emc\Personen\BenutzerController::NEUE_PERSON; ?>
                 <div class="mb-3">
                     <label for="person_id" class="form-label">Person</label>
-                    <select class="form-select<?= $ungueltig('person_id') ?>" id="person_id" name="person_id" required>
+                    <select class="form-select<?= $ungueltig('person_id') ?>" id="person_id" name="person_id" required data-neue-person>
                         <option value="">– bitte wählen –</option>
+                        <option value="<?= e(\Emc\Personen\BenutzerController::NEUE_PERSON) ?>"<?= $istNeu ? ' selected' : '' ?>>+ Neue Person anlegen</option>
                         <?php foreach ($personen as $p): ?>
                             <option value="<?= e((string) $p['id']) ?>"<?= (string) ($werte['person_id'] ?? '') === (string) $p['id'] ? ' selected' : '' ?>><?= e($p['nachname'] . ', ' . $p['vorname']) ?></option>
                         <?php endforeach; ?>
                     </select>
                     <?php $meldung('person_id'); ?>
-                    <div class="form-text">Nur Personen ohne Zugang. Neue Personen zuerst unter „Personen“ anlegen.</div>
+                    <div class="form-text"><?= $personen === [] ? 'Alle vorhandenen Personen haben schon einen Zugang. Lege die Person hier gleich mit an.' : 'Vorhandene Person ohne Zugang wählen oder hier eine neue Person anlegen.' ?></div>
+                </div>
+                <div id="neue-person"<?= $istNeu ? '' : ' hidden' ?>>
+                    <div class="row g-2 mb-3">
+                        <div class="col-sm-6">
+                            <label for="neu_vorname" class="form-label">Vorname</label>
+                            <input type="text" class="form-control<?= $ungueltig('neu_vorname') ?>" id="neu_vorname" name="neu_vorname" maxlength="100" value="<?= e((string) ($werte['neu_vorname'] ?? '')) ?>" autocomplete="off">
+                            <?php $meldung('neu_vorname'); ?>
+                        </div>
+                        <div class="col-sm-6">
+                            <label for="neu_nachname" class="form-label">Nachname</label>
+                            <input type="text" class="form-control<?= $ungueltig('neu_nachname') ?>" id="neu_nachname" name="neu_nachname" maxlength="100" value="<?= e((string) ($werte['neu_nachname'] ?? '')) ?>" autocomplete="off">
+                            <?php $meldung('neu_nachname'); ?>
+                        </div>
+                    </div>
+                    <p class="form-text mt-n2 mb-3">Weitere Angaben (Telefon, Notiz) später unter „Personen“ ergänzen.</p>
                 </div>
                 <div class="mb-3">
                     <label for="email" class="form-label">E-Mail (Benutzername)</label>

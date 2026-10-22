@@ -3,6 +3,14 @@
     'use strict';
 
     // Spurweite o. Ä. automatisch absenden
+    // Zugang anlegen: Felder für eine neue Person nur bei „+ Neue Person anlegen“ zeigen.
+    document.querySelectorAll('select[data-neue-person]').forEach(function (sel) {
+        var felder = document.getElementById('neue-person');
+        if (!felder) { return; }
+        var zeige = function () { felder.hidden = sel.value !== 'neu'; };
+        sel.addEventListener('change', zeige);
+        zeige();
+    });
     document.querySelectorAll('select[data-auto-submit]').forEach(function (sel) {
         sel.addEventListener('change', function () {
             if (sel.form) { sel.form.submit(); }

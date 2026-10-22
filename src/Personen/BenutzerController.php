@@ -12,11 +12,15 @@ use Emc\Core\HttpFehler;
 use Emc\Core\Request;
 use Emc\Core\Response;
 use Emc\Core\Session;
+use Emc\Core\Transaktion;
 use Emc\Core\View;
 use Emc\Protokoll\Aenderungsprotokoll;
 
 final class BenutzerController
 {
+    /** Wert der Personenauswahl für „Neue Person anlegen“. */
+    public const NEUE_PERSON = 'neu';
+
     public function __construct(
         private View $view,
         private BenutzerRepository $benutzer,
@@ -25,6 +29,7 @@ final class BenutzerController
         private Auth $auth,
         private Session $session,
         private KennwortVergessen $kennwort,
+        private \PDO $pdo,
     ) {
     }
 
@@ -78,23 +83,50 @@ final class BenutzerController
     {
         $werte = [
             'person_id' => (string) $r->post('person_id', ''),
+            'neu_vorname' => trim((string) $r->post('neu_vorname', '')),
+            'neu_nachname' => trim((string) $r->post('neu_nachname', '')),
             'email' => trim((string) $r->post('email', '')),
             'rolle' => (string) $r->post('rolle', 'mitglied'),
             'ist_boersenwart' => self::haekchen($r) ? 1 : 0,
         ];
         $passwort = (string) $r->post('passwort', '');
         $fehler = [];
-        $person = ctype_digit($werte['person_id']) ? $this->personen->finde((int) $werte['person_id']) : null;
-        if ($person === null) {
-            $fehler['person_id'] = 'Bitte wähle eine Person aus.';
+        $neuePerson = $werte['person_id'] === self::NEUE_PERSON;
+        $person = null;
+        if ($neuePerson) {
+            foreach (['neu_vorname' => 'Vornamen', 'neu_nachname' => 'Nachnamen'] as $feld => $wort) {
+                if ($werte[$feld] === '') {
+                    $fehler[$feld] = 'Bitte gib einen ' . $wort . ' an.';
+                } elseif (mb_strlen($werte[$feld]) > 100) {
+                    $fehler[$feld] = 'Bitte höchstens 100 Zeichen.';
+                }
+            }
+        } else {
+            $person = ctype_digit($werte['person_id']) ? $this->personen->finde((int) $werte['person_id']) : null;
+            if ($person === null) {
+                $fehler['person_id'] = 'Bitte wähle eine Person aus.';
+            }
         }
         $rolle = Rolle::tryFrom($werte['rolle']);
         if ($rolle === null) {
             $fehler['rolle'] = 'Bitte wähle eine Rolle aus.';
         }
+        $personDaten = null;
         if ($fehler === []) {
             try {
-                $id = $this->benutzer->anlegen((int) $person['id'], $werte['email'], $rolle, $passwort, $werte['ist_boersenwart'] === 1);
+                // Neue Person und Zugang gemeinsam: scheitert der Zugang (z. B. E-Mail vergeben), bleibt keine Person zurück.
+                [$personId, $id, $personDaten] = Transaktion::readCommitted($this->pdo, function () use ($neuePerson, $person, $werte, $rolle, $passwort): array {
+                    $daten = null;
+                    if ($neuePerson) {
+                        $daten = ['vorname' => $werte['neu_vorname'], 'nachname' => $werte['neu_nachname'],
+                            'email' => mb_strtolower($werte['email']), 'aktiv' => 1];
+                        $personId = $this->personen->speichern($daten);
+                    } else {
+                        $personId = (int) $person['id'];
+                    }
+                    $id = $this->benutzer->anlegen($personId, $werte['email'], $rolle, $passwort, $werte['ist_boersenwart'] === 1);
+                    return [$personId, $id, $daten];
+                });
             } catch (DomainFehler $e) {
                 $fehler[$this->feldFuer($e->getMessage())] = $e->getMessage();
             }
@@ -102,12 +134,16 @@ final class BenutzerController
         if ($fehler !== []) {
             return $this->formularNeu($werte, $fehler, 422);
         }
-        $this->protokoll->schreibe($this->auth->benutzer()?->id, 'benutzer', $id, 'angelegt', [
+        $adminId = $this->auth->benutzer()?->id;
+        if ($personDaten !== null) {
+            $this->protokoll->schreibe($adminId, 'person', $personId, 'angelegt', Aenderungsprotokoll::diff([], $personDaten));
+        }
+        $this->protokoll->schreibe($adminId, 'benutzer', $id, 'angelegt', [
             'email' => ['alt' => null, 'neu' => mb_strtolower($werte['email'])],
             'rolle' => ['alt' => null, 'neu' => $rolle->value],
             'aktiv' => ['alt' => null, 'neu' => 1],
             'ist_boersenwart' => ['alt' => null, 'neu' => $werte['ist_boersenwart']],
-            'person_id' => ['alt' => null, 'neu' => (int) $person['id']],
+            'person_id' => ['alt' => null, 'neu' => $personId],
         ]);
         $this->session->meldung('erfolg', 'Der Zugang wurde angelegt. Das Startpasswort muss beim ersten Anmelden geändert werden.');
         return Response::redirect(url('/admin/benutzer'));
@@ -215,6 +251,9 @@ final class BenutzerController
     {
         $vergeben = array_column($this->benutzer->alle(), 'person_id');
         $frei = array_values(array_filter($this->personen->alle(), fn(array $p): bool => !in_array($p['id'], $vergeben, false)));
+        if ($frei === [] && ($werte['person_id'] ?? '') === '') {
+            $werte['person_id'] = self::NEUE_PERSON; // keine freie Person: gleich eine neue anlegen
+        }
         return $this->html('admin/benutzer/formular', [
             'titel' => 'Zugang anlegen',
             'benutzerEintrag' => null,

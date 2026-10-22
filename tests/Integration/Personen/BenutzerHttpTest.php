@@ -84,6 +84,65 @@ final class BenutzerHttpTest extends DbTestCase
         $this->assertSame(['ist_boersenwart' => ['alt' => 1, 'neu' => 0]], json_decode($aenderungen, true));
     }
 
+    /** Ohne freie Person: das Formular bietet „Neue Person anlegen“ an und legt Person und Zugang zusammen an. */
+    public function test_zugang_mit_neuer_person(): void
+    {
+        $this->anmelden('admin', 'admin@verein.de');
+        $formular = $this->get('/admin/benutzer/neu');
+        $this->assertSame(200, $formular->status);
+        $this->assertMatchesRegularExpression('/<option value="neu"\s+selected>/', $formular->body);
+        $this->assertStringContainsString('name="neu_vorname"', $formular->body);
+        $this->assertStringNotContainsString('id="neue-person" hidden', $formular->body);
+
+        $antwort = $this->post('/admin/benutzer', ['person_id' => 'neu', 'neu_vorname' => ' Dora ', 'neu_nachname' => 'Fink',
+            'email' => 'Dora@Verein.de', 'rolle' => 'bearbeiter', 'passwort' => 'start-passwort-1']);
+        $this->assertSame(303, $antwort->status);
+        $person = $this->pdo->query("SELECT * FROM person WHERE nachname = 'Fink'")->fetch(\PDO::FETCH_ASSOC);
+        $this->assertSame('Dora', $person['vorname']);
+        $this->assertSame('dora@verein.de', $person['email']);
+        $this->assertSame(1, (int) $person['aktiv']);
+        $benutzer = $this->pdo->query("SELECT * FROM benutzer WHERE email = 'dora@verein.de'")->fetch(\PDO::FETCH_ASSOC);
+        $this->assertSame((int) $person['id'], (int) $benutzer['person_id']);
+        $this->assertSame('bearbeiter', $benutzer['rolle']);
+        $pid = (int) $person['id'];
+        $this->assertSame(1, (int) $this->pdo->query("SELECT COUNT(*) FROM aenderungsprotokoll WHERE objekt_typ = 'person' AND objekt_id = $pid AND aktion = 'angelegt'")->fetchColumn());
+    }
+
+    public function test_neue_person_pflichtfelder_und_kein_halber_datensatz(): void
+    {
+        $this->anmelden('admin', 'admin@verein.de');
+        $ohneName = $this->post('/admin/benutzer', ['person_id' => 'neu', 'neu_vorname' => '', 'neu_nachname' => '',
+            'email' => 'e@verein.de', 'rolle' => 'mitglied', 'passwort' => 'start-passwort-1']);
+        $this->assertSame(422, $ohneName->status);
+        $this->assertStringContainsString('Bitte gib einen Vornamen an.', $ohneName->body);
+        $this->assertStringContainsString('Bitte gib einen Nachnamen an.', $ohneName->body);
+
+        // E-Mail schon vergeben: die neue Person wird nicht angelegt (eine Transaktion), Eingaben bleiben stehen.
+        $vorher = (int) $this->pdo->query('SELECT COUNT(*) FROM person')->fetchColumn();
+        $doppelt = $this->post('/admin/benutzer', ['person_id' => 'neu', 'neu_vorname' => 'Emil', 'neu_nachname' => 'Gans',
+            'email' => 'admin@verein.de', 'rolle' => 'mitglied', 'passwort' => 'start-passwort-1']);
+        $this->assertSame(422, $doppelt->status);
+        $this->assertStringContainsString('bereits vergeben', $doppelt->body);
+        $this->assertStringContainsString('value="Emil"', $doppelt->body);
+        $this->assertSame($vorher, (int) $this->pdo->query('SELECT COUNT(*) FROM person')->fetchColumn());
+
+        // Zu kurzes Passwort: ebenfalls keine Person.
+        $kurz = $this->post('/admin/benutzer', ['person_id' => 'neu', 'neu_vorname' => 'Emil', 'neu_nachname' => 'Gans',
+            'email' => 'emil@verein.de', 'rolle' => 'mitglied', 'passwort' => 'kurz']);
+        $this->assertSame(422, $kurz->status);
+        $this->assertSame($vorher, (int) $this->pdo->query('SELECT COUNT(*) FROM person')->fetchColumn());
+    }
+
+    public function test_mit_freien_personen_ist_neu_nicht_vorausgewaehlt(): void
+    {
+        $this->anmelden('admin', 'admin@verein.de');
+        $this->pdo->exec("INSERT INTO person (vorname, nachname) VALUES ('Hans', 'Igel')");
+        $body = $this->get('/admin/benutzer/neu')->body;
+        $this->assertStringContainsString('Igel, Hans', $body);
+        $this->assertMatchesRegularExpression('/<option value="neu">/', $body);
+        $this->assertStringContainsString('id="neue-person" hidden', $body);
+    }
+
     public function test_boersenwart_beim_anlegen(): void
     {
         $this->anmelden('admin', 'admin@verein.de');
