@@ -71,6 +71,7 @@ final class LayoutPwaTest extends TestCase
         $this->assertSame('./', $m['scope']);
         $this->assertSame('standalone', $m['display']);
         $this->assertSame('de', $m['lang']);
+        $this->assertSame('./', $m['id']);
         $groessen = array_column($m['icons'], 'sizes');
         $this->assertContains('192x192', $groessen);
         $this->assertContains('512x512', $groessen);
@@ -80,5 +81,18 @@ final class LayoutPwaTest extends TestCase
         foreach ($m['icons'] as $icon) {
             $this->assertFileExists(dirname(__DIR__, 3) . '/public/' . $icon['src']);
         }
+    }
+
+    /** Android/Chrome erwartet die App-Beschreibung mit Dateityp; dazu Sicherheits-Header für alle Antworten. */
+    public function test_htaccess_liefert_manifest_typ_und_sicherheits_header(): void
+    {
+        $h = (string) file_get_contents(dirname(__DIR__, 3) . '/public/.htaccess');
+        $this->assertStringContainsString('AddType application/manifest+json .webmanifest', $h);
+        $this->assertStringContainsString('<IfModule mod_headers.c>', $h);
+        $this->assertStringContainsString('X-Content-Type-Options "nosniff"', $h);
+        $this->assertStringContainsString('Referrer-Policy "same-origin"', $h);
+        $this->assertStringContainsString("Strict-Transport-Security \"max-age=31536000\" \"expr=%{HTTPS} == 'on'\"", $h);
+        // Fotos werden per Dateiauswahl/Kamera-App hochgeladen: die Kamera darf nicht gesperrt werden.
+        $this->assertStringNotContainsString('camera=()', $h);
     }
 }

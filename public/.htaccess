@@ -3,3 +3,14 @@ DirectoryIndex index.php
 RewriteEngine On
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule ^ index.php [L]
+
+# App-Beschreibung für „Zum Startbildschirm hinzufügen“ mit korrektem Dateityp ausliefern
+AddType application/manifest+json .webmanifest
+
+# Sicherheits-Header für alle Antworten (sofern mod_headers verfügbar ist)
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Referrer-Policy "same-origin"
+    Header always set Permissions-Policy "geolocation=(), microphone=(), payment=(), usb=()"
+    Header always set Strict-Transport-Security "max-age=31536000" "expr=%{HTTPS} == 'on'"
+</IfModule>
