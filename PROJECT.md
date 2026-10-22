@@ -205,7 +205,7 @@ Prototyp  ──>  Echter Test  ──>  Freigaben  ──>  Pilot (20–30 Pers
 
 ### Phase 2: Freigaben und Inhalte (parallel zu Phase 1, 3–6 Wochen)
 
-*   **Betriebsrat:** Betriebsvereinbarung oder Regelungsabrede zu Wissenscheck, Lernprotokoll und Latenzdaten (§ 87 Abs. 1 Nr. 6 BetrVG). Ohne sie kein Pilot.
+*   **Betriebsrat:** Unterrichtung (§ 80 Abs. 2, § 90 Abs. 1 Nr. 3 BetrVG) und Betriebsvereinbarung zu Wissenscheck, Lernprotokoll und Sitzungsdaten (§ 87 Abs. 1 Nr. 6, § 98 BetrVG). Ohne sie kein Pilot. Entwürfe: [`docs/compliance/`](docs/compliance/README.md).
 *   **Datenschutz:** Datenschutz-Folgenabschätzung (Art. 35 DSGVO), Auftragsverarbeitungsverträge mit allen Anbietern, Prüfung der Drittlandübermittlung (USA).
 *   **EU AI Act:** Einstufung dokumentieren. Solange keine Bewertung mit Folgen für Beschäftigte erfolgt, kein Hochrisiko-System.
 *   **Inhalte:** 1–2 echte SOPs mit der Fachabteilung in das Modulformat überführen, Lernziele und Quizfragen freigeben lassen.
@@ -216,6 +216,7 @@ Prototyp  ──>  Echter Test  ──>  Freigaben  ──>  Pilot (20–30 Pers
 *   Ablauf: Wissenscheck vorher → Lerneinheit → Wissenscheck nachher → nach 1–2 Wochen Wissenscheck später.
 *   Kurzer Fragebogen: Verständlichkeit, Unterbrechungen, Nutzung im Arbeitsumfeld (Großraumbüro, Headset).
 *   Hosting für den Pilot: eine VM im Unternehmensnetz oder LiveKit Cloud (EU-Region), Agent und Web-Server per Docker.
+*   Vor dem Start die offenen Maßnahmen der DSFA umsetzen, insbesondere: Agent im Produktivmodus (`start`, keine Debug-Logs mit Transkripten), Betrieb nur im internen Netz oder hinter Anmeldung, TLS, Dateirechte auf `data/`, dokumentierte Löschung (`docs/compliance/04-dsfa.md`, M10–M13).
 
 ### Gate: Entscheidung über Skalierung
 
@@ -301,8 +302,8 @@ Wenn die Person nach einer Tutor-Frage nachdenkt, wartet der Agent bis zu `max_d
 | 1 | Accounts für Anthropic, Deepgram, Cartesia anlegen, Keys hinterlegen | Projektleitung | offen |
 | 2 | Deutsche Cartesia-Stimme auswählen | Projektteam | offen, nach #1 |
 | 3 | Test mit echten Sprachdiensten, Endpointing feinjustieren | Entwicklung | offen, nach #1 |
-| 4 | Betriebsrat informieren, Regelung für den Pilot | Projektleitung + HR | offen |
-| 5 | DSFA und Auftragsverarbeitungsverträge | Datenschutzbeauftragte | offen |
+| 4 | Betriebsrat informieren, Regelung für den Pilot | Projektleitung + HR | Entwürfe liegen vor: [`docs/compliance/`](docs/compliance/README.md) |
+| 5 | DSFA und Auftragsverarbeitungsverträge | Datenschutzbeauftragte | DSFA-Entwurf und Anbieter-Prüfliste liegen vor: [`docs/compliance/`](docs/compliance/README.md) |
 | 6 | Erste echte SOP auswählen und ins Modulformat überführen | Fachabteilung | offen |
 | 7 | Pilot-Hosting: VM im Unternehmensnetz oder LiveKit Cloud (EU) | IT | offen |
 | 8 | Vergleichsgruppe und Pilot-Teilnehmende festlegen | Personalentwicklung | offen |

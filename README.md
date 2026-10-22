@@ -84,7 +84,13 @@ Gespeichert wird in `data/` (nicht im Repository):
 - `sessions.jsonl`: pro Sitzung Modulstand, bearbeitete Lernziele und Latenzen pro
   Gesprächswechsel (`e2e_latency`, `end_of_turn_delay`, `llm_node_ttft`, `tts_node_ttfb`)
 
-Es gibt keine Audioaufzeichnung und kein Gesprächstranskript auf dem Server. Das
+Es gibt keine Audioaufzeichnung und kein Gesprächstranskript auf dem Server.
+
+> **Im Pilot den Agenten mit `python -m tutor.agent start` betreiben, nicht mit `dev`.** Im
+> Entwicklungsmodus protokolliert LiveKit die Transkripte der Nutzenden auf Debug-Ebene.
+> Außerdem sind Token-Ausgabe und Auswertung im Prototyp ohne Anmeldung erreichbar: nur im
+> internen Netz oder hinter einem Reverse Proxy mit Anmeldung betreiben. Weitere Maßnahmen
+> und die Unterlagen für Betriebsrat und Datenschutz stehen in [`docs/compliance/`](docs/compliance/README.md). Das
 Lernprotokoll sieht nur die lernende Person; sie kann es als Markdown speichern.
 
 ## Eigenes Modul anlegen
