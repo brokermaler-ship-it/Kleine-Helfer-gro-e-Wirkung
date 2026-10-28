@@ -11,6 +11,11 @@ Ergebnis: ``moodle/dist/<modul-id>/`` und ``moodle/dist/<modul-id>_SCORM.zip``, 
 im ZIP-Wurzelverzeichnis. ``hsl-ci.css`` und ``logo-hsl.jpeg`` (Firmen-CI) werden nur
 übernommen, wenn sie lokal in ``moodle/template/`` liegen; sie gehören nicht ins Repository.
 
+Die Antwortoptionen werden beim Build gemischt: Die richtige Antwort landet gleichmäßig
+verteilt auf a, b, c, d (fest pro Modul, ein neuer Build ergibt dieselbe Reihenfolge).
+Außerdem warnt der Build, wenn die richtige Antwort auffällig oft die längste ist, weil
+man die Fragen dann ohne Wissen erraten kann. Mit ``--streng`` bricht er dann ab.
+
 Mit ``--audio`` liest jeder Tutor jedes Modul einmal über Cartesia ein (``CARTESIA_API_KEY``
 nötig). Die MP3-Dateien landen unter ``audio/`` im Paket, jedes Modul bekommt einen Player
 zum Vorlesenlassen, auch ohne laufenden Tutor-Server.
@@ -23,6 +28,7 @@ import hashlib
 import html
 import json
 import os
+import random
 import re
 import urllib.request
 import shutil
@@ -39,6 +45,10 @@ from tutor.modules import Module, load_module  # noqa: E402
 TEMPLATE = HERE / "template"
 SCRIPTS = ("scorm.js", "quiz.js", "modules.js")
 LETTERS = "abcdefgh"
+# Ab diesem Anteil "richtige Antwort ist die längste" warnt der Build (Zufall wäre 1/Optionen).
+LONGEST_LIMIT = 0.4
+# Eine einzelne richtige Antwort, die so viel länger ist als die längste falsche, verrät sich.
+LONGER_FACTOR = 1.5
 
 
 def esc(text: str) -> str:
@@ -50,18 +60,60 @@ def paragraphs(text: str) -> str:
     return "\n".join(f"<p>{esc(p)}</p>" for p in parts)
 
 
-def quiz_html(module: Module, objective_id: str, n: int) -> str:
+def shuffled_quiz(module: Module) -> dict[str, tuple[list[str], int]]:
+    """Optionen je Frage mischen, die richtige Antwort gleichmäßig auf alle Positionen verteilen.
+
+    Ergebnis: Fragen-ID -> (Optionen in neuer Reihenfolge, Index der richtigen Antwort).
+    Der Zufall hängt nur an der Modul-ID, damit jeder Build dasselbe Paket ergibt.
+    """
+    rng = random.Random(hashlib.sha256(module.id.encode("utf-8")).hexdigest())
+    width = min(len(q.options) for q in module.quiz) if module.quiz else 0
+    targets: list[int] = []
+    result = {}
+    for q in module.quiz:
+        if not targets:
+            targets = list(range(width))
+            rng.shuffle(targets)
+        target = targets.pop()
+        wrong = [o for i, o in enumerate(q.options) if i != q.correct]
+        rng.shuffle(wrong)
+        result[q.id] = (wrong[:target] + [q.options[q.correct]] + wrong[target:], target)
+    return result
+
+
+def quiz_warnings(module: Module) -> list[str]:
+    """Hinweise auf ratbare Fragen: die richtige Antwort ist auffällig oft oder deutlich die längste."""
+    if not module.quiz:
+        return []
+    warnings = []
+    longest = [q for q in module.quiz if max(range(len(q.options)), key=lambda i: len(q.options[i])) == q.correct]
+    share = len(longest) / len(module.quiz)
+    if len(longest) >= 3 and share > LONGEST_LIMIT:
+        warnings.append(
+            f"Die richtige Antwort ist in {len(longest)} von {len(module.quiz)} Fragen die längste ({share:.0%}). "
+            "Falsche Antworten ähnlich ausführlich formulieren."
+        )
+    for q in module.quiz:
+        right = len(q.options[q.correct])
+        wrong = max(len(o) for i, o in enumerate(q.options) if i != q.correct)
+        if right > LONGER_FACTOR * wrong:
+            warnings.append(f"Frage {q.id}: Die richtige Antwort ist deutlich länger als alle falschen ({right} zu {wrong} Zeichen).")
+    return warnings
+
+
+def quiz_html(module: Module, objective_id: str, n: int, order: dict[str, tuple[list[str], int]]) -> str:
     questions = [q for q in module.quiz if q.objective == objective_id]
     if not questions:
         return ""
     items = []
     for q in questions:
+        opts, correct = order[q.id]
         options = "\n".join(
             f'<label><input type="radio" name="m{n}-{esc(q.id)}" value="{LETTERS[i]}"> {esc(o)}</label>'
-            for i, o in enumerate(q.options)
+            for i, o in enumerate(opts)
         )
         items.append(
-            f'<div class="ls-qz" data-answer="{LETTERS[q.correct]}" data-explain="{esc(q.explanation)}">'
+            f'<div class="ls-qz" data-answer="{LETTERS[correct]}" data-explain="{esc(q.explanation)}">'
             f'<p class="ls-q">{esc(q.question)}</p>{options}</div>'
         )
     return (
@@ -130,6 +182,7 @@ def build_index(
     audio: dict[int, list[tuple[str, str]]] | None = None,
 ) -> str:
     audio = audio or {}
+    order = shuffled_quiz(module)
     blocks, toc = [], []
     for n, (objective, section) in enumerate(zip(module.objectives, module.sections), start=1):
         toc.append(f'<li><a href="#modul-{n}">Modul {n}: {esc(section.title)}</a></li>')
@@ -140,7 +193,7 @@ def build_index(
             f'<span class="ls-mod-state" data-mod-state></span><span class="ls-mod-arrow" data-mod-arrow>+</span></button>'
             f'<div class="ls-mod-body" data-mod-body>{read_aloud_html(audio.get(n, []))}'
             f'<div class="hsl-note"><strong>Lernziel:</strong> {esc(objective.text)}</div>'
-            f"{paragraphs(section.text)}{quiz_html(module, objective.id, n)}</div></section>"
+            f"{paragraphs(section.text)}{quiz_html(module, objective.id, n, order)}</div></section>"
         )
     buttons = "".join(
         f'<button type="button" class="ls-btn primary" data-tutor="{esc(tid)}">Mit {esc(name)} sprechen</button>'
@@ -236,8 +289,17 @@ def build_manifest(module: Module, files: list[str]) -> str:
 """
 
 
-def build(module_path: Path, tutor_url: str, out_dir: Path, with_audio: bool = False) -> Path:
+class QuizQualityError(ValueError):
+    pass
+
+
+def build(module_path: Path, tutor_url: str, out_dir: Path, with_audio: bool = False, strict: bool = False) -> Path:
     module = load_module(module_path)
+    warnings = quiz_warnings(module)
+    for warning in warnings:
+        print(f"Warnung: {warning}", file=sys.stderr)
+    if warnings and strict:
+        raise QuizQualityError(f"{module.id}: {len(warnings)} Warnung(en) zur Ratbarkeit der Fragen")
     settings = load_settings()
     tutors = [(t.id, t.name) for t in settings.tutors.values()]
     target = out_dir / module.id
@@ -280,8 +342,12 @@ def main() -> None:
     parser.add_argument("--tutor-url", default="http://localhost:8000", help="Adresse des Voice-Tutors")
     parser.add_argument("--out", type=Path, default=HERE / "dist")
     parser.add_argument("--audio", action="store_true", help="Module mit den Tutor-Stimmen vertonen (Cartesia)")
+    parser.add_argument("--streng", action="store_true", help="Bei Warnungen zur Ratbarkeit der Fragen abbrechen")
     args = parser.parse_args()
-    print(build(args.module, args.tutor_url, args.out, args.audio))
+    try:
+        print(build(args.module, args.tutor_url, args.out, args.audio, args.streng))
+    except QuizQualityError as e:
+        sys.exit(str(e))
 
 
 if __name__ == "__main__":
