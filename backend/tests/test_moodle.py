@@ -29,7 +29,7 @@ def test_scorm_package(tmp_path):
 def test_scorm_package_with_audio(tmp_path, monkeypatch):
     builder = load_builder()
     calls = []
-    monkeypatch.setattr(builder, "synthesize", lambda text, voice, model, target: (calls.append(text), target.write_bytes(b"mp3")))
+    monkeypatch.setattr(builder, "synthesize", lambda text, voice, model, target, language="de": (calls.append(text), target.write_bytes(b"mp3")))
     archive = builder.build(ROOT / "content" / "modules" / "phishing-melden.yaml", "http://localhost:8000", tmp_path, True)
     with zipfile.ZipFile(archive) as zf:
         names = zf.namelist()
@@ -38,3 +38,15 @@ def test_scorm_package_with_audio(tmp_path, monkeypatch):
     assert len(calls) == 6 and calls[0].startswith("Modul 1: Typische Merkmale.")
     assert "audio/modul1-luisa.mp3" in names and 'href="audio/modul3-lukas.mp3"' in manifest
     assert index.count('<audio controls preload="none"') == 6
+
+
+def test_scorm_package_english(tmp_path):
+    builder = load_builder()
+    source = (ROOT / "content" / "modules" / "phishing-melden.yaml").read_text(encoding="utf-8")
+    module = tmp_path / "phishing-en.yaml"
+    module.write_text(source.replace("id: phishing-melden", "id: phishing-en") + "\nlanguage: en\n", encoding="utf-8")
+    archive = builder.build(module, "https://tutor.example/", tmp_path / "out")
+    with zipfile.ZipFile(archive) as zf:
+        index = zf.read("index.html").decode()
+    assert '<html lang="en"' in index and "Knowledge check, module 1" in index
+    assert "data-tutor=" not in index and "Lerngespräch" not in index

@@ -14,6 +14,9 @@ im ZIP-Wurzelverzeichnis. ``hsl-ci.css`` und ``logo-hsl.jpeg`` (Firmen-CI) werde
 Mit ``--audio`` liest jeder Tutor jedes Modul einmal über Cartesia ein (``CARTESIA_API_KEY``
 nötig). Die MP3-Dateien landen unter ``audio/`` im Paket, jedes Modul bekommt einen Player
 zum Vorlesenlassen, auch ohne laufenden Tutor-Server.
+
+``language: en`` in der Moduldatei baut das Paket mit englischer Oberfläche. Der Voice-Tutor
+spricht bisher nur Deutsch, deshalb entfällt das Lerngespräch in anderen Sprachen.
 """
 
 from __future__ import annotations
@@ -40,6 +43,62 @@ TEMPLATE = HERE / "template"
 SCRIPTS = ("scorm.js", "quiz.js", "modules.js")
 LETTERS = "abcdefgh"
 
+TEXT = {
+    "de": {
+        "module": "Modul",
+        "objective": "Lernziel",
+        "quiz": "Lernerfolgskontrolle Modul {n}",
+        "check": "Auswerten",
+        "reset": "Zurücksetzen",
+        "unlock_next": "Ab 70 % richtig wird das nächste Modul freigeschaltet.",
+        "unlock_talk": "Ab 70 % richtig wird das Lerngespräch empfohlen.",
+        "unlock_last": "Ab 70 % richtig ist das Lernmodul bestanden.",
+        "reads": "{name} liest vor",
+        "read_aloud": "Vorlesen lassen",
+        "kicker": "Lernmodul",
+        "meta": "Bearbeitungsdauer ca. {minutes} Minuten · {modules} Module · {questions} Fragen · Bestehensgrenze 70 %",
+        "intro": "So funktioniert das Lernmodul: Lies ein Modul und beantworte die Fragen am Ende. Ab 70 % richtig wird das nächste Modul freigeschaltet.",
+        "intro_talk": " Zum Schluss kannst du das Gelernte im Gespräch mit unserem Sprach-Tutor {names} vertiefen.",
+        "toc": "Inhalt",
+        "talk_toc": "Lerngespräch mit {names}",
+        "end": "Abschluss",
+        "end_hint": "Beantworte die Fragen aller Module, dann erscheint hier dein Gesamtergebnis.",
+        "end_moodle": "Das Ergebnis wird automatisch an Moodle übermittelt.",
+        "as_of": "Stand",
+    },
+    "en": {
+        "module": "Module",
+        "objective": "Learning objective",
+        "quiz": "Knowledge check, module {n}",
+        "check": "Check answers",
+        "reset": "Reset",
+        "unlock_next": "With at least 70 % correct, the next module is unlocked.",
+        "unlock_talk": "With at least 70 % correct, the conversation is recommended.",
+        "unlock_last": "With at least 70 % correct, you have passed the course.",
+        "reads": "{name} reads aloud",
+        "read_aloud": "Read aloud",
+        "kicker": "E-learning",
+        "meta": "Approx. {minutes} minutes · {modules} modules · {questions} questions · pass mark 70 %",
+        "intro": "How it works: read a module and answer the questions at the end. With at least 70 % correct, the next module is unlocked.",
+        "intro_talk": "",
+        "toc": "Contents",
+        "talk_toc": "",
+        "end": "Completion",
+        "end_hint": "Answer the questions of all modules and your overall result will appear here.",
+        "end_moodle": "Your result is sent to Moodle automatically.",
+        "as_of": "Version",
+    },
+}
+
+
+def ui_text(module: Module) -> dict[str, str]:
+    return TEXT.get(module.language, TEXT["de"])
+
+
+def with_tutor(module: Module) -> bool:
+    """Der Voice-Tutor spricht bisher nur Deutsch."""
+    return module.language == "de"
+
 
 def esc(text: str) -> str:
     return html.escape(text, quote=True)
@@ -54,6 +113,11 @@ def quiz_html(module: Module, objective_id: str, n: int) -> str:
     questions = [q for q in module.quiz if q.objective == objective_id]
     if not questions:
         return ""
+    t = ui_text(module)
+    if n < len(module.objectives):
+        hint = t["unlock_next"]
+    else:
+        hint = t["unlock_talk"] if with_tutor(module) else t["unlock_last"]
     items = []
     for q in questions:
         options = "\n".join(
@@ -65,21 +129,22 @@ def quiz_html(module: Module, objective_id: str, n: int) -> str:
             f'<p class="ls-q">{esc(q.question)}</p>{options}</div>'
         )
     return (
-        f'<div class="ls-quiz"><h3>Lernerfolgskontrolle Modul {n}</h3>{"".join(items)}'
-        '<div class="ls-quiz-actions"><button type="button" class="ls-btn primary" data-quiz-check>Auswerten</button>'
-        '<button type="button" class="ls-btn" data-quiz-reset>Zurücksetzen</button></div>'
+        f'<div class="ls-quiz"><h3>{esc(t["quiz"].format(n=n))}</h3>{"".join(items)}'
+        f'<div class="ls-quiz-actions"><button type="button" class="ls-btn primary" data-quiz-check>{esc(t["check"])}</button>'
+        f'<button type="button" class="ls-btn" data-quiz-reset>{esc(t["reset"])}</button></div>'
         "<div data-quiz-result></div>"
-        f'<p class="ls-hint">Ab 70 % richtig wird {"das nächste Modul" if n < len(module.objectives) else "das Lerngespräch empfohlen"} freigeschaltet.</p></div>'
+        f'<p class="ls-hint">{esc(hint)}</p></div>'
     )
 
 
 def spoken_text(module: Module, n: int) -> str:
     objective, section = module.objectives[n - 1], module.sections[n - 1]
     body = "\n\n".join(" ".join(p.split()) for p in re.split(r"\n\s*\n", section.text) if p.strip())
-    return f"Modul {n}: {section.title}.\n\nLernziel: {objective.text}\n\n{body}"
+    t = ui_text(module)
+    return f"{t['module']} {n}: {section.title}.\n\n{t['objective']}: {objective.text}\n\n{body}"
 
 
-def synthesize(text: str, voice: str, model: str, target: Path) -> None:
+def synthesize(text: str, voice: str, model: str, target: Path, language: str = "de") -> None:
     request = urllib.request.Request(
         "https://api.cartesia.ai/tts/bytes",
         data=json.dumps(
@@ -87,7 +152,7 @@ def synthesize(text: str, voice: str, model: str, target: Path) -> None:
                 "model_id": model,
                 "transcript": text,
                 "voice": {"mode": "id", "id": voice},
-                "language": "de",
+                "language": language,
                 "output_format": {"container": "mp3", "sample_rate": 44100, "bit_rate": 128000},
             }
         ).encode("utf-8"),
@@ -101,25 +166,27 @@ def synthesize(text: str, voice: str, model: str, target: Path) -> None:
         target.write_bytes(response.read())
 
 
-def cached_audio(text: str, voice: str, model: str, cache: Path) -> Path:
+def cached_audio(text: str, voice: str, model: str, cache: Path, language: str = "de") -> Path:
     """Vertonungen werden zwischengespeichert, damit ein neuer Build kein Cartesia-Guthaben kostet."""
-    key = hashlib.sha256(f"{model}|{voice}|{text}".encode("utf-8")).hexdigest()[:20]
+    # Deutsche Vertonungen behalten ihren bisherigen Schlüssel, damit der Zwischenspeicher gültig bleibt.
+    raw = f"{model}|{voice}|{text}" if language == "de" else f"{model}|{voice}|{language}|{text}"
+    key = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:20]
     path = cache / f"{key}.mp3"
     if not path.exists():
         cache.mkdir(parents=True, exist_ok=True)
-        synthesize(text, voice, model, path)
+        synthesize(text, voice, model, path, language)
     return path
 
 
-def read_aloud_html(players: list[tuple[str, str]]) -> str:
+def read_aloud_html(players: list[tuple[str, str]], t: dict[str, str] = TEXT["de"]) -> str:
     if not players:
         return ""
     items = "".join(
-        f'<figure><figcaption>{esc(name)} liest vor</figcaption>'
+        f'<figure><figcaption>{esc(t["reads"].format(name=name))}</figcaption>'
         f'<audio controls preload="none" src="{esc(src)}"></audio></figure>'
         for name, src in players
     )
-    return f'<div class="ls-read" role="group" aria-label="Modul vorlesen lassen"><strong>Vorlesen lassen</strong>{items}</div>'
+    return f'<div class="ls-read" role="group" aria-label="{esc(t["read_aloud"])}"><strong>{esc(t["read_aloud"])}</strong>{items}</div>'
 
 
 def build_index(
@@ -130,16 +197,18 @@ def build_index(
     audio: dict[int, list[tuple[str, str]]] | None = None,
 ) -> str:
     audio = audio or {}
+    t = ui_text(module)
+    talk = with_tutor(module)
     blocks, toc = [], []
     for n, (objective, section) in enumerate(zip(module.objectives, module.sections), start=1):
-        toc.append(f'<li><a href="#modul-{n}">Modul {n}: {esc(section.title)}</a></li>')
+        toc.append(f'<li><a href="#modul-{n}">{esc(t["module"])} {n}: {esc(section.title)}</a></li>')
         blocks.append(
             f'<section class="ls-module" id="modul-{n}" data-module="{n}">'
             f'<button type="button" class="ls-mod-head" data-mod-toggle>'
-            f'<span class="ls-mod-kicker">Modul {n}</span><span class="ls-mod-title">{esc(section.title)}</span>'
+            f'<span class="ls-mod-kicker">{esc(t["module"])} {n}</span><span class="ls-mod-title">{esc(section.title)}</span>'
             f'<span class="ls-mod-state" data-mod-state></span><span class="ls-mod-arrow" data-mod-arrow>+</span></button>'
-            f'<div class="ls-mod-body" data-mod-body>{read_aloud_html(audio.get(n, []))}'
-            f'<div class="hsl-note"><strong>Lernziel:</strong> {esc(objective.text)}</div>'
+            f'<div class="ls-mod-body" data-mod-body>{read_aloud_html(audio.get(n, []), t)}'
+            f'<div class="hsl-note"><strong>{esc(t["objective"])}:</strong> {esc(objective.text)}</div>'
             f"{paragraphs(section.text)}{quiz_html(module, objective.id, n)}</div></section>"
         )
     buttons = "".join(
@@ -149,8 +218,11 @@ def build_index(
     names = " oder ".join(name for _, name in tutors)
     logo = '<img class="hsl-head-logo" src="logo-hsl.jpeg" alt="HSL LOGISTIK">' if has_logo else ""
     n_questions = len(module.quiz)
+    intro = t["intro"] + (t["intro_talk"].format(names=names) if talk else "")
+    talk_toc = f'<li><a href="#lerngespraech">{esc(t["talk_toc"].format(names=names))}</a></li>' if talk else ""
+    talk_section = TALK_SECTION.format(buttons=buttons) if talk else ""
     return f"""<!doctype html>
-<html lang="de" data-course="{esc(module.id)}" data-module-id="{esc(module.id)}" data-tutor-url="{esc(tutor_url)}">
+<html lang="{esc(module.language)}" data-course="{esc(module.id)}" data-module-id="{esc(module.id)}" data-tutor-url="{esc(tutor_url)}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -162,23 +234,39 @@ def build_index(
 <main class="ls-page">
 <header class="hsl-head">
   <div class="hsl-head-title">
-    <p class="ls-kicker">Lernmodul · {esc(module.owner)}</p>
+    <p class="ls-kicker">{esc(t["kicker"])} · {esc(module.owner)}</p>
     <h1>{esc(module.title)}</h1>
-    <p class="ls-meta">Bearbeitungsdauer ca. {module.estimated_minutes} Minuten · {len(module.objectives)} Module · {n_questions} Fragen · Bestehensgrenze 70 %</p>
+    <p class="ls-meta">{esc(t["meta"].format(minutes=module.estimated_minutes, modules=len(module.objectives), questions=n_questions))}</p>
   </div>
   {logo}
 </header>
 
 <div class="hsl-field">
-<p>So funktioniert das Lernmodul: Lies ein Modul und beantworte die Fragen am Ende. Ab 70 % richtig
-wird das nächste Modul freigeschaltet. Zum Schluss kannst du das Gelernte im Gespräch mit unserem
-Sprach-Tutor {esc(names)} vertiefen.</p>
+<p>{esc(intro)}</p>
 </div>
 
-<nav class="ls-toc"><h2>Inhalt</h2><ol>{"".join(toc)}<li><a href="#lerngespraech">Lerngespräch mit {esc(names)}</a></li></ol></nav>
+<nav class="ls-toc"><h2>{esc(t["toc"])}</h2><ol>{"".join(toc)}{talk_toc}</ol></nav>
 
 {"".join(blocks)}
+{talk_section}
+<section class="ls-end">
+  <h2>{esc(t["end"])}</h2>
+  <p data-total>{esc(t["end_hint"])}</p>
+  <p class="ls-hint">{esc(t["end_moodle"])}</p>
+</section>
 
+<footer class="hsl-foot"><span>{esc(module.owner)}</span><span>{esc(module.title)}</span><span>{esc(t["as_of"])} {esc(module.version)}</span></footer>
+</main>
+<script src="scorm.js"></script>
+<script src="quiz.js"></script>
+<script src="modules.js"></script>
+<script src="tutor.js"></script>
+</body>
+</html>
+"""
+
+
+TALK_SECTION = """
 <section class="ls-talk" id="lerngespraech">
   <div class="hsl-band-dark">Lerngespräch</div>
   <div class="ls-talk-body">
@@ -191,21 +279,6 @@ Sprach-Tutor {esc(names)} vertiefen.</p>
     <p class="ls-hint" data-tutor-status></p>
   </div>
 </section>
-
-<section class="ls-end">
-  <h2>Abschluss</h2>
-  <p data-total>Beantworte die Fragen aller Module, dann erscheint hier dein Gesamtergebnis.</p>
-  <p class="ls-hint">Das Ergebnis wird automatisch an Moodle übermittelt.</p>
-</section>
-
-<footer class="hsl-foot"><span>{esc(module.owner)}</span><span>{esc(module.title)}</span><span>Stand {esc(module.version)}</span></footer>
-</main>
-<script src="scorm.js"></script>
-<script src="quiz.js"></script>
-<script src="modules.js"></script>
-<script src="tutor.js"></script>
-</body>
-</html>
 """
 
 
@@ -259,7 +332,9 @@ def build(module_path: Path, tutor_url: str, out_dir: Path, with_audio: bool = F
             for tutor in settings.tutors.values():
                 name = f"audio/modul{n}-{tutor.id}.mp3"
                 print(f"Vertone {name} …", flush=True)
-                mp3 = cached_audio(spoken_text(module, n), tutor.voice, settings.tts_model, out_dir / "audio-cache")
+                mp3 = cached_audio(
+                    spoken_text(module, n), tutor.voice, settings.tts_model, out_dir / "audio-cache", module.language
+                )
                 shutil.copy(mp3, target / name)
                 audio.setdefault(n, []).append((tutor.name, name))
                 files.append(name)
