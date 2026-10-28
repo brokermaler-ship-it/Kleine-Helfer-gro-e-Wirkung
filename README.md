@@ -24,15 +24,20 @@ Modell eine Anfrage ab, beantwortet die API sie automatisch mit einem Ausweichmo
 
 ```text
 content/modules/          Lernmodule als YAML (Lernziele, SOP-Text, Wissenscheck)
+content/evals/            Evaluations-Set je Modul (geprüfte Fragen mit Referenzantworten)
 backend/tutor/
   modules.py              Module laden und validieren
   prompts.py              System-Prompt (sokratisch, nur Fakten aus dem Modul)
   tools.py                Tutor-Werkzeuge und Lernprotokoll, unabhängig von LiveKit
   agent.py                LiveKit-Sprach-Agent (Deepgram → Claude → Cartesia)
   textmode.py             Derselbe Tutor im Terminal, nur mit Anthropic-Key
+  evaluation.py           Prüflauf des Evaluations-Sets im Textmodus
   server.py               Web-Server: Browser-Client, Raum-Token, Wissenscheck, Auswertung
+  metrics.py              Latenz-Auswertung (P50/P95)
+  feedback.py             Fragebogen nach der Lerneinheit
 frontend/                 Browser-Client (ohne Build-Schritt)
-docker-compose.yml        Lokaler LiveKit-Server
+Dockerfile                Ein Image für Sprach-Agent und Web-Server
+docker-compose.yml        LiveKit-Server, Agent und Web-Server für den Pilot
 ```
 
 Data-Channel-Topics vom Agenten zum Browser: `agent_state`, `agent_key_point`,
@@ -56,6 +61,16 @@ uvicorn tutor.server:app --port 8000          # Terminal 2: Web-Server
 
 Dann <http://localhost:8000> im Browser öffnen (Chrome oder Edge, Mikrofon erlauben).
 
+Alles in Containern (Keys aus `.env`, Daten im Volume `tutor-data`):
+
+```bash
+docker compose up -d --build
+```
+
+Der Agent erreicht LiveKit im Compose-Netz unter `ws://livekit:7880`. Der Browser bekommt
+`PUBLIC_LIVEKIT_URL` (Standard `ws://localhost:7880`); auf einer Pilot-VM muss dort die von
+den Rechnern der Teilnehmenden erreichbare Adresse stehen.
+
 Nur die Didaktik ausprobieren, ohne Sprache und LiveKit:
 
 ```bash
@@ -65,6 +80,29 @@ python -m tutor.textmode phishing-melden
 
 Tests: `cd backend && pytest`
 
+## Evaluations-Set
+
+Zu jedem Modul gehört unter `content/evals/` ein Satz geprüfter Fragen mit
+Referenzantworten (20–30 Fälle). Der Prüflauf stellt jede Frage in einem frischen
+Gespräch an den Tutor im Textmodus und lässt die Antwort von Claude gegen die Referenz
+bewerten. Er braucht nur den Anthropic-Key:
+
+```bash
+python -m tutor.evaluation phishing-melden            # alle Fälle
+python -m tutor.evaluation phishing-melden --only e12 # einzelne Fälle
+```
+
+Es gibt drei Arten von Fällen: `fakt` (Kernaussage stimmt, nichts dazuerfunden),
+`ausserhalb` (Material sagt nichts dazu, Tutor bleibt ehrlich) und `korrektur` (falsche
+Annahme wird eindeutig korrigiert). Unter `forbidden` stehen Begriffe, die nie in der
+Antwort vorkommen dürfen, etwa eine falsche Durchwahl. Der Lauf endet mit Exit-Code 1,
+sobald ein Fall scheitert, und schreibt einen Bericht nach `data/evals/`. Das
+Prüfmodell lässt sich mit `TUTOR_EVAL_JUDGE_MODEL` wechseln.
+
+Die Fälle zum Beispielmodul sind ebenfalls Beispielinhalt. Bei einer echten SOP gibt die
+Fachabteilung die Fälle zusammen mit dem Modul frei; `module_version` im Evaluations-Set
+muss zum Modulstand passen.
+
 > Hinweis: Hinter einem HTTP-Proxy ignoriert der Agent beim Verbindungsaufbau zu LiveKit
 > die `NO_PROXY`-Liste. Für einen lokalen LiveKit-Server dann `HTTPS_PROXY` für den
 > Agent-Prozess entfernen.
@@ -73,14 +111,26 @@ Tests: `cd backend && pytest`
 
 1. Die Pilotleitung vergibt pseudonyme Kennungen (z. B. `P-017`). Namen werden abgelehnt.
 2. Teilnehmende machen den Wissenscheck **vorher**, dann die Lerneinheit, dann den
-   Wissenscheck **nachher** mit Auflösung.
+   Wissenscheck **nachher** mit Auflösung und zum Schluss einen kurzen Fragebogen
+   (Verständlichkeit, Unterbrechungen beim Nachdenken, Arbeitsumfeld und Headset).
+   Die **Vergleichsgruppe** bekommt den Link mit `?gruppe=vergleich`, zum Beispiel
+   `http://localhost:8000/?gruppe=vergleich`. Sie macht denselben Wissenscheck, bearbeitet
+   dazwischen aber das bisherige E-Learning statt des Tutors und bekommt keinen Fragebogen.
 3. Ein bis zwei Wochen später: Startseite → „Nur Wissenscheck (Wiederholung)“.
-4. Auswertung: `GET /api/pilot/summary` liefert je Modul und Phase die Zahl der
-   Teilnehmenden und die Quote richtiger Antworten (letzter Versuch pro Person).
+4. Auswertung: `GET /api/pilot/summary` liefert je Modul, Gruppe (`tutor`, `vergleich`)
+   und Phase die Zahl der Teilnehmenden und die Quote richtiger Antworten (letzter
+   Versuch pro Person).
+5. Latenz: `GET /api/pilot/latency` liefert je Modul P50/P95 von `e2e_latency` und der
+   Reaktionszeit nach Turn-Ende in Millisekunden, die Abschlussquote und ob die Ziele aus
+   PROJECT.md erreicht sind. Nachdenkpausen (Turn-Erkennung wartet länger als 1,5 s)
+   werden getrennt ausgewiesen und zählen nicht für die Ziele.
+6. Fragebogen: `GET /api/pilot/feedback` liefert je Modul die Häufigkeit jeder Antwort,
+   bei Skalenfragen den Mittelwert, und die freiwilligen Kommentare ohne Pilot-Kennung.
 
 Gespeichert wird in `data/` (nicht im Repository):
 
-- `quiz_results.jsonl`: Antworten und Punktzahl pro Kennung und Phase
+- `quiz_results.jsonl`: Antworten und Punktzahl pro Kennung, Gruppe und Phase
+- `feedback.jsonl`: Antworten auf den Fragebogen pro Kennung
 - `sessions.jsonl`: pro Sitzung Modulstand, bearbeitete Lernziele und Latenzen pro
   Gesprächswechsel (`e2e_latency`, `end_of_turn_delay`, `llm_node_ttft`, `tts_node_ttfb`)
 
@@ -117,7 +167,7 @@ sollte vor allem diese Punkte ansehen:
 
 - Wartet der Tutor nach seinen Fragen lange genug? Sonst `TUTOR_ENDPOINTING_*` anpassen.
 - Klingt die gewählte Cartesia-Stimme auf Deutsch natürlich?
-- Liegt `e2e_latency` in `sessions.jsonl` im Median unter 1.000 ms (inklusive Turn-Erkennung, siehe PROJECT.md Abschnitt 7)?
+- Liegt `e2e_latency` im Median unter 1.000 ms (inklusive Turn-Erkennung, siehe PROJECT.md Abschnitt 7)? `GET /api/pilot/latency` zeigt es direkt.
 - Hält sich der Tutor an das Material und ruft er die Werkzeuge sinnvoll auf?
 
 Bewusst noch nicht enthalten: SSO, Rollenrechte, mehrere Module mit RAG,
