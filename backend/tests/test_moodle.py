@@ -40,6 +40,39 @@ def test_scorm_package_with_audio(tmp_path, monkeypatch):
     assert index.count('<audio controls preload="none"') == 6
 
 
+def test_quiz_answers_are_shuffled_and_balanced():
+    builder = load_builder()
+    from tutor.modules import load_module
+
+    module = load_module(ROOT / "content" / "modules" / "phishing-melden.yaml")
+    order = builder.shuffled_quiz(module)
+    assert order == builder.shuffled_quiz(module)  # gleicher Build, gleiche Reihenfolge
+    positions = [correct for _, correct in order.values()]
+    assert max(positions.count(p) for p in range(4)) - min(positions.count(p) for p in range(4)) <= 1
+    for q in module.quiz:
+        options, correct = order[q.id]
+        assert sorted(options) == sorted(q.options) and options[correct] == q.options[q.correct]
+
+
+def test_quiz_warnings_detect_longest_answer():
+    builder = load_builder()
+    from tutor.modules import parse_module
+
+    quiz = [
+        {"id": f"q{i}", "objective": "o", "question": "Was tun?", "options": ["Nein", "Ja, sofort und ausführlich melden", "Egal", "Später"],
+         "correct": 1, "explanation": "Melden."}
+        for i in range(4)
+    ]
+    module = parse_module({
+        "id": "test", "title": "Test", "version": "1", "owner": "Team", "estimated_minutes": 5,
+        "learning_objectives": [{"id": "o", "text": "Ziel"}],
+        "sections": [{"id": "s1", "title": "Abschnitt", "text": "Text"}],
+        "quiz": quiz,
+    })
+    warnings = builder.quiz_warnings(module)
+    assert "4 von 4" in warnings[0] and len(warnings) == 5
+
+
 def test_scorm_package_english(tmp_path):
     builder = load_builder()
     source = (ROOT / "content" / "modules" / "phishing-melden.yaml").read_text(encoding="utf-8")
