@@ -146,19 +146,15 @@ KAP = [
   "Werden die operativen Tätigkeiten gemäß festgelegten Vorgaben (örtliche Richtlinien, Betriebsanweisungen, Netzzugangsbedingungen CZ/DE) geplant, gesteuert und dokumentiert?",
   "Wie wird im Tagesbetrieb die Einhaltung gesetzlicher/interner Vorgaben (Arbeits- und Ruhezeiten, Regelwerke DE/CZ) überwacht?",
   "Wie ist das Notfall- und Störungsmanagement geregelt und ist es dem Personal bekannt?",
-  "Wie werden ausgelagerte/zugekaufte Leistungen gesteuert und deren Qualität überwacht?",
-  "Ist die Meldekette bei gefährlichen Ereignissen (Triebfahrzeugführer → Fahrdienstleiter/Notfallmanager → Leitstelle → Sicherheitsmanagement → EBA bzw. Untersuchungsstelle in DE / Drážní úřad bzw. Drážní inspekce in CZ) mit Fristen und Zuständigkeiten festgelegt und dem Personal bekannt?" + A,
-  "Werden Beweise und Daten nach einem Vorfall gesichert (Fahrtenschreiber/Registriereinrichtung, Fotos, Zeugenaussagen, Dokumente) und ist das Vorgehen geregelt?" + A]),
+  "Wie werden ausgelagerte/zugekaufte Leistungen gesteuert und deren Qualität überwacht?"]),
  ("Bewertung der Leistung (Kap. 9)", [
   "Wird die Leistung überwacht und werden Kennzahlen und Ereignisse regelmäßig ausgewertet?",
   "Werden interne Audits gemäß Auditprogramm geplant, durchgeführt und dokumentiert?",
-  "Fließen die Ergebnisse (Audits, Ereignisse, Behördenmeldungen, Kennzahlen) in die Managementbewertung ein?",
-  "Werden alle Vorfälle und EBA-Meldungen vollständig, fristgerecht und nachvollziehbar erfasst (Ereignisregister mit Datum, Meldezeitpunkt, Aktenzeichen, Status) und auf Trends/Häufungen ausgewertet?" + A,
-  "Stimmen die intern erfassten Ereignisse mit den tatsächlich an die Behörden (EBA / DÚ) gemeldeten Fällen überein – gibt es nicht oder verspätet gemeldete Ereignisse?" + A]),
+  "Fließen die Ergebnisse (Audits, Ereignisse, Behördenmeldungen, Kennzahlen) in die Managementbewertung ein?"]),
  ("Verbesserung (Kap. 10)", [
   "Wie wird mit festgestellten Nichtkonformitäten umgegangen und wie werden Korrekturmaßnahmen festgelegt und dokumentiert?",
   "Wie wird die Wirksamkeit umgesetzter Korrektur- und Verbesserungsmaßnahmen überprüft?",
-  "Werden zu den Vorfällen systematische Ursachenanalysen (z. B. 5-Why, Ishikawa, Human Factors) durchgeführt und die abgeleiteten Maßnahmen – einschließlich der Stellungnahmen/Rückmeldungen an das EBA – termingerecht nachverfolgt?" + A]),
+  "Ist der Umgang mit Vorfällen und Meldungen im Detail in Kapitel 16 bewertet (Verweis)?"]),
  ("Rangierbetrieb & Sicherheit", [
   "Liegen gültige örtliche Richtlinien/Betriebsanweisungen vor und sind sie dem Personal bekannt?",
   "Wie wird vor jeder Rangierfahrt die Zustimmung des EIU (z. B. SŽ, Anschlussbahn)/des Fahrdienstleiters eingeholt und dokumentiert?",
@@ -174,9 +170,19 @@ KAP = [
   "Wie werden Schadwagen erkannt, gekennzeichnet, behandelt und gemeldet?",
   "Wird die erforderliche Bremsstellung korrekt erstellt und geprüft?",
   "Wird bei Gefahrguttransporten (RID/GGVSEB) die wagentechnische und dokumentarische Kontrolle eingehalten und nachgewiesen?"]),
- ("SQAS", [
-  "Werden die SQAS-Anforderungen (Sicherheit, Qualität, Umwelt bei Flüssigbrennstoffen/Gefahrgut) eingehalten und ist das Personal vertraut?",
-  "Wie werden Vorfälle, Beinaheunfälle und Beanstandungen erfasst, ausgewertet und für Verbesserungen genutzt?"]),
+ ("SQAS (Rail) – Sicherheit, Qualität, Umwelt, Security", [
+  "Werden die SQAS-Anforderungen (Sicherheit, Qualität, Umwelt bei Flüssigbrennstoffen/Gefahrgut) eingehalten und ist das Personal damit vertraut?",
+  "Sind die Feststellungen/Verbesserungsbereiche aus dem letzten SQAS-Rail-Assessment in einem Maßnahmenplan erfasst und termingerecht abgearbeitet?",
+  "Liegen für Gefahrguttransporte Risikobewertungen vor (Strecken, Abstellorte, Grenzübergang CZ/DE, Übergabe an Lade-/Entladestellen) und sind die Schutzmaßnahmen umgesetzt?",
+  "Ist ein Gefahrgutbeauftragter benannt, liegt der Jahresbericht vor und ist das Personal nach RID 1.3 unterwiesen (Nachweis)?",
+  "Ist ein Sicherungsplan für Güter mit hohem Gefahrenpotenzial (RID 1.10) vorhanden, dem Personal bekannt und wird er umgesetzt (Security)?",
+  "Werden Subunternehmer/Personaldienstleister nach SQAS-Kriterien ausgewählt, unterwiesen und regelmäßig bewertet?",
+  "Sind Notfallpläne für Gefahrgutereignisse (Austritt, Brand) vorhanden, mit Kunden/EIU/Feuerwehr abgestimmt, und werden Notfallübungen durchgeführt und ausgewertet?",
+  "Werden Gefahrgutereignisse erkannt und gemäß RID 1.8.5 fristgerecht gemeldet und dokumentiert?",
+  "Wie werden Vorfälle, Beinaheunfälle und Beanstandungen erfasst, ausgewertet und für Verbesserungen genutzt – und werden die betroffenen Kunden informiert?",
+  "Werden Kundenbeschwerden und kundenspezifische Vorgaben systematisch erfasst, beantwortet und nachverfolgt?",
+  "Werden SQAS-relevante Kennzahlen (z. B. Ereignisse, Unfälle mit Ausfallzeit, Umweltereignisse, Pünktlichkeit) erhoben und an Management/Kunden berichtet?",
+  "Sind Maßnahmen gegen Boden-/Gewässerverunreinigung (Ölbindemittel, Leckage-Kits, Auffangwannen) vorhanden und dem Personal bekannt?"]),
  ("ISO 50001 Energiemanagement", [
   "Wird der Energie-/Dieselverbrauch erfasst und im Sinne des Energiemanagements (ISO 50001) ausgewertet?",
   "Welche Maßnahmen zur Senkung des Energieverbrauchs sind bekannt und umgesetzt?"]),
@@ -191,8 +197,21 @@ KAP = [
   "Wird die PSA bereitgestellt, getragen und regelmäßig geprüft?",
   "Werden die arbeitsschutzbezogenen Unterweisungen (mind. jährlich + anlassbezogen, z. B. nach Vorfällen) durchgeführt und dokumentiert?",
   "Sind Erste-Hilfe-Organisation, Notfallausrüstung und Verhalten bei Arbeitsunfällen geregelt und bekannt?"]),
+ ("Ereignis- und Meldemanagement / Top-Ereignisse" + A, [
+  "Welche Meldewege stehen dem Personal für Vorfälle, Beinaheunfälle und Störungen zur Verfügung (Leitstelle, Meldeformular, App, anonym) und sind sie bekannt (Stichprobe: Befragung Personal CZ und DE)?",
+  "Ist die Meldekette bei gefährlichen Ereignissen (Triebfahrzeugführer → Fahrdienstleiter/Notfallmanager → Leitstelle → Sicherheitsmanagement → EBA bzw. Untersuchungsstelle in DE / Drážní úřad bzw. Drážní inspekce in CZ) mit Fristen und Zuständigkeiten festgelegt und dem Personal bekannt?",
+  "Wie werden eingehende Meldungen klassifiziert (meldepflichtig gegenüber EBA/Untersuchungsstelle bzw. DÚ/DI, Gefahrgut nach RID 1.8.5, nur intern) – wer entscheidet und ist die Entscheidung nachvollziehbar dokumentiert?",
+  "Werden die Meldefristen eingehalten? (Stichprobe EBA-Meldungen: Zeitpunkt Ereignis → Zeitpunkt Meldung → Aktenzeichen)",
+  "Werden Beweise und Daten nach einem Vorfall gesichert (Registriereinrichtung, Fotos, Zeugenaussagen, Dokumente) und ist das Vorgehen geregelt?",
+  "Werden alle Vorfälle und EBA-Meldungen vollständig und nachvollziehbar im Ereignisregister erfasst (Datum, Ort, Ereignisart, Meldezeitpunkt, Aktenzeichen, Status)?",
+  "Stimmen die intern erfassten Ereignisse mit den tatsächlich an die Behörden (EBA / DÚ) gemeldeten Fällen überein – gibt es nicht oder verspätet gemeldete Ereignisse?",
+  "Werden zu den Vorfällen systematische Ursachenanalysen (z. B. 5-Why, Ishikawa, Human Factors) durchgeführt und die Maßnahmen – einschließlich der Stellungnahmen an das EBA – termingerecht nachverfolgt?",
+  "Erhält der Melder eine Rückmeldung und werden Erkenntnisse (Lessons Learned) an das Personal in CZ und DE kommuniziert?",
+  ("Werden aus dem Ereignisregister die Top-Ereignisse nach Häufigkeit und Schwere ermittelt und priorisiert?", "Anl. 3"),
+  ("Wurde für die Top-Ereignisse eine Bow-Tie-Analyse durchgeführt (Ursachen, präventive/mitigierende Barrieren, Eskalationsfaktoren) und ist dokumentiert, welche Barrieren bei den Vorfällen versagt haben?", "Anl. 3"),
+  ("Fließen die Ergebnisse der Bow-Tie-Analyse in Risikotabelle, Maßnahmenplan und Managementbewertung ein?", "Anl. 3")]),
 ]
-assert len(KAP) == 15
+assert len(KAP) == 16
 
 # ---------- 3. Übersichtstabelle ----------
 W = [1.0, 7.4, 1.2, 1.2, 1.65, 1.65, 1.65, 1.65]
@@ -218,7 +237,7 @@ for color, txt in ((WD_COLOR_INDEX.YELLOW, "= Empfehlung – ohne zwingenden Cha
     p.add_run("  " + txt)
 
 # ---------- 5. Kapitel-Tabellen ----------
-CW = [1.2, 7.3, 0.8, 0.8, 0.8, 0.8, 0.8, 3.4, 1.5]  # = 17.4
+CW = [1.35, 7.15, 0.8, 0.8, 0.8, 0.8, 0.8, 3.4, 1.5]  # = 17.4
 for k, (name, qs) in enumerate(KAP, 1):
     p = doc.add_paragraph(); p.add_run().add_break(WD_BREAK.PAGE) if k == 1 else None
     nrows = 3 + len(qs) + 5
@@ -240,11 +259,14 @@ for k, (name, qs) in enumerate(KAP, 1):
     for i, q in enumerate(qs):
         r_ = 3 + i
         put(t.cell(r_, 0), f"{k}.{i+1}", align=C)
+        anl = ""
+        if isinstance(q, tuple): q, anl = q
         if q.endswith(A):
             p = put(t.cell(r_, 1), q[:-len(A)]); rr = p.add_run(A); rr.italic = True; rr.bold = True
         else:
             put(t.cell(r_, 1), q)
-        for j in range(2, 9): put(t.cell(r_, j))
+        for j in range(2, 8): put(t.cell(r_, j))
+        put(t.cell(r_, 8), anl, align=C, size=8)
         t.rows[r_].height = Cm(1.6); cant_split(t.rows[r_])
     g = 3 + len(qs)
     a = t.cell(g, 0).merge(t.cell(g, 8))
@@ -303,6 +325,108 @@ doc.add_paragraph()
 p = doc.add_paragraph(); p.add_run().add_break(WD_BREAK.PAGE)
 doc.add_heading("Anlage 2. Team Summary", level=1)
 doc.add_paragraph()
+# ---------- Anlage 3: Top-Ereignisse und Bow-Tie-Analyse ----------
+import os
+from docx.shared import RGBColor as _RGB
+BLUE_L, RED_L, DARKRED, GOLD_L = "DCE8F7", "F9D9D2", "C00000", "FFF4CC"
+def small(text, bold=False, italic=False, after=2):
+    p = doc.add_paragraph(); r = p.add_run(text); r.font.size = Pt(9); r.bold = bold; r.italic = italic
+    p.paragraph_format.space_after = Pt(after); return p
+
+p = doc.add_paragraph(); p.add_run().add_break(WD_BREAK.PAGE)
+doc.add_heading("Anlage 3. Top-Ereignisse und Bow-Tie-Analyse", level=1)
+para("Vorgehen im Audit:", bold=True, after=2)
+for st_ in ["1. Ereignisregister und EBA-/DÚ-Meldungen des Auswertungszeitraums sichten (Stichprobe gegen Meldeliste).",
+            "2. Ereignisse nach Ereignisart zusammenfassen, Schwere (S) und Häufigkeit (H) bewerten, Risiko = S × H.",
+            "3. Die Top-Ereignisse (höchstes Risiko, mind. die Top 3) in Tabelle 3.1 eintragen.",
+            "4. Für jedes Top-Ereignis gemeinsam mit den Fachverantwortlichen eine Bow-Tie-Analyse (3.3 ff.) erstellen.",
+            "5. Bei den realen Vorfällen prüfen, welche Barrieren versagt haben, und Maßnahmen ableiten (→ Kap. 16, Maßnahmenplan, Risikotabelle)."]:
+    small(st_, after=1)
+para(after=4)
+
+doc.add_heading("3.1 Top-Ereignisse aus dem Ereignisregister", level=2)
+t = table(1, [17.4]); p = put(t.cell(0, 0)); r = p.add_run("Auswertungszeitraum:  "); r.bold = True
+p.add_run("von ____________  bis ____________      Quelle: Ereignisregister / Meldeliste EBA / DÚ")
+para(after=3)
+W3 = [1.3, 5.3, 1.5, 2.2, 1.8, 1.8, 1.7, 1.8]
+t = table(7, W3)
+for i, h in enumerate(["Rang", "Ereignis / Ereignisart", "Anzahl", "davon gemeldet (EBA / DÚ)",
+                       "Schwere S (1–5)", "Häufigk. H (1–5)", "Risiko S × H", "Bow-Tie"]):
+    put(t.cell(0, i), h, bold=True, align=C, size=8); shade(t.cell(0, i), GREY)
+for n in range(1, 7):
+    put(t.cell(n, 0), str(n), align=C)
+    for j in range(1, 7): put(t.cell(n, j), align=C)
+    put(t.cell(n, 7), "☐", align=C); t.rows[n].height = Cm(0.9)
+para(after=2)
+small("Bewertung (Vorschlag – an die HSL-Risikomatrix anpassen):", bold=True, after=1)
+small("S: 1 = unbedeutend (kein Schaden) · 2 = gering · 3 = mittel (Sachschaden, Betriebsstörung) · 4 = schwer (Verletzte, Gefahrgutaustritt) · 5 = katastrophal (Tote, großer Umweltschaden)", after=1)
+small("H: 1 = einmalig · 2 = selten (1×/Jahr) · 3 = gelegentlich (mehrmals/Jahr) · 4 = häufig (monatlich) · 5 = sehr häufig (mehrmals/Monat)", after=1)
+small("Risiko ≥ 15: Bow-Tie zwingend · 8–14: Bow-Tie empfohlen · < 8: Beobachtung über Ereignisregister", after=3)
+small("Auswahlhilfe typische Top-Ereignisse (nicht abschließend): unzulässige Vorbeifahrt an Halt zeigendem Signal (SPAD) · "
+      "Entgleisung · Zusammenprall/Flankenfahrt · Entlaufen abgestellter Fahrzeuge · Austritt von Gefahrgut · "
+      "Überschreitung der zulässigen Geschwindigkeit · fehlerhafte/unterlassene Bremsprobe · Personenunfall im Gleisbereich · Brand am Fahrzeug.",
+      italic=True, after=6)
+
+doc.add_heading("3.2 Methode Bow-Tie", level=2)
+img = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bowtie.png")
+doc.add_picture(img, width=Cm(15.5)); doc.paragraphs[-1].alignment = C
+for term, expl in [("Gefahr:", "Tätigkeit oder Zustand mit Schadenspotenzial (z. B. Zugfahrt mit Gefahrgut)."),
+                   ("Top-Ereignis:", "Der Moment, in dem die Kontrolle über die Gefahr verloren geht (z. B. SPAD, Entgleisung)."),
+                   ("Ursache / Bedrohung:", "Was das Top-Ereignis auslösen kann (z. B. Ablenkung, fehlerhafte Fahrplanunterlagen)."),
+                   ("Präventive Barriere:", "Verhindert, dass eine Ursache zum Top-Ereignis führt (z. B. PZB/LZB, Vier-Augen-Prinzip)."),
+                   ("Konsequenz:", "Mögliche Folge des Top-Ereignisses (z. B. Zusammenprall, Verletzte, Umweltschaden)."),
+                   ("Mitigierende Barriere:", "Begrenzt die Folgen (z. B. Notfallmanagement, Gefahrgut-Notfallplan, Erste Hilfe)."),
+                   ("Eskalationsfaktor:", "Schwächt eine Barriere (z. B. Übermüdung, Sprachbarriere CZ/DE, fehlende Unterweisung).")]:
+    p = doc.add_paragraph(); r = p.add_run(term + " "); r.bold = True; r.font.size = Pt(9)
+    r = p.add_run(expl); r.font.size = Pt(9); p.paragraph_format.space_after = Pt(1)
+
+BW = [3.4, 3.6, 3.4, 3.6, 3.4]
+EW = [0.8, 3.6, 1.0, 1.3, 1.9, 2.6, 1.6, 4.6]
+for n in range(1, 4):
+    p = doc.add_paragraph(); p.add_run().add_break(WD_BREAK.PAGE)
+    doc.add_heading(f"3.{n+2} Bow-Tie-Analyse – Top-Ereignis {n}", level=2)
+    t = table(4, [5.0, 12.4])
+    for i, k in enumerate(["Top-Ereignis (Bezeichnung):", "Gefahr:", "Bezug Vorfälle / EBA-/DÚ-Aktenzeichen:", "Datum / Analyseteam:"]):
+        put(t.cell(i, 0), k, bold=True); shade(t.cell(i, 0), LIGHT); put(t.cell(i, 1)); t.rows[i].height = Cm(0.8)
+    shade(t.cell(1, 0), GOLD_L)
+    para(after=4)
+    t = table(7, BW)
+    heads = [("Ursachen / Bedrohungen", BLUE_L), ("Präventive Barrieren  ►", BLUE_L), ("TOP-EREIGNIS", DARKRED),
+             ("►  Mitigierende Barrieren", RED_L), ("Konsequenzen", RED_L)]
+    for i, (h, col) in enumerate(heads):
+        pp = put(t.cell(0, i), h, bold=True, align=C, size=9); shade(t.cell(0, i), col)
+        if col == DARKRED: pp.runs[0].font.color.rgb = _RGB(255, 255, 255)
+    repeat_header(t.rows[0])
+    mid = t.cell(1, 2).merge(t.cell(5, 2)); shade(mid, DARKRED)
+    pp = put(mid, "Top-Ereignis " + str(n), bold=True, align=C); pp.runs[0].font.color.rgb = _RGB(255, 255, 255)
+    for rr in range(1, 6):
+        for j in (0, 1, 3, 4):
+            put(t.cell(rr, j), f"{rr}." if j in (0, 4) else "", size=8)
+            t.cell(rr, j).vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.TOP
+        t.rows[rr].height = Cm(1.7); cant_split(t.rows[rr])
+    a = t.cell(6, 0).merge(t.cell(6, 1)); put(a, "Eskalationsfaktoren (präventiv):", bold=True, size=8)
+    a.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.TOP; shade(a, LIGHT)
+    put(t.cell(6, 2)); shade(t.cell(6, 2), DARKRED)
+    a = t.cell(6, 3).merge(t.cell(6, 4)); put(a, "Eskalationsfaktoren (mitigierend):", bold=True, size=8)
+    a.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.TOP; shade(a, LIGHT)
+    t.rows[6].height = Cm(1.5)
+    para(after=4)
+    para("Barrierenbewertung", bold=True, after=2, keep=True)
+    t = table(8, EW)
+    for i, h in enumerate(["Nr.", "Barriere", "P / M", "Typ T/O/V", "Verantw.",
+                           "Wirksamkeit", "Bei Vorfall versagt?", "Maßnahme / Termin"]):
+        put(t.cell(0, i), h, bold=True, align=C, size=8); shade(t.cell(0, i), GREY)
+    for rr in range(1, 7):
+        put(t.cell(rr, 0), str(rr), align=C)
+        for j in (1, 2, 3, 4, 7): put(t.cell(rr, j))
+        put(t.cell(rr, 5), "☐ wirksam", size=7)
+        for x in ("☐ eingeschränkt", "☐ unwirksam"):
+            t.cell(rr, 5).add_paragraph(style=tc_style).add_run(x).font.size = Pt(7)
+        put(t.cell(rr, 6), "☐ ja ☐ nein", align=C, size=8)
+        t.rows[rr].height = Cm(0.95); cant_split(t.rows[rr])
+    a = t.cell(7, 0).merge(t.cell(7, 7)); p = put(a); r = p.add_run("Restrisiko akzeptabel?  "); r.bold = True
+    p.add_run("☐ ja   ☐ nein – zusätzliche Barrieren erforderlich (→ Maßnahmenplan)")
+    small("P = präventiv, M = mitigierend · T = technisch, O = organisatorisch, V = verhaltensbezogen", after=0)
 
 doc.core_properties.title = "Protokoll interner Audits – " + THEMA
 doc.core_properties.author = "Enrico Görzen (QMB)"
