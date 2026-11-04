@@ -103,7 +103,7 @@ p = para("Anlassbezogenes Audit HSL CZ – Grund: Vorfälle und EBA-Meldungen", 
 
 # ---------- 1. Auditdurchführung ----------
 para("Auditdurchführung", bold=True, size=11, after=4, keep=True)
-meta = [("Datum:", ""), ("Beginn:", ""), ("Ende:", ""), ("Geplante Dauer:", "4 Stunden (inkl. 15 min Pause) – Ablauf siehe Auditplan"), ("Ort(e) der Durchführung:", ORT + " – "),
+meta = [("Datum:", ""), ("Beginn:", "10:00 Uhr"), ("Ende:", "14:00 Uhr (geplant)"), ("Geplante Dauer:", "4 Stunden, 10:00–14:00 Uhr (inkl. 15 min Pause) – Ablauf siehe Auditplan"), ("Ort(e) der Durchführung:", "Pirna"),
         ("Auditart / Anlass:", "Anlassbezogenes (außerplanmäßiges) internes Audit – Vorfälle und EBA-Meldungen"),
         ("Auditor(en):", "Enrico Görzen (QMB)"), ("Teilnehmer:", "")]
 t = table(len(meta), [5.0, 12.4])
@@ -238,26 +238,26 @@ for color, txt in ((WD_COLOR_INDEX.YELLOW, "= Empfehlung – ohne zwingenden Cha
 
 
 # ---------- Auditplan (4 h) ----------
-p = para("Auditplan – geplante Dauer 4 Stunden", bold=True, size=12, after=2, keep=True)
+p = para("Auditplan – Pirna, 10:00–14:00 Uhr (4 Stunden)", bold=True, size=12, after=2, keep=True)
 p.paragraph_format.page_break_before = True
 small_ = lambda txt, it=False: (lambda p_: ([setattr(r_.font, "size", Pt(9)) or setattr(r_, "italic", it) for r_ in p_.runs], p_.paragraph_format.__setattr__("space_after", Pt(4))))(doc.add_paragraph(txt))
 small_("Schwerpunkt anlassbezogen: Meldewesen/EBA-Meldungen, Top-Ereignisse und Bow-Tie, SQAS. Die übrigen Kapitel werden als Kurzcheck "
        "mit Bezug zu den Vorfällen geprüft; nicht zutreffende Kapitel mit „0 = entfällt“ bewerten.", True)
 PW = [2.0, 1.2, 7.3, 2.4, 3.0, 1.5]
 PLAN = [
- ("0:00–0:15", "15", "Eröffnung: Anlass, Ziel, Ablauf, Vorstellung, Vertraulichkeit/Just Culture", "–", "alle"),
- ("0:15–0:30", "15", "Kurzcheck Managementsystem: Kontext, Rollen, Risikotabelle, Dokumentenlenkung", "Nr. 1–4", "Standortleitung, SMS"),
- ("0:30–1:15", "45", "Meldewesen: Meldewege, Meldekette CZ/DE, Klassifizierung, Meldefristen, Beweissicherung – Stichprobe EBA-/DÚ-Meldungen", "Nr. 16.1–16.5", "SMS, Leitstelle, Tf-Vertreter"),
- ("1:15–1:45", "30", "Ereignisregister, Abgleich mit Behördenmeldungen, Ursachenanalysen, Lessons Learned; Top-Ereignisse ziehen und ranken", "Nr. 16.6–16.10, Anl. 3.1", "SMS, Standortleitung"),
- ("1:45–2:00", "15", "Pause", "", ""),
- ("2:00–2:45", "45", "Bow-Tie-Workshop Top-Ereignis 1 (Top-Ereignis 2/3 bei Zeitreserve, sonst Nacharbeit mit Termin)", "Nr. 16.11–16.12, Anl. 3.3 ff.", "SMS, Fachverantwortliche, ECM, Gb"),
- ("2:45–3:15", "30", "SQAS: Assessment-Maßnahmen, Gefahrgut (RID 1.3/1.8.5/1.10), Notfallpläne/-übungen, Kennzahlen, Umwelt", "Nr. 11", "Gefahrgutbeauftragter, QM"),
- ("3:15–3:35", "20", "Betrieb und Operativ mit Bezug zu den Vorfällen: Betrieb, Leistung, Verbesserung, Rangieren, Fahrzeuge/ECM, Wagentechnik, Arbeitsschutz", "Nr. 5–10, 15", "Standortleitung, ECM, Wagenmeister"),
- ("3:35–3:45", "10", "Kurzcheck ISO 50001, IT-Sicherheit, EfB (ggf. „entfällt“)", "Nr. 12–14", "Standortleitung"),
- ("3:45–4:00", "15", "Abschlussgespräch: erste Feststellungen, Empfehlungen/Schwachstellen, Maßnahmen und Termine, Nachaudit?", "Auditbericht", "alle"),
+ ("10:00–10:15", "15", "Eröffnung: Anlass, Ziel, Ablauf, Vorstellung, Vertraulichkeit/Just Culture", "–", "alle"),
+ ("10:15–10:30", "15", "Kurzcheck Managementsystem: Kontext, Rollen, Risikotabelle, Dokumentenlenkung", "Nr. 1–4", "Standortleitung, SMS"),
+ ("10:30–11:15", "45", "Meldewesen: Meldewege, Meldekette CZ/DE, Klassifizierung, Meldefristen, Beweissicherung – Stichprobe EBA-/DÚ-Meldungen", "Nr. 16.1–16.5", "SMS, Leitstelle, Tf-Vertreter"),
+ ("11:15–11:45", "30", "Ereignisregister, Abgleich mit Behördenmeldungen, Ursachenanalysen, Lessons Learned; Top-Ereignisse ziehen und ranken", "Nr. 16.6–16.10, Anl. 3.1", "SMS, Standortleitung"),
+ ("11:45–12:00", "15", "Pause", "", ""),
+ ("12:00–12:45", "45", "Bow-Tie-Workshop Top-Ereignis 1 (Top-Ereignis 2/3 bei Zeitreserve, sonst Nacharbeit mit Termin)", "Nr. 16.11–16.12, Anl. 3.3 ff.", "SMS, Fachverantwortliche, ECM, Gb"),
+ ("12:45–13:15", "30", "SQAS: Assessment-Maßnahmen, Gefahrgut (RID 1.3/1.8.5/1.10), Notfallpläne/-übungen, Kennzahlen, Umwelt", "Nr. 11", "Gefahrgutbeauftragter, QM"),
+ ("13:15–13:35", "20", "Betrieb und Operativ mit Bezug zu den Vorfällen: Betrieb, Leistung, Verbesserung, Rangieren, Fahrzeuge/ECM, Wagentechnik, Arbeitsschutz", "Nr. 5–10, 15", "Standortleitung, ECM, Wagenmeister"),
+ ("13:35–13:45", "10", "Kurzcheck ISO 50001, IT-Sicherheit, EfB (ggf. „entfällt“)", "Nr. 12–14", "Standortleitung"),
+ ("13:45–14:00", "15", "Abschlussgespräch: erste Feststellungen, Empfehlungen/Schwachstellen, Maßnahmen und Termine, Nachaudit?", "Auditbericht", "alle"),
 ]
 t = table(len(PLAN) + 1, PW)
-for i, h in enumerate(["Zeit (ab Beginn)", "Min.", "Inhalt", "Nr. / Fragen", "Gesprächspartner", "Uhrzeit Ist"]):
+for i, h in enumerate(["Uhrzeit (Plan)", "Min.", "Inhalt", "Nr. / Fragen", "Gesprächspartner", "Uhrzeit Ist"]):
     put(t.cell(0, i), h, bold=True, align=C, size=8); shade(t.cell(0, i), GREY)
 repeat_header(t.rows[0])
 for n, (z, m_, inh, kap, wer) in enumerate(PLAN, 1):

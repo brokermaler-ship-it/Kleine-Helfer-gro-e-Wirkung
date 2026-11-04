@@ -11,8 +11,8 @@
 - Erstellt mit dem Skill `audit-protokoll-erstellen` als leere Vorlage für ein anlassbezogenes internes Audit.
 - Anlass: Vorfälle und EBA-Meldungen.
 - Auditor: Enrico Görzen (QMB).
-- Geplante Dauer: 4 Stunden.
-- Datum, Beginn, Ende, Ort und Teilnehmer sind noch offen.
+- Ort und Zeit: Pirna, 10:00–14:00 Uhr (4 Stunden); der Auditplan steht auf Uhrzeiten.
+- Datum und Teilnehmer sind noch offen.
 - Quelle: GitHub-Repo `brokermaler-ship-it/Kleine-Helfer-gro-e-Wirkung`, Branch `ccr-4f6a765f-snbb46`, Ordner `docs/audits/`:
   - `Auditprotokoll_HSL-CZ_Vorfaelle_EBA-Meldungen.docx`: das Protokoll (19 Seiten)
   - `build_auditprotokoll_hsl_cz.py`: Generator (python-docx), erwartet `bowtie.png` im selben Ordner
@@ -46,7 +46,7 @@
    - Tätigkeit der HSL CZ: „Eisenbahnverkehrsleistungen CZ/DE inkl. grenzüberschreitender Verkehre“
    - Bewertungsschwellen der Bow-Tie: ab 15 zwingend, 8–14 empfohlen. Das ist ein Vorschlag; an die HSL-Risikomatrix angleichen bzw. mit `HSL_Risikobewertung_v2_Konzept_v1.md` abgleichen (Bow-Tie statt RPZ).
    - Die Fachkapitel ISO 50001, EfB und Rangierbetrieb treffen bei der HSL CZ eventuell nicht zu (im Audit dann „0 = entfällt“).
-7. Trage Datum, Ort und Teilnehmer ein, sobald sie feststehen. Rechne den relativen Zeitplan auf echte Uhrzeiten um.
+7. Trage Datum und Teilnehmer ein, sobald sie feststehen.
 8. Liegen Ereignisregister oder EBA-Meldeliste vor: Ermittle die Top-Ereignisse und fülle die Tabelle 3.1 sowie die Bow-Tie-Entwürfe (3.3 ff.) vor. Die Bewertung der Barrieren bleibt dem Audit vor Ort vorbehalten.
 9. Nach dem Audit: Bewertungen eintragen und den Skill `audit-protokoll-auswerten` für Auswertung, Maßnahmen und Summaries verwenden.
 
