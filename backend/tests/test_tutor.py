@@ -48,6 +48,8 @@ def test_system_prompt_contains_full_material(module):
     for objective in module.objectives:
         assert f"[{objective.id}]" in prompt
     assert build_system_prompt(module) == prompt  # stabil für Prompt-Caching
+    assert "Du bist Lukas" in prompt
+    assert "Du bist Luisa" in build_system_prompt(module, "Luisa")
 
 
 def test_tool_specs_are_strict_and_enumerate_ids(module):
@@ -140,6 +142,19 @@ def test_session_token_dispatches_agent_with_module(client):
     assert claims.video.room == res["room"] and claims.video.room_join
     dispatch = claims.room_config.agents[0]
     assert dispatch.agent_name == "voice-tutor"
-    assert json.loads(dispatch.metadata) == {"module_id": "phishing-melden", "pilot_id": "P-001"}
+    assert json.loads(dispatch.metadata) == {"module_id": "phishing-melden", "pilot_id": "P-001", "tutor": "lukas"}
 
     assert client.post("/api/session", json={"module_id": "gibtsnicht", "pilot_id": "P-001"}).status_code == 404
+
+
+def test_session_with_luisa(client):
+    from livekit import api
+
+    assert [t["name"] for t in client.get("/api/tutors").json()] == ["Lukas", "Luisa"]
+    body = {"module_id": "phishing-melden", "pilot_id": "P-001", "tutor": "luisa"}
+    res = client.post("/api/session", json=body).json()
+    claims = api.TokenVerifier("devkey", "secret").verify(res["token"])
+    assert json.loads(claims.room_config.agents[0].metadata)["tutor"] == "luisa"
+
+    body["tutor"] = "max"
+    assert client.post("/api/session", json=body).status_code == 422

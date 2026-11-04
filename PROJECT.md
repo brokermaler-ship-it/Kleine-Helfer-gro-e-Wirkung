@@ -299,9 +299,9 @@ Wenn die Person nach einer Tutor-Frage nachdenkt, wartet der Agent bis zu `max_d
 
 | # | Thema | Verantwortlich | Status |
 | :--- | :--- | :--- | :--- |
-| 1 | Accounts für Anthropic, Deepgram, Cartesia anlegen, Keys hinterlegen | Projektleitung | offen |
-| 2 | Deutsche Cartesia-Stimme auswählen | Projektteam | offen, nach #1 |
-| 3 | Test mit echten Sprachdiensten, Endpointing feinjustieren | Entwicklung | offen, nach #1 |
+| 1 | Accounts für Anthropic, Deepgram, Cartesia anlegen, Keys hinterlegen | Projektleitung | erledigt (Okt. 2026), zusätzlich LiveKit Cloud |
+| 2 | Deutsche Cartesia-Stimme auswählen | Projektteam | erledigt: Tutor „Lukas“ mit Stimme „Lukas – Professional“ |
+| 3 | Test mit echten Sprachdiensten, Endpointing feinjustieren | Entwicklung | erster Test erfolgreich (Okt. 2026), Feinjustierung offen |
 | 4 | Betriebsrat informieren, Regelung für den Pilot | Projektleitung + HR | Entwürfe liegen vor: [`docs/compliance/`](docs/compliance/README.md) |
 | 5 | DSFA und Auftragsverarbeitungsverträge | Datenschutzbeauftragte | DSFA-Entwurf und Anbieter-Prüfliste liegen vor: [`docs/compliance/`](docs/compliance/README.md) |
 | 6 | Erste echte SOP auswählen und ins Modulformat überführen | Fachabteilung | offen |
