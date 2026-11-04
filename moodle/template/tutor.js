@@ -46,9 +46,16 @@
     var d = e.detail, box = document.querySelector('[data-total]');
     if (!box || !d.total) return;
     var pct = Math.round(d.right / d.total * 100);
-    box.textContent = d.quizzesDone < d.quizzes
-      ? 'Bisher ' + d.right + ' von ' + d.total + ' Fragen richtig. Es fehlen noch ' + (d.quizzes - d.quizzesDone) + ' Lernerfolgskontrollen.'
-      : 'Gesamtergebnis: ' + d.right + ' von ' + d.total + ' richtig (' + pct + ' %). ' + (pct >= 70 ? 'Bestanden.' : 'Noch nicht bestanden, wiederhole die Module mit den meisten Fehlern.');
+    var open = d.quizzes - d.quizzesDone;
+    if (document.documentElement.lang === 'en') {
+      box.textContent = open > 0
+        ? 'So far ' + d.right + ' of ' + d.total + ' questions correct. ' + open + ' knowledge checks still to go.'
+        : 'Overall result: ' + d.right + ' of ' + d.total + ' correct (' + pct + ' %). ' + (pct >= 70 ? 'Passed.' : 'Not passed yet, repeat the modules with the most mistakes.');
+    } else {
+      box.textContent = open > 0
+        ? 'Bisher ' + d.right + ' von ' + d.total + ' Fragen richtig. Es fehlen noch ' + open + ' Lernerfolgskontrollen.'
+        : 'Gesamtergebnis: ' + d.right + ' von ' + d.total + ' richtig (' + pct + ' %). ' + (pct >= 70 ? 'Bestanden.' : 'Noch nicht bestanden, wiederhole die Module mit den meisten Fehlern.');
+    }
     box.className = pct >= 70 && d.quizzesDone >= d.quizzes ? 'hsl-ok' : '';
   });
 })();

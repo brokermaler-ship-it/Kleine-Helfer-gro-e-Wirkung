@@ -5,6 +5,7 @@
    Freischaltung: Lernerfolgskontrolle des Vormoduls mit mindestens 70 %. */
 (function () {
   var KEY = (document.documentElement.getAttribute('data-course') || 'kurs') + '-modulfortschritt', DONE = '#1e7a3c';
+  var EN = document.documentElement.lang === 'en';
   var state = { done: {}, open: 1 };
   try {
     var raw = JSON.parse(localStorage.getItem(KEY));
@@ -42,7 +43,9 @@
       el.style.opacity = free ? '1' : '0.55';
       if (btn) btn.style.cursor = free ? 'pointer' : 'not-allowed';
       if (lab) {
-        lab.textContent = done ? '✓ abgeschlossen' : (free ? (open ? 'geöffnet' : 'öffnen') : 'gesperrt');
+        lab.textContent = EN
+          ? (done ? '✓ completed' : (free ? (open ? 'open' : 'show') : 'locked'))
+          : (done ? '✓ abgeschlossen' : (free ? (open ? 'geöffnet' : 'öffnen') : 'gesperrt'));
         lab.style.color = done ? DONE : 'var(--color-neutral-700)';
       }
       if (arrow) arrow.textContent = open ? '–' : '+';

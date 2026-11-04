@@ -51,6 +51,7 @@ class Module:
     objectives: tuple[Objective, ...]
     sections: tuple[Section, ...]
     quiz: tuple[QuizQuestion, ...]
+    language: str = "de"
 
     def objective(self, objective_id: str) -> Objective | None:
         return next((o for o in self.objectives if o.id == objective_id), None)
@@ -115,6 +116,7 @@ def parse_module(data: dict, source: str = "<modul>") -> Module:
         objectives=objectives,
         sections=sections,
         quiz=tuple(quiz),
+        language=str(data.get("language", "de")),
     )
 
 

@@ -29,7 +29,7 @@ def test_scorm_package(tmp_path):
 def test_scorm_package_with_audio(tmp_path, monkeypatch):
     builder = load_builder()
     calls = []
-    monkeypatch.setattr(builder, "synthesize", lambda text, voice, model, target: (calls.append(text), target.write_bytes(b"mp3")))
+    monkeypatch.setattr(builder, "synthesize", lambda text, voice, model, target, language="de": (calls.append(text), target.write_bytes(b"mp3")))
     archive = builder.build(ROOT / "content" / "modules" / "phishing-melden.yaml", "http://localhost:8000", tmp_path, True)
     with zipfile.ZipFile(archive) as zf:
         names = zf.namelist()
@@ -71,3 +71,15 @@ def test_quiz_warnings_detect_longest_answer():
     })
     warnings = builder.quiz_warnings(module)
     assert "4 von 4" in warnings[0] and len(warnings) == 5
+
+
+def test_scorm_package_english(tmp_path):
+    builder = load_builder()
+    source = (ROOT / "content" / "modules" / "phishing-melden.yaml").read_text(encoding="utf-8")
+    module = tmp_path / "phishing-en.yaml"
+    module.write_text(source.replace("id: phishing-melden", "id: phishing-en") + "\nlanguage: en\n", encoding="utf-8")
+    archive = builder.build(module, "https://tutor.example/", tmp_path / "out")
+    with zipfile.ZipFile(archive) as zf:
+        index = zf.read("index.html").decode()
+    assert '<html lang="en"' in index and "Knowledge check, module 1" in index
+    assert "data-tutor=" not in index and "Lerngespräch" not in index

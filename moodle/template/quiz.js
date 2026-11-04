@@ -6,6 +6,7 @@
      <button data-quiz-check>  <button data-quiz-reset>  <div data-quiz-result> */
 (function () {
   var GREEN = '#1e7a3c', RED = '#b8262a';
+  var EN = document.documentElement.lang === 'en';
 
   function fields(q) { return Array.prototype.slice.call(q.querySelectorAll('input')); }
   function picked(q) { return fields(q).filter(function (i) { return i.checked; }).map(function (i) { return i.value; }).sort().join(','); }
@@ -31,13 +32,13 @@
       box.style.borderColor = ok ? GREEN : RED;
       box.style.color = ok ? GREEN : RED;
       box.style.background = ok ? 'rgba(47,109,79,0.07)' : 'rgba(156,59,59,0.06)';
-      box.innerHTML = '<strong>' + (ok ? 'Richtig.' : 'Noch nicht richtig.') + '</strong> ' + (q.getAttribute('data-explain') || '');
+      box.innerHTML = '<strong>' + (ok ? (EN ? 'Correct.' : 'Richtig.') : (EN ? 'Not quite.' : 'Noch nicht richtig.')) + '</strong> ' + (q.getAttribute('data-explain') || '');
       q.style.borderLeft = '3px solid ' + (ok ? GREEN : RED);
     });
     var res = quiz.querySelector('[data-quiz-result]');
     if (res) {
       var pct = Math.round(right / qs.length * 100);
-      res.textContent = right + ' von ' + qs.length + ' richtig (' + pct + ' %).';
+      res.textContent = right + (EN ? ' of ' : ' von ') + qs.length + (EN ? ' correct (' : ' richtig (') + pct + ' %).';
       res.style.color = pct >= 70 ? GREEN : RED;
     }
     quiz.setAttribute('data-score-right', right);
