@@ -1,4 +1,9 @@
-# Lokaler LiveKit-Server im Entwicklungsmodus (API-Key "devkey", Secret "secret").
+# Lokaler Pilot-Aufbau: LiveKit-Server, Sprach-Agent und Web-Server.
+#
+#   docker compose up -d livekit          # nur LiveKit, Agent und Server laufen lokal
+#   docker compose up -d --build          # alles in Containern (Keys aus .env)
+#
+# LiveKit läuft im Entwicklungsmodus (API-Key "devkey", Secret "secret").
 services:
   livekit:
     image: livekit/livekit-server:v1.13.7
@@ -7,3 +12,37 @@ services:
       - "7880:7880"
       - "7881:7881"
       - "7882:7882/udp"
+
+  agent:
+    build: .
+    command: ["python", "-m", "tutor.agent", "start"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Der Agent erreicht LiveKit im Compose-Netz unter dem Dienstnamen.
+      LIVEKIT_URL: ws://livekit:7880
+    volumes:
+      - tutor-data:/data
+    depends_on:
+      - livekit
+    restart: unless-stopped
+
+  web:
+    build: .
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Diese Adresse bekommt der Browser mit dem Raum-Token, sie muss von dort erreichbar sein.
+      LIVEKIT_URL: ${PUBLIC_LIVEKIT_URL:-ws://localhost:7880}
+    ports:
+      - "8000:8000"
+    volumes:
+      - tutor-data:/data
+    depends_on:
+      - livekit
+    restart: unless-stopped
+
+volumes:
+  tutor-data:

@@ -35,10 +35,13 @@ class Settings:
     content_dir: Path
     # Interne Module (nicht im Repository, siehe .gitignore), werden zusätzlich geladen.
     intern_content_dir: Path
+    eval_dir: Path
     data_dir: Path
     frontend_dir: Path
     llm_model: str
     llm_effort: str
+    # Modell, das im Evaluationslauf die Antworten des Tutors bewertet.
+    eval_judge_model: str
     stt_model: str
     tts_model: str
     # Tutor-Personas: Name und Cartesia-Stimme, die lernende Person wählt eine davon.
@@ -56,10 +59,12 @@ def load_settings() -> Settings:
     return Settings(
         content_dir=Path(os.environ.get("TUTOR_CONTENT_DIR", REPO_ROOT / "content" / "modules")),
         intern_content_dir=Path(os.environ.get("TUTOR_INTERN_CONTENT_DIR", REPO_ROOT / "content-intern")),
+        eval_dir=Path(os.environ.get("TUTOR_EVAL_DIR", REPO_ROOT / "content" / "evals")),
         data_dir=Path(os.environ.get("TUTOR_DATA_DIR", REPO_ROOT / "data")),
         frontend_dir=REPO_ROOT / "frontend",
         llm_model=os.environ.get("TUTOR_LLM_MODEL", "claude-sonnet-5-5"),
         llm_effort=os.environ.get("TUTOR_LLM_EFFORT", "low"),
+        eval_judge_model=os.environ.get("TUTOR_EVAL_JUDGE_MODEL", "claude-opus-5-5"),
         stt_model=os.environ.get("TUTOR_STT_MODEL", "nova-3"),
         tts_model=os.environ.get("TUTOR_TTS_MODEL", "sonic-3"),
         tutors={
