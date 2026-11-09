@@ -51,6 +51,7 @@ class Module:
     objectives: tuple[Objective, ...]
     sections: tuple[Section, ...]
     quiz: tuple[QuizQuestion, ...]
+    language: str = "de"
 
     def objective(self, objective_id: str) -> Objective | None:
         return next((o for o in self.objectives if o.id == objective_id), None)
@@ -115,6 +116,7 @@ def parse_module(data: dict, source: str = "<modul>") -> Module:
         objectives=objectives,
         sections=sections,
         quiz=tuple(quiz),
+        language=str(data.get("language", "de")),
     )
 
 
@@ -125,9 +127,11 @@ def load_module(path: Path) -> Module:
     return parse_module(data, source=str(path))
 
 
-def load_modules(directory: Path) -> dict[str, Module]:
+def load_modules(*directories: Path) -> dict[str, Module]:
+    """Lädt alle Module; Ordner, die es nicht gibt (z. B. ``content-intern``), werden übersprungen."""
     modules: dict[str, Module] = {}
-    for path in sorted(directory.glob("*.yaml")):
+    paths = [p for d in directories if d.is_dir() for p in sorted(d.glob("*.yaml"))]
+    for path in paths:
         module = load_module(path)
         if module.id in modules:
             raise ModuleError(f"{path}: Modul-ID '{module.id}' ist doppelt vergeben")

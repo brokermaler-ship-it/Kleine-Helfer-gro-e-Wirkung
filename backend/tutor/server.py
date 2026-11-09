@@ -23,7 +23,7 @@ from livekit import api
 from pydantic import BaseModel, Field
 
 from . import feedback
-from .config import Settings, load_settings
+from .config import DEFAULT_TUTOR, Settings, load_settings
 from .metrics import latency_summary
 from .modules import Module, load_modules
 
@@ -38,6 +38,7 @@ Group = Literal["tutor", "vergleich"]
 class SessionRequest(BaseModel):
     module_id: str
     pilot_id: str = Field(pattern=PILOT_ID_PATTERN)
+    tutor: str = DEFAULT_TUTOR
 
 
 class QuizSubmission(BaseModel):
@@ -70,7 +71,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @lru_cache(maxsize=1)
     def modules() -> dict[str, Module]:
-        return load_modules(settings.content_dir)
+        return load_modules(settings.content_dir, settings.intern_content_dir)
 
     def get_module(module_id: str) -> Module:
         module = modules().get(module_id)
@@ -94,8 +95,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/session")
     def create_session(req: SessionRequest) -> dict:
         module = get_module(req.module_id)
+        if req.tutor not in settings.tutors:
+            raise HTTPException(422, f"Unbekannter Tutor '{req.tutor}'")
         room = f"tutor-{module.id}-{uuid.uuid4().hex[:8]}"
-        metadata = json.dumps({"module_id": module.id, "pilot_id": req.pilot_id})
+        metadata = json.dumps({"module_id": module.id, "pilot_id": req.pilot_id, "tutor": req.tutor})
         token = (
             api.AccessToken(settings.livekit_api_key, settings.livekit_api_secret)
             .with_identity(f"lernende-{req.pilot_id}-{uuid.uuid4().hex[:4]}")
@@ -109,6 +112,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             .to_jwt()
         )
         return {"url": settings.livekit_url, "token": token, "room": room}
+
+    @app.get("/api/tutors")
+    def list_tutors() -> list[dict]:
+        return [{"id": t.id, "name": t.name} for t in settings.tutors.values()]
 
     @app.get("/api/modules/{module_id}/quiz")
     def get_quiz(module_id: str) -> list[dict]:
