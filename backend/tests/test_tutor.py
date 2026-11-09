@@ -117,19 +117,28 @@ def test_quiz_rejects_names_as_pilot_id(client):
     assert res.status_code == 422
 
 
-def test_pilot_summary_uses_latest_attempt(client):
-    def submit(pilot, phase, answer):
-        client.post(
-            "/api/modules/phishing-melden/quiz",
-            json={"pilot_id": pilot, "phase": phase, "answers": {f"q{i}": answer for i in range(1, 7)}},
-        )
+def test_pilot_summary_uses_latest_attempt_per_group(client, tmp_path):
+    def submit(pilot, phase, answer, group=None):
+        body = {"pilot_id": pilot, "phase": phase, "answers": {f"q{i}": answer for i in range(1, 7)}}
+        if group:
+            body["group"] = group
+        assert client.post("/api/modules/phishing-melden/quiz", json=body).status_code == 200
 
     submit("P-001", "vorher", 0)   # 1 von 6
     submit("P-001", "nachher", 3)  # 0 von 6, wird überschrieben
     submit("P-001", "nachher", 1)  # 4 von 6
+    submit("V-001", "nachher", 0, group="vergleich")  # 1 von 6
+    # Datensatz aus der Zeit vor den Gruppen zählt zur Tutor-Gruppe
+    with (tmp_path / "quiz_results.jsonl").open("a") as f:
+        f.write(json.dumps({"pilot_id": "P-002", "module_id": "phishing-melden", "phase": "vorher", "score": 3, "total": 6}) + "\n")
+
     summary = client.get("/api/pilot/summary").json()["phishing-melden"]
-    assert summary["vorher"] == {"teilnehmende": 1, "quote_richtig": round(1 / 6, 3)}
-    assert summary["nachher"] == {"teilnehmende": 1, "quote_richtig": round(4 / 6, 3)}
+    assert summary["tutor"]["vorher"] == {"teilnehmende": 2, "quote_richtig": round((1 / 6 + 3 / 6) / 2, 3)}
+    assert summary["tutor"]["nachher"] == {"teilnehmende": 1, "quote_richtig": round(4 / 6, 3)}
+    assert summary["vergleich"] == {"nachher": {"teilnehmende": 1, "quote_richtig": round(1 / 6, 3)}}
+
+    bad = {"pilot_id": "P-003", "phase": "vorher", "group": "andere", "answers": {}}
+    assert client.post("/api/modules/phishing-melden/quiz", json=bad).status_code == 422
 
 
 def test_session_token_dispatches_agent_with_module(client):
@@ -143,3 +152,71 @@ def test_session_token_dispatches_agent_with_module(client):
     assert json.loads(dispatch.metadata) == {"module_id": "phishing-melden", "pilot_id": "P-001"}
 
     assert client.post("/api/session", json={"module_id": "gibtsnicht", "pilot_id": "P-001"}).status_code == 404
+
+
+def test_percentile_interpolates_like_numpy():
+    from tutor.metrics import percentile
+
+    assert percentile([], 50) is None
+    assert percentile([1.0], 95) == 1.0
+    assert percentile([4.0, 1.0, 3.0, 2.0], 50) == 2.5
+    assert percentile([float(i) for i in range(1, 21)], 95) == pytest.approx(19.05)
+
+
+def test_pilot_latency_separates_thinking_pauses(client, tmp_path):
+    def session(finished, *pairs):
+        turns = []
+        for eot, e2e, ttft, ttfb in pairs:
+            turns.append({"role": "user", "end_of_turn_delay": eot, "transcription_delay": 0.1})
+            turns.append({"role": "assistant", "e2e_latency": e2e, "llm_node_ttft": ttft, "tts_node_ttfb": ttfb})
+        return {"module_id": "phishing-melden", "finished": finished, "turns": turns}
+
+    records = [
+        # Begrüßung ohne vorherige Nachricht der Person, ohne e2e_latency
+        {"module_id": "phishing-melden", "finished": True, "turns": [
+            {"role": "assistant", "llm_node_ttft": 0.2, "tts_node_ttfb": 0.1},
+            *session(True, (0.5, 0.8, 0.2, 0.1), (0.6, 0.9, 0.25, 0.1))["turns"],
+        ]},
+        session(False, (0.7, 1.2, 0.3, 0.15), (3.0, 3.6, 0.3, 0.1)),  # zweiter Wechsel: Nachdenkpause
+    ]
+    (tmp_path / "sessions.jsonl").write_text("\n".join(json.dumps(r) for r in records) + "\n")
+
+    summary = client.get("/api/pilot/latency").json()["phishing-melden"]
+    assert summary["sitzungen"] == 2 and summary["abschlussquote"] == 0.5
+    assert summary["e2e_latency_ms"] == {"n": 3, "p50": 900, "p95": 1170}
+    assert summary["reaktionszeit_ms"]["n"] == 4  # Begrüßung zählt mit, Nachdenkpause nicht
+    assert summary["reaktionszeit_ms"]["p50"] == 325
+    assert summary["nachdenkpausen"] == {"anzahl": 1, "e2e_latency_ms": {"n": 1, "p50": 3600, "p95": 3600}}
+    assert summary["ziele_erreicht"] == {"e2e_p50": True, "e2e_p95": True, "reaktionszeit_p50": True}
+
+
+def test_pilot_latency_without_sessions(client):
+    assert client.get("/api/pilot/latency").json() == {}
+
+
+def test_feedback_is_validated_and_summarized(client):
+    questions = client.get("/api/feedback/questions").json()
+    ids = [q["id"] for q in questions]
+    assert "unterbrechungen" in ids and "verstaendlich" in ids
+
+    def submit(pilot, value, comment=""):
+        return client.post(
+            "/api/modules/phishing-melden/feedback",
+            json={"pilot_id": pilot, "answers": {i: value for i in ids}, "comment": comment},
+        )
+
+    assert submit("P-001", 0).status_code == 200
+    assert submit("P-001", 1, "Gut verständlich.").status_code == 200  # ersetzt die erste Abgabe
+    assert submit("P-002", 0).status_code == 200
+    assert submit("P-003", 9).status_code == 422
+    assert submit("Max Mustermann", 0).status_code == 422
+    assert submit("P-004", 0, "x" * 501).status_code == 422
+    missing = client.post("/api/modules/phishing-melden/feedback", json={"pilot_id": "P-005", "answers": {}})
+    assert missing.status_code == 422
+
+    summary = client.get("/api/pilot/feedback").json()["phishing-melden"]
+    assert summary["teilnehmende"] == 2
+    assert summary["fragen"]["unterbrechungen"]["antworten"] == {"nie": 1, "einmal": 1, "zweimal": 0, "dreimal oder öfter": 0}
+    assert summary["fragen"]["verstaendlich"]["mittelwert"] == 1.5
+    assert "mittelwert" not in summary["fragen"]["umgebung"]
+    assert summary["kommentare"] == ["Gut verständlich."]

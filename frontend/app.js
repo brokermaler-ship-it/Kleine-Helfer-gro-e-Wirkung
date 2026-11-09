@@ -2,6 +2,9 @@
 
 const { Room, RoomEvent, Track } = LivekitClient;
 
+// Die Pilotleitung schickt der Vergleichsgruppe den Link mit ?gruppe=vergleich.
+const GROUP = new URLSearchParams(location.search).get("gruppe") === "vergleich" ? "vergleich" : "tutor";
+
 const state = {
   pilotId: "",
   module: null,
@@ -49,6 +52,11 @@ async function api(path, options = {}) {
 // ---------- Start ----------
 
 async function initStart() {
+  if (GROUP === "vergleich") {
+    $("start-lead").textContent =
+      "Du bearbeitest das bisherige E-Learning. Vorher und nachher gibt es einen kurzen Wissenscheck, damit wir die Formate vergleichen können.";
+    $("start-note").textContent = "Gespeichert werden nur die Ergebnisse des Wissenschecks, mit deiner Pilot-Kennung.";
+  }
   state.modules = await api("/api/modules");
   const select = $("module-select");
   for (const m of state.modules) select.append(el("option", { value: m.id, textContent: m.title }));
@@ -119,7 +127,7 @@ async function startQuiz(phase) {
     for (const q of questions) answers[q.id] = Number(new FormData(form).get(q.id));
     const result = await api(`/api/modules/${state.module.id}/quiz`, {
       method: "POST",
-      body: JSON.stringify({ pilot_id: state.pilotId, phase, answers }),
+      body: JSON.stringify({ pilot_id: state.pilotId, phase, group: GROUP, answers }),
     });
     onQuizResult(phase, result);
   };
@@ -130,7 +138,8 @@ async function startQuiz(phase) {
 function onQuizResult(phase, result) {
   if (phase === "vorher") {
     state.preScore = result.score;
-    startSession();
+    if (GROUP === "vergleich") show("view-elearning");
+    else startSession();
     return;
   }
   // Auflösung anzeigen
@@ -147,9 +156,54 @@ function onQuizResult(phase, result) {
   if (phase === "nachher" && state.preScore !== null) {
     box.append(el("p", { class: "muted", textContent: `Vorher: ${state.preScore} von ${result.total}.` }));
   }
-  box.append(el("p", { class: "muted", textContent: "Danke! Du kannst das Fenster jetzt schließen." }));
+  if (phase === "nachher" && GROUP === "tutor") {
+    const next = el("button", { type: "button", class: "primary", textContent: "Weiter zum Fragebogen" });
+    next.addEventListener("click", startFeedback);
+    box.append(el("div", { class: "row" }, next));
+  } else {
+    box.append(el("p", { class: "muted", textContent: "Danke! Du kannst das Fenster jetzt schließen." }));
+  }
   box.hidden = false;
   box.scrollIntoView({ behavior: "smooth" });
+}
+
+// ---------- Fragebogen (nur Tutor-Gruppe) ----------
+
+async function startFeedback() {
+  const questions = await api("/api/feedback/questions");
+  const form = $("feedback-form");
+  form.replaceChildren();
+  $("feedback-done").hidden = true;
+  form.hidden = false;
+  for (const q of questions) {
+    const fs = el("fieldset", { class: "question" }, el("legend", { textContent: q.text }));
+    q.options.forEach((opt, i) => {
+      fs.append(el("label", {}, el("input", { type: "radio", name: q.id, value: String(i), required: true }), opt));
+    });
+    form.append(fs);
+  }
+  const comment = el("textarea", { name: "comment", maxLength: 500, rows: 3 });
+  form.append(
+    el("label", {}, "Möchtest du noch etwas anmerken? (freiwillig, bitte keine Namen)", comment),
+  );
+  const submit = el("button", { type: "submit", class: "primary", textContent: "Fragebogen abschicken" });
+  form.append(el("div", { class: "row" }, submit));
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    if (!form.reportValidity()) return;
+    submit.disabled = true;
+    const data = new FormData(form);
+    const answers = {};
+    for (const q of questions) answers[q.id] = Number(data.get(q.id));
+    await api(`/api/modules/${state.module.id}/feedback`, {
+      method: "POST",
+      body: JSON.stringify({ pilot_id: state.pilotId, answers, comment: comment.value }),
+    });
+    form.hidden = true;
+    $("feedback-done").hidden = false;
+  };
+  show("view-feedback");
+  window.scrollTo(0, 0);
 }
 
 // ---------- Gespräch ----------
@@ -280,6 +334,7 @@ async function endSession() {
 }
 
 function initSessionControls() {
+  $("elearning-done").addEventListener("click", () => startQuiz("nachher"));
   $("mute").addEventListener("click", async () => {
     const lp = state.room?.localParticipant;
     if (!lp) return;

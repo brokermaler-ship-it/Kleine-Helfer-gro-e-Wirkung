@@ -17,7 +17,7 @@
     <!-- 1. Start -->
     <section id="view-start" class="view">
       <h1>Lerneinheit starten</h1>
-      <p class="lead">Du lernst im Gespräch mit einem KI-Tutor. Vorher und nachher gibt es einen kurzen Wissenscheck, damit wir sehen, ob das Format funktioniert.</p>
+      <p id="start-lead" class="lead">Du lernst im Gespräch mit einem KI-Tutor. Vorher und nachher gibt es einen kurzen Wissenscheck, damit wir sehen, ob das Format funktioniert.</p>
       <form id="start-form" class="card stack">
         <label>Pilot-Kennung
           <input id="pilot-id" name="pilot" required pattern="[A-Za-z0-9_\-]{3,32}" placeholder="z. B. P-017" autocomplete="off">
@@ -32,7 +32,7 @@
           <button type="button" id="retention-only" class="secondary">Nur Wissenscheck (Wiederholung)</button>
         </div>
       </form>
-      <p class="note">Das Gespräch wird nicht aufgezeichnet. Audio wird nur während der Sitzung verarbeitet. Gespeichert werden die Ergebnisse des Wissenschecks und Latenzmesswerte, beides nur mit deiner Pilot-Kennung.</p>
+      <p id="start-note" class="note">Das Gespräch wird nicht aufgezeichnet. Audio wird nur während der Sitzung verarbeitet. Gespeichert werden die Ergebnisse des Wissenschecks und Latenzmesswerte, beides nur mit deiner Pilot-Kennung.</p>
     </section>
 
     <!-- 2./4. Wissenscheck -->
@@ -41,6 +41,15 @@
       <p id="quiz-lead" class="lead"></p>
       <form id="quiz-form" class="stack"></form>
       <div id="quiz-result" class="card" hidden></div>
+    </section>
+
+    <!-- 3. (nur Vergleichsgruppe) Bisheriges E-Learning -->
+    <section id="view-elearning" class="view" hidden>
+      <h1>Jetzt das bisherige E-Learning bearbeiten</h1>
+      <p class="lead">Bearbeite das E-Learning zu diesem Thema so, wie du es sonst auch tun würdest. Lass dieses Fenster offen und komm danach hierher zurück.</p>
+      <div class="row">
+        <button id="elearning-done" class="primary" type="button">Ich bin fertig, weiter zum Wissenscheck</button>
+      </div>
     </section>
 
     <!-- 3. Gespräch -->
@@ -73,6 +82,17 @@
             <div id="source" class="source muted">Noch keine</div>
           </div>
         </aside>
+      </div>
+    </section>
+
+    <!-- 5. (nur Tutor-Gruppe) Fragebogen -->
+    <section id="view-feedback" class="view" hidden>
+      <h1>Kurzer Fragebogen</h1>
+      <p class="lead">Sechs Fragen zum Gespräch mit dem Tutor. Die Antworten werden nur zusammengefasst ausgewertet.</p>
+      <form id="feedback-form" class="stack"></form>
+      <div id="feedback-done" class="card" hidden>
+        <div class="score">Danke!</div>
+        <p class="muted">Du kannst das Fenster jetzt schließen.</p>
       </div>
     </section>
 

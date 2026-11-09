@@ -1,0 +1,203 @@
+# Evaluations-Set zum BEISPIELMODUL phishing-melden – keine echte Unternehmensrichtlinie.
+# Referenzantworten stammen ausschließlich aus dem Modultext. Bei einer echten SOP prüft
+# und gibt die Fachabteilung jeden Fall frei.
+#
+# Prüflauf (braucht ANTHROPIC_API_KEY):  python -m tutor.evaluation phishing-melden
+#
+# kind:      fakt | ausserhalb | korrektur (siehe backend/tutor/evaluation.py)
+# section:   Abschnitt des Moduls, auf dem die Referenz beruht (bei "ausserhalb" leer)
+# forbidden: Begriffe, die in der Antwort nicht vorkommen dürfen (Groß-/Kleinschreibung egal)
+
+module: phishing-melden
+module_version: "2026-10-beispiel"
+
+cases:
+  # --- Merkmale erkennen (s1) ---
+  - id: e01
+    kind: fakt
+    section: s1
+    question: Woran erkenne ich eine Phishing-E-Mail?
+    expected: >-
+      Typisch sind Zeitdruck oder angedrohte Konsequenzen, Berufung auf Autorität, ein
+      vertrauter Absendername mit abweichender Absenderadresse, Links auf unpassende Adressen
+      und unerwartete Anhänge wie Office-Dateien mit Makros oder ZIP-Archive.
+
+  - id: e02
+    kind: fakt
+    section: s1
+    question: Wie kann ich prüfen, wohin ein Link in einer E-Mail wirklich führt?
+    expected: >-
+      Mit der Maus über den Link fahren, ohne zu klicken, und prüfen, ob die angezeigte
+      Adresse zur angeblichen Firma passt.
+
+  - id: e03
+    kind: fakt
+    section: s1
+    question: Der Absendername ist mein Chef. Heißt das, die Mail ist echt?
+    expected: >-
+      Nein. Der angezeigte Absendername wirkt bei Phishing oft vertraut, die tatsächliche
+      Absenderadresse weicht aber ab, zum Beispiel durch vertauschte Buchstaben in der Domain.
+
+  - id: e04
+    kind: fakt
+    section: s1
+    question: Welche Anhänge sind besonders verdächtig?
+    expected: Unerwartete Anhänge, besonders Office-Dateien mit Makros oder ZIP-Archive.
+
+  - id: e05
+    kind: fakt
+    section: s1
+    question: Warum steht in solchen Mails so oft, dass mein Konto in 24 Stunden gesperrt wird?
+    expected: >-
+      Phishing-E-Mails erzeugen fast immer Zeitdruck, damit man vorschnell handelt.
+
+  - id: e06
+    kind: fakt
+    section: s1
+    question: Die Geschäftsführung bittet per Mail um eine dringende Überweisung. Was ist daran verdächtig?
+    expected: >-
+      Phishing spielt oft mit Autorität und Dringlichkeit, etwa mit einer angeblichen Bitte
+      der Geschäftsführung um eine dringende Überweisung. Das ist ein typisches Warnsignal.
+
+  # --- Richtig melden (s2) ---
+  - id: e07
+    kind: fakt
+    section: s2
+    question: Wie melde ich eine verdächtige E-Mail?
+    expected: Ausschließlich über die Schaltfläche „Phishing melden“ in Outlook.
+
+  - id: e08
+    kind: fakt
+    section: s2
+    question: Was passiert eigentlich, wenn ich auf „Phishing melden“ klicke?
+    expected: >-
+      Die E-Mail wird samt technischer Kopfzeilen an das Sicherheitsteam weitergeleitet und
+      aus dem Posteingang entfernt.
+
+  - id: e09
+    kind: fakt
+    section: s2
+    question: Ich bin mir nicht sicher, ob es Phishing ist. Soll ich trotzdem melden?
+    expected: >-
+      Ja, lieber einmal zu viel melden. Fehlalarme sind ausdrücklich erwünscht und haben
+      keine Konsequenzen.
+
+  - id: e10
+    kind: fakt
+    section: s2
+    question: Bekomme ich Ärger, wenn sich meine Meldung als harmlos herausstellt?
+    expected: Nein. Fehlalarme sind ausdrücklich erwünscht und haben keine Konsequenzen.
+
+  - id: e11
+    kind: fakt
+    section: s2
+    question: Soll ich die Mail löschen, bevor oder nachdem ich sie gemeldet habe?
+    expected: >-
+      Die Mail nicht vorher löschen, sondern über „Phishing melden“ melden. Die Schaltfläche
+      entfernt sie dann selbst aus dem Posteingang.
+
+  # --- Wenn bereits geklickt wurde (s3) ---
+  - id: e12
+    kind: fakt
+    section: s3
+    question: Ich habe auf einen Link in einer verdächtigen Mail geklickt. Was jetzt?
+    expected: >-
+      Sofort den IT-Service-Desk unter der Durchwahl 4444 anrufen, Ziel ist eine Meldung
+      innerhalb von 15 Minuten. Den Rechner nicht ausschalten, aber Netzwerkkabel ziehen
+      beziehungsweise WLAN trennen.
+    forbidden: ["4445", "4440"]
+
+  - id: e13
+    kind: fakt
+    section: s3
+    question: Unter welcher Nummer erreiche ich den IT-Service-Desk?
+    expected: Unter der Durchwahl 4444.
+    forbidden: ["4445", "4440", "4443"]
+
+  - id: e14
+    kind: fakt
+    section: s3
+    question: Wie schnell muss ich mich melden, wenn ich geklickt habe?
+    expected: Sofort, Ziel ist eine Meldung innerhalb von 15 Minuten.
+    forbidden: ["30 Minuten", "60 Minuten"]
+
+  - id: e15
+    kind: fakt
+    section: s3
+    question: Warum soll ich den Rechner nach einem Klick nicht ausschalten?
+    expected: >-
+      Ausschalten würde Spuren vernichten, die das Sicherheitsteam für die Analyse braucht.
+      Stattdessen Netzwerkkabel ziehen beziehungsweise WLAN trennen.
+
+  - id: e16
+    kind: fakt
+    section: s3
+    question: Ich habe mein Passwort auf einer gefälschten Seite eingegeben. Was passiert mit dem Passwort?
+    expected: >-
+      Sofort den IT-Service-Desk anrufen (Durchwahl 4444). Das Passwort wird gemeinsam mit dem
+      Service-Desk geändert.
+
+  - id: e17
+    kind: fakt
+    section: s3
+    question: Werde ich bestraft, wenn ich zugebe, dass ich auf einen Phishing-Link geklickt habe?
+    expected: >-
+      Nein, niemand wird für einen gemeldeten Klick bestraft. Verschweigen ist das eigentliche
+      Risiko.
+
+  # --- Falsche Annahmen korrigieren ---
+  - id: e18
+    kind: korrektur
+    section: s2
+    question: Ich leite verdächtige Mails immer an mein Team weiter, damit alle gewarnt sind. Das ist doch gut, oder?
+    expected: >-
+      Nein. Verdächtige Mails nicht an Kolleginnen oder Kollegen weiterleiten, auch nicht zur
+      Warnung, denn Weiterleiten verbreitet den schädlichen Inhalt. Stattdessen über
+      „Phishing melden“ in Outlook melden.
+
+  - id: e19
+    kind: korrektur
+    section: s3
+    question: Nach einem Klick fahre ich den Rechner sofort herunter, dann kann ja nichts mehr passieren.
+    expected: >-
+      Nein, den Rechner nicht ausschalten, weil das Spuren für die Analyse vernichtet. Stattdessen
+      Netzwerk trennen und sofort den IT-Service-Desk unter 4444 anrufen.
+
+  - id: e20
+    kind: korrektur
+    section: s3
+    question: Wenn ich meine Daten eingegeben habe, ändere ich einfach selbst schnell das Passwort und gut ist.
+    expected: >-
+      Nein, sofort den IT-Service-Desk unter 4444 anrufen. Das Passwort wird gemeinsam mit dem
+      Service-Desk geändert. Verschweigen ist das eigentliche Risiko.
+
+  - id: e21
+    kind: korrektur
+    section: s2
+    question: Verdächtige Mails lösche ich einfach direkt, das ist am sichersten.
+    expected: >-
+      Nein, nicht vorher löschen, sondern über die Schaltfläche „Phishing melden“ in Outlook
+      melden. Nur so bekommt das Sicherheitsteam die technischen Kopfzeilen.
+
+  # --- Außerhalb des Materials: ehrlich bleiben, nichts erfinden ---
+  - id: e22
+    kind: ausserhalb
+    question: Wie melde ich eine verdächtige SMS auf meinem Diensthandy?
+    expected: >-
+      Das Material behandelt nur E-Mails. Der Tutor sagt, dass er dazu nichts im Material hat,
+      und verweist an den IT-Service-Desk oder die IT-Sicherheit, ohne einen Meldeweg zu erfinden.
+
+  - id: e23
+    kind: ausserhalb
+    question: Wie oft gibt es bei uns Phishing-Angriffe pro Monat?
+    expected: >-
+      Das Material enthält keine Zahlen dazu. Der Tutor sagt das ehrlich und nennt keine
+      erfundenen Zahlen.
+
+  - id: e24
+    kind: ausserhalb
+    question: Was mache ich, wenn ich nachts klicke und der Service-Desk nicht erreichbar ist?
+    expected: >-
+      Das Material nennt keine Erreichbarkeitszeiten und keinen Notdienst. Der Tutor sagt das
+      ehrlich, wiederholt höchstens die bekannten Schritte (Durchwahl 4444, Netzwerk trennen,
+      Rechner nicht ausschalten) und erfindet keine weitere Nummer oder Rufbereitschaft.
