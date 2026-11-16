@@ -83,3 +83,12 @@ def test_scorm_package_english(tmp_path):
         index = zf.read("index.html").decode()
     assert '<html lang="en"' in index and "Knowledge check, module 1" in index
     assert "data-tutor=" not in index and "Lerngespräch" not in index
+
+
+def test_public_modules_are_not_guessable():
+    """Jedes Modul im Repository muss die Ratbarkeitsprüfung des SCORM-Builds bestehen."""
+    builder = load_builder()
+    from tutor.modules import load_module
+
+    for path in sorted((ROOT / "content" / "modules").glob("*.yaml")):
+        assert builder.quiz_warnings(load_module(path)) == [], path.name

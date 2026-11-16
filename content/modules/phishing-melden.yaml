@@ -58,10 +58,10 @@ quiz:
     objective: erkennen
     question: Welches Merkmal ist ein typisches Warnsignal für Phishing?
     options:
-      - Die E-Mail enthält das Firmenlogo.
-      - Die E-Mail erzeugt Zeitdruck, zum Beispiel mit einer angedrohten Kontosperrung.
-      - Die E-Mail ist auf Deutsch geschrieben.
-      - Die E-Mail kommt an einem Montag.
+      - Die E-Mail trägt das Firmenlogo und eine Signatur mit Telefonnummer.
+      - Die E-Mail droht mit einer Kontosperrung, falls du nicht sofort handelst.
+      - Die E-Mail ist in fehlerfreiem Deutsch und mit Anrede geschrieben.
+      - Die E-Mail kommt am Montagvormittag während der Arbeitszeit an.
     correct: 1
     explanation: Zeitdruck und angedrohte Konsequenzen sollen dich zum schnellen Klicken bringen.
 
@@ -69,10 +69,10 @@ quiz:
     objective: erkennen
     question: Wie prüfst du, wohin ein Link in einer E-Mail wirklich führt?
     options:
-      - Ich klicke darauf und schaue, welche Seite sich öffnet.
-      - Ich fahre mit der Maus über den Link, ohne zu klicken, und prüfe die angezeigte Adresse.
-      - Ich leite die E-Mail an eine Kollegin weiter und frage sie.
-      - Gar nicht, Links in E-Mails sind grundsätzlich sicher.
+      - Ich klicke darauf und schaue mir an, welche Seite sich im Browser öffnet.
+      - Ich fahre mit der Maus über den Link, ohne zu klicken, und prüfe die Adresse.
+      - Ich leite die E-Mail an eine Kollegin weiter und frage sie nach ihrer Meinung.
+      - Gar nicht, Links in E-Mails von bekannten Absendern sind grundsätzlich sicher.
     correct: 1
     explanation: Beim Darüberfahren zeigt Outlook das echte Linkziel an, ohne die Seite zu öffnen.
 
@@ -80,10 +80,10 @@ quiz:
     objective: melden
     question: Wie meldest du eine verdächtige E-Mail korrekt?
     options:
-      - Ich lösche sie sofort.
+      - Ich lösche sie sofort und leere danach den Papierkorb.
       - Ich leite sie an mein Team weiter, damit alle gewarnt sind.
       - Ich nutze die Schaltfläche "Phishing melden" in Outlook.
-      - Ich antworte dem Absender und frage nach.
+      - Ich antworte dem Absender und frage nach, was er will.
     correct: 2
     explanation: Nur die Schaltfläche übermittelt die technischen Kopfzeilen an das Sicherheitsteam.
 
@@ -93,8 +93,8 @@ quiz:
     options:
       - Ich melde sie trotzdem, Fehlalarme sind erwünscht.
       - Ich warte ab, ob noch mehr solche E-Mails kommen.
-      - Ich öffne den Anhang in einer ruhigen Minute, um es zu prüfen.
-      - Ich ignoriere sie.
+      - Ich öffne den Anhang in einer ruhigen Minute zur Prüfung.
+      - Ich ignoriere sie und verschiebe sie in den Spam-Ordner.
     correct: 0
     explanation: Lieber einmal zu viel melden. Fehlalarme haben keine Konsequenzen.
 
@@ -102,9 +102,9 @@ quiz:
     objective: notfall
     question: Du hast deine Zugangsdaten auf einer gefälschten Seite eingegeben. Was ist der erste Schritt?
     options:
-      - Den Rechner sofort ausschalten.
+      - Den Rechner sofort ausschalten, damit nichts weiter passiert.
       - Sofort den IT-Service-Desk anrufen und das Netzwerk trennen.
-      - Erst einmal abwarten, ob etwas passiert.
+      - Erst einmal abwarten, ob in den nächsten Tagen etwas passiert.
       - Selbst das Passwort ändern und niemandem davon erzählen.
     correct: 1
     explanation: Schnell melden (Ziel unter 15 Minuten) und Netzwerk trennen. Ausschalten vernichtet Spuren.
@@ -113,9 +113,9 @@ quiz:
     objective: notfall
     question: Warum solltest du den Rechner nach einem Klick NICHT ausschalten?
     options:
-      - Weil er sonst kaputtgehen könnte.
-      - Weil das Sicherheitsteam die Spuren im Arbeitsspeicher für die Analyse braucht.
-      - Weil das Ausschalten zu lange dauert.
-      - Das ist egal, Ausschalten ist genauso gut.
+      - Weil der Rechner beim schnellen Ausschalten kaputtgehen könnte.
+      - Weil das Sicherheitsteam die Spuren im Arbeitsspeicher braucht.
+      - Weil das Herunterfahren nach einem Angriff zu lange dauert.
+      - Das ist egal, Ausschalten ist genauso gut wie Netzwerk trennen.
     correct: 1
     explanation: Beim Ausschalten gehen Spuren verloren, die für die Analyse wichtig sind.
